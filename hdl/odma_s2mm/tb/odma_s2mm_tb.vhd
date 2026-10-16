@@ -100,6 +100,7 @@ architecture sim of odma_s2mm_tb is
     signal StreamClear  : std_logic                     := '0';
     signal EccInjValid  : std_logic_vector(2 downto 0)  := "000";
     signal EccInjDouble : std_logic                     := '0';
+    signal EccInjData   : std_logic                     := '0';
     signal Obs          : Obs_r;
 
 begin
@@ -129,6 +130,7 @@ begin
             StreamClear  => StreamClear,
             EccInjValid  => EccInjValid,
             EccInjDouble => EccInjDouble,
+            EccInjData   => EccInjData,
             Obs          => Obs
         );
 
@@ -601,18 +603,21 @@ begin
 
             elsif run("test_ecc") then
                 log(ID_LOG_HDR, "TC-S2-13 single and double errors injected into the three buffers");
+                -- d = 0: single error, d = 1: double error (parity bits), d = 2: single error on a data bit, which
+                -- only a channel that uses the corrected output of the buffer passes
                 Len_v := minimum(3 * StreamBytes_c + 1, MaxLen_c);
 
                 for b in 0 to 2 loop
 
-                    for d in 0 to 1 loop
+                    for d in 0 to 2 loop
                         Sec_v          := Obs.EccSec;
                         Ded_v          := Obs.EccDed;
                         Res_v          := Obs.ResCount;
-                        Dst_v          := region(1 + 2 * b + d);
-                        Src_v          := source(1 + 2 * b + d);
+                        Dst_v          := region(1 + 3 * b + d);
+                        Src_v          := source(1 + 3 * b + d);
                         wait until rising_edge(Clk);
                         EccInjDouble   <= '1' when d = 1 else '0';
+                        EccInjData     <= '1' when d = 2 else '0';
                         EccInjValid    <= (others => '0');
                         EccInjValid(b) <= '1';
                         wait until rising_edge(Clk);
@@ -628,7 +633,7 @@ begin
                         cycles(4);
 
                         for i in 0 to 2 loop
-                            Cnt_v  := 1 when i = b and d = 0 else 0;
+                            Cnt_v  := 1 when i = b and d /= 1 else 0;
                             Cnt2_v := 1 when i = b and d = 1 else 0;
                             check_value(Obs.EccSec(i) - Sec_v(i), Cnt_v, ERROR, "Ecc_Sec of buffer " & to_string(i));
                             check_value(Obs.EccDed(i) - Ded_v(i), Cnt2_v, ERROR, "Ecc_Ded of buffer " & to_string(i));

@@ -908,6 +908,7 @@ begin
 
             elsif run("test_ecc") then
                 log(ID_LOG_HDR, "TC-RG-13 ECC counters, flags, Ecc_Irq and error injection");
+                check_value(Obs.InjMode, '0', ERROR, "injection mode after the reset");
                 -- Events of the buffers of the configuration are counted, the other indices count nothing
                 pulseEcc(true, 0, 3);
                 pulseEcc(false, 0, 1);
@@ -988,6 +989,21 @@ begin
                 cycles(2);
                 check_value(Obs.InjCount, 2, ERROR, "no strobe without Inject or without a buffer");
                 check_value(Obs.InjMulti, 0, ERROR, "never more than one strobe");
+                -- Injection mode: ECC_INJECT.Data is taken with a strobe and held, a reset returns it to 0
+                check_value(Obs.InjMode, '0', ERROR, "parity mode after strobes without Data");
+                wr(EccInject_c, x"00000601");
+                cycles(2);
+                check_value(Obs.InjCount, 3, ERROR, "one injection strobe");
+                check_value(Obs.InjData, '1', ERROR, "data mode of the strobe");
+                check_value(Obs.InjMode, '1', ERROR, "data mode held after the strobe");
+                wr(EccInject_c, x"00000400");
+                cycles(2);
+                check_value(Obs.InjCount, 3, ERROR, "no strobe without Inject");
+                check_value(Obs.InjMode, '1', ERROR, "mode unchanged by a write without Inject");
+                Excl_v := Mm2s_c when Incl_c(Mm2s_c) else S2mm_c;
+                wr(Dmacr_c(Excl_v), Reset_c);
+                poll(Dmacr_c(Excl_v), Zero_c, Reset_c, "end of the soft reset");
+                check_value(Obs.InjMode, '0', ERROR, "parity mode after a soft reset");
 
             elsif run("test_no_extension") then
                 log(ID_LOG_HDR, "TC-RG-14 configuration without the extension window");

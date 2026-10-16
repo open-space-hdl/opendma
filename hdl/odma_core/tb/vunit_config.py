@@ -89,6 +89,7 @@ TESTS = {
     "test_errors": (both, files_errors),
     "test_soft_reset_load": (both, files_after_reset),
     "test_ecc_index": (lambda g: True, files_ecc),
+    "test_ecc_data": (lambda g: g["ExtRegs_g"] and min(g["Mm2sStreamWidth_g"], g["S2mmStreamWidth_g"]) >= 16, None),
     "test_configuration": (lambda g: True, None),
     "test_excluded_channel": (lambda g: not both(g), files_excluded),
 }

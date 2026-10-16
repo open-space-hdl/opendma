@@ -198,6 +198,7 @@ architecture rtl of odma_core is
     signal Ecc_Ded       : std_logic_vector(15 downto 0);
     signal EccInj_Valid  : std_logic_vector(15 downto 0);
     signal EccInj_Double : std_logic;
+    signal EccInj_Data   : std_logic;
 
 begin
 
@@ -297,7 +298,8 @@ begin
             Ecc_Sec           => Ecc_Sec,
             Ecc_Ded           => Ecc_Ded,
             EccInj_Valid      => EccInj_Valid,
-            EccInj_Double     => EccInj_Double
+            EccInj_Double     => EccInj_Double,
+            EccInj_Data       => EccInj_Data
         );
 
     -- *** FT buffers of the channels in the order of the extension window ***
@@ -359,7 +361,8 @@ begin
                 Ecc_Sec       => Mm2sEcc_Sec,
                 Ecc_Ded       => Mm2sEcc_Ded,
                 EccInj_Valid  => Mm2sEccInj,
-                EccInj_Double => EccInj_Double
+                EccInj_Double => EccInj_Double,
+                EccInj_Data   => EccInj_Data
             );
 
     end generate;
@@ -442,7 +445,8 @@ begin
                 Ecc_Sec       => S2mmEcc_Sec,
                 Ecc_Ded       => S2mmEcc_Ded,
                 EccInj_Valid  => S2mmEccInj,
-                EccInj_Double => EccInj_Double
+                EccInj_Double => EccInj_Double,
+                EccInj_Data   => EccInj_Data
             );
 
     end generate;

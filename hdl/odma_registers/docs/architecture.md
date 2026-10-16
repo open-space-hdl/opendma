@@ -44,6 +44,7 @@ the registers of this module, is reset by the core reset `CoreRst` = `Rst` or th
 | `Ecc_Sec`, `Ecc_Ded` | `EccBuffers_c` | in | SEC and DED event pulses of the FT buffers (index per section 8) |
 | `EccInj_Valid` | `EccBuffers_c` | out | Error injection strobe per FT buffer |
 | `EccInj_Double` | 1 | out | '1': flip two bits, '0': flip one bit of the injected codeword |
+| `EccInj_Data` | 1 | out | '1': flip data bits, '0': flip parity bits of the injected codeword |
 
 The generics are those of section 6 of the specification. `EccBuffers_c` = 16, the fixed size of the buffer index
 space of the extension window. The inputs of the channels and the ECC inputs have defaults (`Cmd_Ready` '0',
@@ -149,7 +150,7 @@ returns the reset values, with `DMACR.Reset` = 1.
 | 0x124 | `ECC_CTRL` | W1 | Bit 0: clear all counters |
 | 0x128 | `ECC_STATUS` | W1C | Bit 0 a SEC event, bit 1 a DED event was counted since the last clear |
 | 0x12C | `ECC_ENABLE` | RW | Bits 0 and 1: the `ECC_STATUS` bits that drive `Ecc_Irq` (reset 0) |
-| 0x130 | `ECC_INJECT` | W1 | Bits 3 to 0 the buffer index, bit 8 '1' double, '0' single error, bit 9 '1' injects into the next codeword written to the buffer |
+| 0x130 | `ECC_INJECT` | W1 | Bits 3 to 0 the buffer index, bit 8 '1' double, '0' single error, bit 9 '1' injects into the next codeword written to the buffer, bit 10 '1' data bits, '0' parity bits |
 | 0x140 + 4 x n | `ECC_COUNT_n` | RC | Bits 15 to 0 the SEC counter, 31 to 16 the DED counter of buffer n (n = 0 to 15); any write clears both |
 
 The counters are those of `olo_ft_ecc_monitor` (`Channels_g` = 16, `CounterWidth_g` = 16): the window reads a
@@ -157,7 +158,8 @@ counter through its read port and clears it with the read-and-clear of the same 
 inputs of the monitor are set for the buffers of the configuration only (section 8), so the counters of the other
 indices stay 0; `ECC_INJECT` gives no strobe for them either. The `ECC_STATUS` flags are set by the event outputs of
 the monitor, `Ecc_Irq` is registered one clock cycle after them. `EccInj_Valid` is a strobe of one clock cycle on the
-selected index, `EccInj_Double` holds the error type of the last injection; the buffer turns it into the flip pattern
+selected index, `EccInj_Double` and `EccInj_Data` hold the error type and the mode of the last injection (both '0'
+after a hard or soft reset); the buffer turns it into the flip pattern
 of its `ErrInj_BitFlip` input and applies it to the next codeword written. Without `ExtRegs_g` the window reads 0,
 `Ecc_Irq` stays low and no injection strobe is issued.
 

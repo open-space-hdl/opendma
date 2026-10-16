@@ -33,6 +33,7 @@ and the result](img/odma_mm2s_arch.drawio.svg)
 | `Ecc_Sec`, `Ecc_Ded` | 3 | out | ECC events of the read data buffer (bit 0, index 0 of the extension window), the transfer buffer (bit 1, index 4) and the response buffer (bit 2, index 5); one pulse per word read from the buffer |
 | `EccInj_Valid` | 3 | in | Error injection per buffer, same order |
 | `EccInj_Double` | 1 | in | '1': flip two bits, '0': flip one bit of the next codeword written to the buffer |
+| `EccInj_Data` | 1 | in | '1': flip data bits, '0': flip parity bits (section 6) |
 
 Generics as in section 6 of the specification.
 
@@ -92,10 +93,13 @@ responses arrive. Halt (`Run` = '0'): no change of this block; MM-1 accepts no n
 
 ECC: `Ecc_Sec` and `Ecc_Ded` of a buffer are its flags of the output word (time-aligned with the data) qualified
 with the output handshake of the buffer, so every word read gives at most one pulse. The error injection drives the
-`ErrInj_BitFlip` input of the selected buffer with bit 0 (single error) or bits 0 and 1 (double error) of the
-codeword. These are the overall parity bit and the first Hamming parity bit of the code of `olo_ft_pkg_ecc`, so an
-injected error never changes the data: a single error is corrected, a double error is detected and the word is
-still delivered unchanged.
+`ErrInj_BitFlip` input of the selected buffer. In parity mode (`EccInj_Data` = '0') it flips bit 0 (single error) or
+bits 0 and 1 (double error) of the codeword, the overall parity bit and the first Hamming parity bit of the code of
+`olo_ft_pkg_ecc`, so an injected error never changes the data: a single error is corrected, a double error is detected
+and the word is still delivered unchanged. In data mode (`EccInj_Data` = '1') it flips data bit 0 (codeword bit 3) or
+data bits 0 and 1 (codeword bits 3 and 5): a single error is corrected, so the channel passes only when it uses the
+corrected output of the buffer, and a double error corrupts the word, which is delivered as read (the destructive test
+of the consequence of a double error).
 
 ## 6. Stopped
 

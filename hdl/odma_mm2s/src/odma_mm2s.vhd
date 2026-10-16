@@ -83,7 +83,8 @@ entity odma_mm2s is
         Ecc_Sec       : out   std_logic_vector(2 downto 0);
         Ecc_Ded       : out   std_logic_vector(2 downto 0);
         EccInj_Valid  : in    std_logic_vector(2 downto 0) := (others => '0');
-        EccInj_Double : in    std_logic                    := '0'
+        EccInj_Double : in    std_logic                    := '0';
+        EccInj_Data   : in    std_logic                    := '0'
     );
 end entity;
 
@@ -104,14 +105,23 @@ architecture rtl of odma_mm2s is
     constant XferWidth_c : positive := LengthWidth_g + 3;
     constant RespWidth_c : positive := 2;
 
-    -- Flip pattern of an injected error: bit 0 (single error) or bits 0 and 1 (double error)
+    -- Flip pattern of an injected error in a codeword of olo_ft_pkg_ecc. Parity mode (data '0'):
+    -- the overall parity (bit 0) and, for a double error, the Hamming parity p0 (bit 1), so the
+    -- data never changes. Data mode: data bit 0 (codeword bit 3) and, for a double error, data
+    -- bit 1 (codeword bit 5); a double error then corrupts the word
     function flipPattern (
         width  : positive;
-        double : std_logic) return std_logic_vector is
+        double : std_logic;
+        data   : std_logic) return std_logic_vector is
         variable Flip_v : std_logic_vector(width - 1 downto 0) := (others => '0');
     begin
-        Flip_v(0) := '1';
-        Flip_v(1) := double;
+        if data = '1' then
+            Flip_v(3) := '1';
+            Flip_v(5) := double;
+        else
+            Flip_v(0) := '1';
+            Flip_v(1) := double;
+        end if;
         return Flip_v;
     end function;
 
@@ -201,7 +211,7 @@ begin
         );
 
     -- *** AXI4 read master with the read data buffer ***
-    RdInjFlip  <= flipPattern(RdInjFlip'length, EccInj_Double);
+    RdInjFlip  <= flipPattern(RdInjFlip'length, EccInj_Double, EccInj_Data);
     MasterSize <= std_logic_vector(resize(unsigned(CmdRd_Size), SizeBits_c));
 
     i_master : entity olo.olo_ft_axi_master_full
@@ -252,7 +262,7 @@ begin
 
     -- *** Transfer buffer and response buffer ***
     Xfer_InData <= Xfer_InCode & Xfer_InEof & Xfer_InLength;
-    XferInjFlip <= flipPattern(XferInjFlip'length, EccInj_Double);
+    XferInjFlip <= flipPattern(XferInjFlip'length, EccInj_Double, EccInj_Data);
 
     i_xfer : entity olo.olo_ft_fifo_sync
         generic map (
@@ -275,7 +285,7 @@ begin
             In_ErrInj_Valid   => EccInj_Valid(1)
         );
 
-    RespInjFlip <= flipPattern(RespInjFlip'length, EccInj_Double);
+    RespInjFlip <= flipPattern(RespInjFlip'length, EccInj_Double, EccInj_Data);
 
     i_resp : entity olo.olo_ft_fifo_sync
         generic map (

@@ -68,7 +68,7 @@ command). Packets of several buffers (phase b, gap G10), keyhole reads (phase b,
 
 | ID | Requirement | PG021 items |
 | --- | --- | --- |
-| MM-FT-01 | The read data buffer, the transfer buffer and the response buffer shall be protected by SECDED ECC; every word read from a buffer with a corrected single error or a detected double error shall raise one pulse on the bit of that buffer in `Ecc_Sec` or `Ecc_Ded`; `EccInj_Valid` of a buffer with `EccInj_Double` shall flip one or two bits of the next codeword written to that buffer. | none (architecture P5) |
+| MM-FT-01 | The read data buffer, the transfer buffer and the response buffer shall be protected by SECDED ECC; every word read from a buffer with a corrected single error or a detected double error shall raise one pulse on the bit of that buffer in `Ecc_Sec` or `Ecc_Ded`; `EccInj_Valid` of a buffer with `EccInj_Double` and `EccInj_Data` shall flip one or two parity bits or data bits of the next codeword written to that buffer. | none (architecture P5) |
 
 ### 3.7 Requirements waiting for Open Logic
 

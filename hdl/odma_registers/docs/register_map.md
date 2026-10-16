@@ -280,6 +280,7 @@ Address 0x130: Error injection into an FT buffer.
 
 | Bits | Field | Access | Reset | Description |
 | --- | --- | --- | --- | --- |
+| 10 | Data | WO | 0 | 1: data bits (single: data bit 0, double: data bits 0 and 1, the word is corrupted), 0: parity bits (the data never changes) |
 | 9 | Inject | W1 | 0 | Flips the bits of the next codeword written to the buffer |
 | 8 | Double | WO | 0 | 1: double error (two bits), 0: single error (one bit) |
 | 3:0 | Buffer | WO | 0 | Index of the buffer (register map page |

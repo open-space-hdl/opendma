@@ -113,6 +113,17 @@ architecture sim of odma_core_tb is
     constant LoadRdAddr_c : natural := 16#0040_0000#;
     constant LoadWrAddr_c : natural := 16#0050_0000#;
 
+    -- Buffers of the injections in data mode (TC-CO-10): the MM2S transfer and the S2MM packets have a length of
+    -- 2 modulo 4, so that the double error of a length (its bits 0 and 1) shortens it by one byte
+    constant DataRdAddr_c : natural  := 16#0060_0000#;
+    constant DataWrAddr_c : natural  := 16#0070_0000#;
+    constant DataRdLen_c  : positive := 254;
+    constant DataPktLen_c : positive := 62;
+    constant DataBufLen_c : positive := 128;
+    constant InjData_c    : natural  := 16#400#;
+    constant InjDouble_c  : natural  := 16#100#;
+    constant InjInject_c  : natural  := 16#200#;
+
     constant MaxLen_c : positive := 2**LengthWidth_g - 1;
 
     signal Mm2sIrq    : std_logic;
@@ -241,6 +252,9 @@ begin
         variable Len_v    : natural;
         variable Mm2s_v   : boolean;
         variable Counts_v : boolean;
+        variable Ded_v    : boolean;
+        variable Exp_v    : t_slv_array(0 to 255)(7 downto 0);
+        variable Base_v   : unsigned(63 downto 0);
 
         impure function hex (ofs : natural) return string is
         begin
@@ -324,6 +338,101 @@ begin
             if AddrWidth_g > 32 then
                 wr(hi, Zero_c);
             end if;
+        end procedure;
+
+        -- Soft reset through the first included channel
+        procedure softReset is
+            constant Dmacr_c : natural := choose(IncludeMm2s_g, Mm2sDmacr_c, S2mmDmacr_c);
+        begin
+            wr(Dmacr_c, Reset_c);
+            poll(Dmacr_c, Zero_c, ResetBit_c, 10 us, "end of the soft reset");
+        end procedure;
+
+        -- Error injection in data mode into buffer k after cleared counters and flags
+        procedure injectData (
+            k      : natural;
+            double : boolean) is
+        begin
+            wr(EccCtrl_c, x"00000001");
+            wr(EccStatus_c, x"00000003");
+            wr(EccInject_c, std_logic_vector(to_unsigned(InjData_c + InjInject_c + k +
+                                                          choose(double, InjDouble_c, 0), 32)));
+        end procedure;
+
+        -- The counters of buffer k count one event of the kind, all other counters 0
+        procedure checkCounts (
+            k      : natural;
+            double : boolean;
+            msg    : string) is
+            variable D_v : Word_t;
+        begin
+
+            for n in 0 to 15 loop
+                rd(EccCount_c + 4 * n, D_v);
+                if n = k and double then
+                    check_value(D_v, x"00010000", ERROR, msg & ": counters of buffer " & to_string(n), C_TB_SCOPE_DEFAULT,
+                                HEX);
+                elsif n = k then
+                    check_value(D_v, x"00000001", ERROR, msg & ": counters of buffer " & to_string(n), C_TB_SCOPE_DEFAULT,
+                                HEX);
+                else
+                    check_value(D_v, Zero_c, ERROR, msg & ": counters of buffer " & to_string(n), C_TB_SCOPE_DEFAULT, HEX);
+                end if;
+            end loop;
+
+        end procedure;
+
+        -- S2MM packet of DataPktLen_c bytes (odmaMemByte of the byte index and seed) into the buffer at addr; the
+        -- bytes from the packet start to the end of the buffer are checked: byte 0 inverted in bits 0 and 1 when
+        -- flip, the packet shortened by one byte when short, unwritten bytes 0
+        procedure checkPacket (
+            addr  : natural;
+            seed  : natural;
+            flip  : boolean;
+            short : boolean;
+            msg   : string) is
+            variable Exp8_v : std_logic_vector(7 downto 0);
+            variable Bad_v  : natural := 0;
+            variable Len_v  : natural;
+        begin
+            Len_v := DataPktLen_c - 1 when short else DataPktLen_c;
+
+            for i in 0 to DataBufLen_c - 1 loop
+                Exp8_v := odmaMemByte(to_unsigned(i, 64), seed) when i < Len_v else x"00";
+                if i = 0 and flip then
+                    Exp8_v := Exp8_v xor x"03";
+                end if;
+                if Mem_v.read8(MemWr_c, to_unsigned(addr + i, 64)) /= Exp8_v then
+                    Bad_v := Bad_v + 1;
+                end if;
+            end loop;
+
+            check_value(Bad_v, 0, ERROR, msg & ": bytes of the buffer that differ");
+            chk(S2mmLength_c, std_logic_vector(to_unsigned(Len_v, 32)), msg & ": S2MM_LENGTH");
+        end procedure;
+
+        -- One S2MM transfer of a packet that is already in the data buffer (sent before) or is sent now
+        procedure s2mmTransfer (
+            addr : natural) is
+        begin
+            setAddr(S2mmDa_c, S2mmDaMsb_c, addr);
+            wr(S2mmLength_c, std_logic_vector(to_unsigned(DataBufLen_c, 32)));
+            await_value(S2mmIrq, '1', 0 ns, 100 us, ERROR, "S2MM interrupt");
+            chk(S2mmDmasr_c, x"00001002", "S2MM transfer completed", x"00007773");
+            wr(S2mmDmasr_c, x"00001000");
+        end procedure;
+
+        procedure sendPacket (
+            seed : natural) is
+            variable Pkt_v : t_slv_array(0 to DataPktLen_c - 1)(7 downto 0);
+        begin
+
+            for i in 0 to DataPktLen_c - 1 loop
+                Pkt_v(i) := odmaMemByte(to_unsigned(i, 64), seed);
+            end loop;
+
+            axistream_transmit(AXISTREAM_VVCT, 0, Pkt_v, "S2MM packet");
+            await_completion(AXISTREAM_VVCT, 0, 100 us, "S2MM packet sent");
         end procedure;
 
     -- Comment for the style checker: subprograms above, statements below
@@ -483,6 +592,74 @@ begin
                     end loop;
 
                     chk(EccStatus_c, Zero_c, "no ECC flag after the soft reset");
+                end loop;
+
+            elsif run("test_ecc_data") then
+                log(ID_LOG_HDR, "TC-CO-10 error injections in data mode: corrected single errors, the double error of " &
+                    "each buffer with its own consequence");
+
+                for d in 0 to 1 loop
+                    Ded_v := d = 1;
+
+                    -- MM2S: an injection before a transfer goes into its first read data word (index 0), its entry
+                    -- {code, end of packet, length} (index 4) and its response code (index 5)
+                    for k in 0 to 5 loop
+                        next when not IncludeMm2s_g or (k /= 0 and k /= 4 and k /= 5);
+                        log(ID_SEQUENCER, "MM2S buffer " & to_string(k) & choose(Ded_v, ", double error", ", single error"));
+                        Base_v := to_unsigned(DataRdAddr_c + 4096 * k, 64);
+                        Mem_v.fill(MemRd_c, Base_v, DataRdLen_c, 40 + k);
+                        softReset;
+                        injectData(k, Ded_v);
+                        wr(Mm2sDmacr_c, Start_c);
+                        poll(Mm2sDmasr_c, Zero_c, x"00000001", 10 us, "MM2S running");
+
+                        for i in 0 to DataRdLen_c - 1 loop
+                            Exp_v(i) := odmaMemByte(Base_v + i, 40 + k);
+                        end loop;
+
+                        Len_v := DataRdLen_c;
+                        if Ded_v and k = 0 then
+                            Exp_v(0) := Exp_v(0) xor x"03";            -- Data bits 0 and 1 of the first word
+                        elsif Ded_v and k = 4 then
+                            Len_v := DataRdLen_c - 1;                   -- Length bits 0 and 1: 254 becomes 253
+                        end if;
+                        axistream_expect(AXISTREAM_VVCT, 1, Exp_v(0 to Len_v - 1), "MM2S packet");
+                        setAddr(Mm2sSa_c, Mm2sSaMsb_c, DataRdAddr_c + 4096 * k);
+                        wr(Mm2sLength_c, std_logic_vector(to_unsigned(DataRdLen_c, 32)));
+                        await_completion(AXISTREAM_VVCT, 1, 100 us, "MM2S packet received");
+                        await_value(Mm2sIrq, '1', 0 ns, 100 us, ERROR, "MM2S interrupt");
+                        if Ded_v and k = 5 then
+                            -- Response code 00 becomes 11: the transfer ends with the decode error
+                            poll(Mm2sDmasr_c, x"00000001", x"00000001", 10 us, "MM2S halted");
+                            chk(Mm2sDmasr_c, x"00004041", "MM2S decode error of the response", x"00007773");
+                        else
+                            chk(Mm2sDmasr_c, x"00001002", "MM2S transfer completed", x"00007773");
+                        end if;
+                        checkCounts(k, Ded_v, "MM2S buffer " & to_string(k));
+                    end loop;
+
+                    -- S2MM: packet A waits in the data buffer (its words and its chunk entry written) before the
+                    -- injection, packet B arrives after it. The injection goes into the write data of A (index 3),
+                    -- the first data word of B (index 1) or the chunk entry of B (index 2)
+                    for k in 1 to 3 loop
+                        next when not IncludeS2mm_g;
+                        log(ID_SEQUENCER, "S2MM buffer " & to_string(k) & choose(Ded_v, ", double error", ", single error"));
+                        softReset;
+                        wr(S2mmDmacr_c, Start_c);
+                        poll(S2mmDmasr_c, Zero_c, x"00000001", 10 us, "S2MM running");
+                        sendPacket(50 + k);
+                        wait for 100 * ClkPeriod_c;
+                        injectData(k, Ded_v);
+                        s2mmTransfer(DataWrAddr_c + 32768 * d + 4096 * k);
+                        checkPacket(DataWrAddr_c + 32768 * d + 4096 * k, 50 + k, Ded_v and k = 3, false,
+                                    "packet A, buffer " & to_string(k));
+                        sendPacket(60 + k);
+                        s2mmTransfer(DataWrAddr_c + 32768 * d + 4096 * k + 2048);
+                        checkPacket(DataWrAddr_c + 32768 * d + 4096 * k + 2048, 60 + k, Ded_v and k = 1, Ded_v and k = 2,
+                                    "packet B, buffer " & to_string(k));
+                        checkCounts(k, Ded_v, "S2MM buffer " & to_string(k));
+                    end loop;
+
                 end loop;
 
             elsif run("test_configuration") then

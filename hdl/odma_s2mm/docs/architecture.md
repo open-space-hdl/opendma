@@ -38,6 +38,7 @@ instantiate it.
 | `Ecc_Sec`, `Ecc_Ded` | 3 | out | ECC events of the data buffer (bit 0, index 1 of the extension window), the chunk buffer (bit 1, index 2), the write data buffer (bit 2, index 3); one pulse per word read from the buffer |
 | `EccInj_Valid` | 3 | in | Error injection per buffer, same order |
 | `EccInj_Double` | 1 | in | '1' double, '0' single error |
+| `EccInj_Data` | 1 | in | '1' data bits, '0' parity bits (section 5.6) |
 
 Generics as in section 6 of the specification. `ChunkBeats_c` = B x `MemWidth_g` / `StreamWidth_g` with B the smaller
 of `BurstBeats_g` and the beats of 4 KB (4096 / (`MemWidth_g` / 8)).
@@ -141,9 +142,13 @@ the values of S2-IF-01.
 
 `Ecc_Sec` and `Ecc_Ded` of the data and chunk buffers are their flags of the output word qualified with the output
 handshake; the write master qualifies the events of its buffer itself. The error injection drives the
-`ErrInj_BitFlip` input of the selected buffer with bit 0 (single error) or bits 0 and 1 (double error) of the
-codeword, the overall parity bit and the first Hamming parity bit: the data never changes, a single error is
-corrected and a double error detected.
+`ErrInj_BitFlip` input of the selected buffer. In parity mode (`EccInj_Data` = '0') it flips bit 0 (single error) or
+bits 0 and 1 (double error) of the codeword, the overall parity bit and the first Hamming parity bit of the code of
+`olo_ft_pkg_ecc`, so an injected error never changes the data: a single error is corrected, a double error is detected
+and the word is still delivered unchanged. In data mode (`EccInj_Data` = '1') it flips data bit 0 (codeword bit 3) or
+data bits 0 and 1 (codeword bits 3 and 5): a single error is corrected, so the channel passes only when it uses the
+corrected output of the buffer, and a double error corrupts the word, which is delivered as read (the destructive test
+of the consequence of a double error).
 
 ## 6. Stopped
 

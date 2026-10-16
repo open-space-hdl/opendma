@@ -111,6 +111,7 @@ architecture sim of odma_registers_th is
     signal EccDedIn       : std_logic_vector(15 downto 0);
     signal EccInjValid_i  : std_logic_vector(15 downto 0);
     signal EccInjDouble   : std_logic;
+    signal EccInjData     : std_logic;
 
     -- Channel models
     signal M_Busy    : std_logic_vector(0 to 1) := "00";
@@ -152,6 +153,8 @@ architecture sim of odma_registers_th is
                                                     InjCount     => 0,
                                                     InjIdx       => 0,
                                                     InjDouble    => '0',
+                                                    InjData      => '0',
+                                                    InjMode      => '0',
                                                     InjMulti     => 0
                                                 );
 
@@ -244,7 +247,8 @@ begin
             Ecc_Sec           => EccSecIn,
             Ecc_Ded           => EccDedIn,
             EccInj_Valid      => EccInjValid_i,
-            EccInj_Double     => EccInjDouble
+            EccInj_Double     => EccInjDouble,
+            EccInj_Data       => EccInjData
         );
 
     Run         <= Run_i;
@@ -455,6 +459,7 @@ begin
                     Strb_v        := Strb_v + 1;
                     O_v.InjIdx    := i;
                     O_v.InjDouble := EccInjDouble;
+                    O_v.InjData   := EccInjData;
                 end if;
             end loop;
 
@@ -465,8 +470,9 @@ begin
                 O_v.InjMulti := Obs_i.InjMulti + 1;
             end if;
 
-            O_v.Cycle := Obs_i.Cycle + 1;
-            Obs_i     <= O_v;
+            O_v.InjMode := EccInjData;
+            O_v.Cycle   := Obs_i.Cycle + 1;
+            Obs_i       <= O_v;
         end if;
     end process;
 

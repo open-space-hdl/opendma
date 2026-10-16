@@ -195,6 +195,7 @@ package odma_regs_pkg is
     constant EccInjectBufferHi_c : natural := 3;
     constant EccInjectDouble_c   : natural := 8;
     constant EccInjectInject_c   : natural := 9;
+    constant EccInjectData_c     : natural := 10;
 
     constant EccCountSecLo_c : natural := 0;
     constant EccCountSecHi_c : natural := 15;

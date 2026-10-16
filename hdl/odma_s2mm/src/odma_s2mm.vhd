@@ -85,7 +85,8 @@ entity odma_s2mm is
         Ecc_Sec       : out   std_logic_vector(2 downto 0);
         Ecc_Ded       : out   std_logic_vector(2 downto 0);
         EccInj_Valid  : in    std_logic_vector(2 downto 0) := (others => '0');
-        EccInj_Double : in    std_logic                    := '0'
+        EccInj_Double : in    std_logic                    := '0';
+        EccInj_Data   : in    std_logic                    := '0'
     );
 end entity;
 
@@ -104,14 +105,23 @@ architecture rtl of odma_s2mm is
     -- 2**size bits (gap G14), which no command reaches with one more size bit
     constant SizeBits_c    : positive := LengthWidth_g + 1;
 
-    -- Flip pattern of an injected error: bit 0 (single error) or bits 0 and 1 (double error)
+    -- Flip pattern of an injected error in a codeword of olo_ft_pkg_ecc. Parity mode (data '0'):
+    -- the overall parity (bit 0) and, for a double error, the Hamming parity p0 (bit 1), so the
+    -- data never changes. Data mode: data bit 0 (codeword bit 3) and, for a double error, data
+    -- bit 1 (codeword bit 5); a double error then corrupts the word
     function flipPattern (
         width  : positive;
-        double : std_logic) return std_logic_vector is
+        double : std_logic;
+        data   : std_logic) return std_logic_vector is
         variable Flip_v : std_logic_vector(width - 1 downto 0) := (others => '0');
     begin
-        Flip_v(0) := '1';
-        Flip_v(1) := double;
+        if data = '1' then
+            Flip_v(3) := '1';
+            Flip_v(5) := double;
+        else
+            Flip_v(0) := '1';
+            Flip_v(1) := double;
+        end if;
         return Flip_v;
     end function;
 
@@ -192,7 +202,7 @@ begin
         );
 
     -- *** Data buffer and chunk buffer ***
-    DataInjFlip <= flipPattern(DataInjFlip'length, EccInj_Double);
+    DataInjFlip <= flipPattern(DataInjFlip'length, EccInj_Double, EccInj_Data);
 
     i_data : entity olo.olo_ft_fifo_sync
         generic map (
@@ -214,7 +224,7 @@ begin
             In_ErrInj_Valid   => EccInj_Valid(0)
         );
 
-    DescInjFlip <= flipPattern(DescInjFlip'length, EccInj_Double);
+    DescInjFlip <= flipPattern(DescInjFlip'length, EccInj_Double, EccInj_Data);
 
     i_desc : entity olo.olo_ft_fifo_sync
         generic map (
@@ -282,7 +292,7 @@ begin
         );
 
     -- *** AXI4 write master with the write data buffer of two chunks ***
-    WrInjFlip  <= flipPattern(WrInjFlip'length, EccInj_Double);
+    WrInjFlip  <= flipPattern(WrInjFlip'length, EccInj_Double, EccInj_Data);
     MasterSize <= std_logic_vector(resize(unsigned(CmdWr_Size), SizeBits_c));
 
     i_master : entity olo.olo_ft_axi_master_full

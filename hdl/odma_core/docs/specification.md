@@ -63,6 +63,16 @@ streams and the micro DMA configuration (phase c) follow.
 | CO-FT-01 | The FT buffers of the channels shall appear in the extension window at the indices of the `odma_registers` architecture (section 8): 0 MM2S read data, 1 S2MM data, 2 S2MM chunk, 3 S2MM write data, 4 MM2S transfer, 5 MM2S response. An injection at an index shall reach that buffer only; the corrected single error of a transfer through it shall be counted at that index only and set the SEC flag and `Ecc_Irq` when enabled; indices of an excluded channel or of a later phase shall count nothing. Without `ExtRegs_g` the window reads 0 and `Ecc_Irq` stays low. | none (extension) |
 | CO-FT-02 | In data mode of the error injection (`ECC_INJECT.Data`), a single error injected at any index shall be corrected, so that data, lengths and results are unchanged; a double error shall corrupt the word of its buffer, which is passed on as read: index 0 and 1 a byte of the stream or of the memory, index 3 a byte written to the memory, index 4 the length of the MM2S packet, index 5 the result code of the MM2S transfer, index 2 the length of the S2MM chunk. | none (extension) |
 
+### 3.6 Requirements of phase b
+
+| ID | Requirement | PG021 items |
+| --- | --- | --- |
+| CO-SG-01 | With `IncludeSg_g` the core shall contain the Scatter/Gather engine `odma_sg` and its descriptor port `M_AxiSg_*`; the consistency checks shall accept `IncludeSg_g` = true. | `MAP.SG` |
+| CO-SG-02 | The Scatter/Gather programming sequence of the MM2S channel (\[PG021\] chapter 4: `CURDESC`, run/stop bit and interrupt enables, `TAILDESC`) shall send the buffers of a descriptor chain as the packets its `TXSOF` and `TXEOF` flags define, write the status of every descriptor and raise the interrupt per packet as the threshold allows. | `SEQ.SG.MM2S` |
+| CO-SG-03 | The Scatter/Gather programming sequence of the S2MM channel shall write received packets into the buffers of the chain, a packet over as many buffers as it needs, with the transferred bytes, `RXSOF` and `RXEOF` in the status of each descriptor. | `SEQ.SG.S2MM` |
+| CO-SG-04 | Software that processes the completed descriptors and moves the tail pointer while the channels run shall keep both channels working without loss of data. | `DESCMGMT.TAIL` |
+| CO-SG-05 | In cyclic mode both channels shall process their descriptor rings until they are halted or reset. | `SEQ.CYCLIC` |
+
 ## 4. Interpretations
 
 The core adds no interpretation of \[PG021\]; it inherits those of `odma_registers`, `odma_mm2s` and `odma_s2mm`

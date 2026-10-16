@@ -82,6 +82,15 @@ code; the requirement below takes effect with that release.
 | --- | --- | --- |
 | S2-RS-05 | The error code of S2-RS-03 shall be the slave error for SLVERR and the decode error for DECERR; with responses of both kinds in one transfer, the first one decides (gap G5). | `S2MM_DMASR.DMASlvErr`, `S2MM_DMASR.DMADecErr` |
 
+### 3.8 Requirements of phase b
+
+| ID | Requirement | PG021 items |
+| --- | --- | --- |
+| S2-SG-01 | In Scatter/Gather Mode a packet longer than the buffer of a command shall continue at byte 0 of the buffer of the next command (gap G10): the result of the full buffer carries its length and no end of packet, and S2-RS-02 does not apply. | `DESC.S2MM_CONTROL.BufferLength`, `STRM.S2MM` |
+| S2-SG-02 | The result shall carry a start of packet flag when its buffer holds the first byte of a packet, and the end of packet when the packet ended in it. | `DESC.S2MM_STATUS.RXSOF`, `DESC.S2MM_STATUS.RXEOF` |
+| S2-SG-03 | When no next command is available for the rest of a packet, the rest shall wait at the stream input (`S_S2mm_Ready` = '0') until the next command arrives. | `DESCMGMT.TAIL` |
+| S2-SG-04 | A command with keyhole shall write its buffer with FIXED bursts of at most 16 beats at the command address with the bits below the memory data width cleared (gap G1), in DR mode and in Scatter/Gather Mode. | `*_DMACR.Keyhole` |
+
 ## 4. Interpretations
 
 | ID | PG021 | OpenDMA |

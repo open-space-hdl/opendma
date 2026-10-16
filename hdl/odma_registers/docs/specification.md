@@ -8,10 +8,11 @@ reset and the reset outputs (RG-3) and the extension window with identification,
 counters and error injection (RG-4). In Direct Register Mode it turns the programmed address and length of a channel
 into a transfer command and updates the status registers from the transfer results of the channels.
 
-This specification covers phase a (Direct Register Mode). The registers and fields of Scatter/Gather Mode, the
-interrupt coalescing and the delay timer follow with phase b; their requirements will be added then. Where a field
-has no function in DR mode, this specification states its DR behaviour and traces it to the access rules
-(`MAP.ACCESS`, `MAP.DR`), so that the function itself stays planned in the compliance matrix until it is implemented.
+Sections 3.1 to 3.7 cover phase a (Direct Register Mode). Where a field has no function in DR mode, they state its
+DR behaviour and trace it to the access rules (`MAP.ACCESS`, `MAP.DR`). Section 3.8 holds the requirements of phase
+b: the register map of Scatter/Gather Mode, the pointer registers, the error flags of the descriptor engine, the
+interrupt coalescing and the delay timer, and the keyhole and cyclic bits; they stay planned in the compliance matrix
+until phase b is implemented.
 
 ## 2. Partner behaviour
 
@@ -102,6 +103,21 @@ such as the programming sequences (`SEQ.*`, owner CO-1), are verified by the req
 | RG-EX-04 | The window shall hold a SEC and a DED event flag (R/WC) with enables; `Ecc_Irq` shall be high while an enabled flag is set. | none (extension) |
 | RG-EX-05 | The window shall hold an error injection control that flips one bit (single error) or two bits (double error) of the next codeword written to a selected FT buffer, through the error injection inputs of the buffer, in parity mode parity bits (the data never changes) and in data mode data bits; the mode shall be taken with each injection and shall be parity mode after a hard or soft reset; the selection of an index without a buffer of the configuration shall have no effect. | none (extension) |
 
+### 3.8 Requirements of phase b
+
+| ID | Requirement | PG021 items |
+| --- | --- | --- |
+| RG-SG-01 | With `IncludeSg_g` the registers shall be at the offsets of PG021 Table 4: `DMACR` 0x00 and 0x30, `DMASR` 0x04 and 0x34, `CURDESC` 0x08 and 0x38, `CURDESC_MSB` 0x0C and 0x3C, `TAILDESC` 0x10 and 0x40, `TAILDESC_MSB` 0x14 and 0x44; the offsets 0x18 to 0x2C and 0x48 to 0x5C shall read 0 (`SG_CTL` exists only in the multichannel mode). | `MAP.SG` |
+| RG-SG-02 | `CURDESC` and `CURDESC_MSB` shall be read/write while the channel is halted and read-only otherwise (writes ignored); bits 5 to 0 and bits at or above `AddrWidth_g` shall read 0; while the channel runs and after it has stopped they shall read the current descriptor pointer of the engine (`odma_sg` SG-FE-07). | `*_CURDESC`, `*_CURDESC_MSB` |
+| RG-SG-03 | `TAILDESC` and `TAILDESC_MSB` shall be read/write with bits 5 to 0 and bits at or above `AddrWidth_g` reading 0. A write while the channel runs shall pass the tail pointer to the engine and, when it is the triggering write (`TAILDESC` with 32 address bits, `TAILDESC_MSB` above 32 bits, `odma_sg` interpretation SGI-01), start or restart the engine; a write while the channel is halted shall only store the pointer. | `*_TAILDESC`, `*_TAILDESC_MSB`, `DESCMGMT.TAIL` |
+| RG-SG-04 | With `IncludeSg_g`, `DMASR.SGIncld` shall read 1, and `DMASR.Idle` shall be 1 while the engine has reached the tail and processed all its descriptors, 0 while the channel is halted or the engine works. | `*_DMASR.SGIncld`, `*_DMASR.Idle` |
+| RG-SG-05 | `DMASR.SGIntErr`, `DMASR.SGSlvErr`, `DMASR.SGDecErr` and `MM2S_DMASR.DMAIntErr` shall be set by the error reports of the engine, clear `DMACR.RS`, set `Err_Irq` and halt the channel; they shall be read-only and cleared only by a reset. | `*_DMASR.SGIntErr`, `*_DMASR.SGSlvErr`, `*_DMASR.SGDecErr`, `MM2S_DMASR.DMAIntErr` |
+| RG-SG-06 | Interrupt threshold: a counter per channel, loaded with `DMACR.IRQThreshold` at the start of the channel and at every write of the field, shall be decremented by every packet completion of the engine; when it reaches 0, `DMASR.IOC_Irq` shall be set and the counter reloaded. `DMASR.IRQThresholdSts` shall read the counter. | `*_DMACR.IRQThreshold`, `*_DMASR.IRQThresholdSts`, `*_DMASR.IOC_Irq` |
+| RG-SG-07 | Delay timer: with `DMACR.IRQDelay` not 0, a timer per channel shall start at a packet completion that did not set `IOC_Irq`, count in units of 125 clock cycles, and stop and clear at the start of the next packet and when the threshold sets `IOC_Irq`; when it reaches `IRQDelay`, `DMASR.Dly_Irq` shall be set, the timer cleared and the threshold counter reloaded (interpretation R9). `DMASR.IRQDelaySts` shall read the timer. | `*_DMACR.IRQDelay`, `*_DMASR.IRQDelaySts`, `*_DMASR.Dly_Irq` |
+| RG-SG-08 | `DMASR.Dly_Irq` shall be cleared by writing 1; the interrupt output of the channel shall also be high while `Dly_Irq` and `DMACR.Dly_IrqEn` are set. | `*_DMACR.Dly_IrqEn`, `*_DMASR.Dly_Irq`, `IRQ.OUT` |
+| RG-SG-09 | `DMACR.Keyhole` shall select non-incrementing bursts for the transfers of the channel: in Scatter/Gather Mode for both channels, in DR mode for S2MM only (interpretation I1). `DMACR.CyclicBD` shall select the cyclic mode of the engine in Scatter/Gather Mode. Both shall be taken at the start of a transfer (DR mode) or of a descriptor fetch (Scatter/Gather Mode). | `*_DMACR.Keyhole`, `*_DMACR.CyclicBD` |
+| RG-SG-10 | With `IncludeSg_g`, `DMASR.Halted` shall be set after a halt request or an error only when the engine and the channel have both stopped (`odma_sg` SG-HA-01). | `*_DMASR.Halted` |
+
 ## 4. Interpretations of the published interface
 
 | ID | PG021 | OpenDMA |
@@ -119,6 +135,7 @@ such as the programming sequences (`SEQ.*`, owner CO-1), are verified by the req
 | R6 | Both `DMACR.Reset` bits during a soft reset | Both read 1 (RG-CR-06) |
 | R7 | Writes not affected by the strobes (Register Space note) | All 32 bits taken; also for partial strobes (RG-IF-03) |
 | R8 | `RS` = 1 written while the channel stops after a halt request | No effect, the channel halts; software waits for `Halted` before a restart (RG-CR-01) |
+| R9 | The delay timer "begins counting at the end of a packet and resets with receipt of a new packet or a timeout event" (Table 6); the threshold counter after a delay interrupt is not described | The timer runs only after a packet that has not raised `IOC_Irq`, in steps of 125 clock cycles; a timeout sets `Dly_Irq` and reloads the threshold counter, so that the next threshold counts the packets after the delay interrupt (RG-SG-07) |
 
 ## 5. Error conditions
 

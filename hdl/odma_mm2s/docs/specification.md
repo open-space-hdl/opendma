@@ -80,6 +80,15 @@ code; the requirement below takes effect with that release.
 | --- | --- | --- |
 | MM-ER-03 | The error code of MM-ER-01 shall be the slave error for SLVERR and the decode error for DECERR; with responses of both kinds in one transfer, the first one decides (gap G5). | `MM2S_DMASR.DMASlvErr`, `MM2S_DMASR.DMADecErr` |
 
+### 3.8 Requirements of phase b
+
+| ID | Requirement | PG021 items |
+| --- | --- | --- |
+| MM-SG-01 | The commands of one packet (the first with the start, the last with the end of packet, each with any address and length) shall be sent as one packet: the bytes of each buffer follow the last byte of the buffer before without gap, every beat is full except the last beat of the packet, and `TLast` is set only on that beat (gap G10). | `STRM.MM2S`, `DESC.MM2S_CONTROL.TXEOF` |
+| MM-SG-02 | The result of a command without the end of packet shall be returned when the last byte of its buffer has been read and passed on to the stream output; the result of the command with the end of packet as in MM-ST-03. | `DESC.MM2S_STATUS.TransferredBytes` |
+| MM-SG-03 | A command with keyhole shall read its buffer with FIXED bursts of at most 16 beats at the command address with the bits below the memory data width cleared (gap G1); the stream output is the same as for an incrementing read of the buffer. | `*_DMACR.Keyhole` |
+| MM-SG-04 | When `Run` falls inside a packet of several commands, the channel shall complete the command in progress as in MM-HA-01 and set `TLast` on its last beat, so that the stream peer sees the packet ended early (interpretation M4). | `*_DMACR.RS` |
+
 ## 4. Interpretations
 
 | ID | PG021 | OpenDMA |
@@ -89,6 +98,7 @@ code; the requirement below takes effect with that release.
 | I11 | Streams potentially terminated early on error | The transfer is sent completely (MM-ER-02); the stream peer sees a complete packet, software sees the error |
 | M1 | Reads at beat granularity are not described | The other bytes of the first and the last memory word are read and discarded (MM-RD-01, architecture P6) |
 | M2 | A double error in the read data buffer is not part of PG021 | The beat is sent as read from the buffer and counted (MM-FT-01, extension window); the transfer result is not changed, so the register interface keeps its PG021 behaviour |
+| M4 | `RS` = 0 in Scatter/Gather Mode: "AXI4-Stream outs are potentially terminated early" | A packet of several descriptors ends with `TLast` on the last beat of the descriptor in progress (MM-SG-04) |
 | M3 | A buffer length of 0 is an internal error of a descriptor in Scatter/Gather Mode (Table 31, `DMAIntErr`) | The channel ends a command of length 0 without a read and with the internal error code (MM-RD-06); the register interface of DR mode never issues one |
 
 ## 5. Error conditions

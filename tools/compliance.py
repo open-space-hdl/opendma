@@ -18,8 +18,9 @@ MM2S_DMACR.RS and would trace to an item MM2S_DMACR).
 A module is in specification while it has no testbench (hdl/<module>/tb/*_tb.vhd): its requirements and test cases
 are listed as planned. A test case whose row starts with `lint/synth_check.py` is run by the synthesis check of the
 CI instead of a testbench. A requirement or a test case in a section of a specification or a verification plan whose
-heading contains "waiting for Open Logic" needs a change of Open Logic that is not released yet: it is listed as
-planned, never counts as verified and need not be run. An item without a verified requirement is planned while its development phase is open in
+heading contains "waiting for Open Logic" needs a change of Open Logic that is not released yet, and one in a
+section whose heading contains "Requirements of phase b" (or a later phase) belongs to a development phase that is not
+implemented yet: both are listed as planned, never count as verified and need not be run. An item without a verified requirement is planned while its development phase is open in
 docs/roadmap.md or while none of its owner modules has a testbench yet. With --check the file is not written; the exit
 code is 1 when an item that is not planned has no test case, when a requirement of a module with a testbench has no
 test case or when a test case of such a module is not run by its testbench.
@@ -83,7 +84,7 @@ def expand_ids(cell):
     return ids
 
 
-WAITING_RE = re.compile(r"^(#+) .*waiting for Open Logic", re.I)
+WAITING_RE = re.compile(r"^(#+) .*(waiting for Open Logic|requirements of phase [b-z]\b)", re.I)
 
 
 def split_waiting(text):
@@ -212,10 +213,11 @@ def main():
         "",
         "An item is listed with every requirement that traces to it and with the test cases that verify these",
         "requirements. An item is verified when every requirement that traces to it is verified by a test case, and",
-        "partly verified while the other requirements belong to modules without a testbench yet or wait for a change",
-        "of Open Logic. An item is planned while its development phase is open, none of its owner modules has a",
-        "testbench yet or all its requirements wait for Open Logic. The interpretations of the published interface",
-        "are listed in section 6 of the architecture and in the module specifications.",
+        "partly verified while the other requirements belong to modules without a testbench yet, to a later",
+        "development phase (for example the Scatter/Gather function of a status bit that is verified in Direct",
+        "Register Mode) or wait for a change of Open Logic. An item is planned while its development phase is open,",
+        "none of its owner modules has a testbench yet or all its requirements are planned. The interpretations of",
+        "the published interface are listed in section 6 of the architecture and in the module specifications.",
         "",
         "| Item | PG021 reference | Owner | Phase | Requirements | Test cases | Status |",
         "| --- | --- | --- | --- | --- | --- | --- |",

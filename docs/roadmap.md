@@ -30,5 +30,5 @@ The core is in development and has no technology readiness level yet. The
 | `odma_registers` | RG-1 to RG-4 (register interface) | Done (GHDL) |
 | `odma_mm2s` | MM-1 to MM-3 (MM2S channel) | MM-1, MM-2 done (GHDL); MM-3 in phase c |
 | `odma_s2mm` | S2-1 to S2-3 (S2MM channel) | S2-1, S2-2 done (GHDL); S2-3 in phase c |
-| `odma_sg` | SG-1 to SG-3 (Scatter/Gather engine) | Open |
+| `odma_sg` | SG-1 to SG-3 (Scatter/Gather engine) | Specification |
 | `odma_core` | CO-1 (core top level) | DR mode done (GHDL) |

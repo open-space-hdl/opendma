@@ -41,6 +41,7 @@ extra:
 nav:
   - Home: README.md
   - Guide:
+      - User guide: docs/user_guide.md
       - Architecture: docs/architecture.md
   - Modules: hdl/*/
   - Verification:

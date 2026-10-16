@@ -17,7 +17,7 @@ The core is in development and has no technology readiness level yet. The
 
 | Phase | Content | State |
 | --- | --- | --- |
-| a | Direct Register Mode: MM2S and S2MM channels, register bank, interrupts, errors, soft reset | Architecture in work |
+| a | Direct Register Mode: MM2S and S2MM channels, register bank, interrupts, errors, soft reset | Implemented, verified with GHDL; QuestaSim and code coverage open |
 | b | Scatter/Gather Mode: descriptor engine, cyclic mode, interrupt coalescing and delay, keyhole | Open |
 | c | Control and status streams (user application fields), micro mode | Open |
 | d | Driver tests on hardware (bare-metal and Linux on a processor system) | Open |
@@ -27,8 +27,8 @@ The core is in development and has no technology readiness level yet. The
 | Module | Blocks (architecture section 7) | Status |
 | --- | --- | --- |
 | `odma_pkg` | Common package; shared verification components (AXI memory model, sequence player) and the model of the programming sequences | Done (GHDL) |
-| `odma_registers` | RG-1 to RG-4 (register interface) | Open |
-| `odma_mm2s` | MM-1 to MM-3 (MM2S channel) | Open |
-| `odma_s2mm` | S2-1 to S2-3 (S2MM channel) | Open |
+| `odma_registers` | RG-1 to RG-4 (register interface) | Done (GHDL) |
+| `odma_mm2s` | MM-1 to MM-3 (MM2S channel) | MM-1, MM-2 done (GHDL); MM-3 in phase c |
+| `odma_s2mm` | S2-1 to S2-3 (S2MM channel) | S2-1, S2-2 done (GHDL); S2-3 in phase c |
 | `odma_sg` | SG-1 to SG-3 (Scatter/Gather engine) | Open |
-| `odma_core` | CO-1 (core top level) | Open |
+| `odma_core` | CO-1 (core top level) | DR mode done (GHDL) |

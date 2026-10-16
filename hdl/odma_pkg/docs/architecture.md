@@ -73,7 +73,8 @@ slave to do); the timing of a real interconnect beyond the random backpressure a
 `odmaSequence(file, ...)` reads a text file and executes one command per line through the AXI4-Lite VVC (register
 accesses), the AXI4-Stream VVCs (stream packets) and two interrupt signals. Numbers are hexadecimal with the prefix
 `0x` or decimal; `#` starts a comment. A failed compare or an expired timeout raises an error alert with the line
-number and the line (PKG-08).
+number and the line (PKG-08). The message of a VVC command carries the last 100 characters of the file name, the line
+number and the first 60 characters of the line, within the 300 characters of the message field of a VVC command.
 
 | Command | Meaning |
 | --- | --- |
@@ -108,7 +109,26 @@ descriptions of chapter 3, without vendor driver code and independently of the R
 The sequence of a DR transfer follows \[PG021\] chapter 4: `DMACR.RS` = 1 and the interrupt enables, the poll of
 `DMASR.Halted` = 0, the address (and its MSB register for addresses above 32 bits), the length as the last write,
 then the completion (interrupt, `DMASR.IOC_Irq` and `Idle`), the write-one-to-clear of `IOC_Irq`, for S2MM the
-read of the received length. A reset step writes `DMACR.Reset` = 1 and polls until it reads 0.
+read of the received length. A reset step writes `DMACR.Reset` = 1 of the first included channel and polls until it
+reads 0. Further steps:
+
+| Step | Sequence |
+| --- | --- |
+| `halt` | `DMACR.RS` = 0, poll until `DMASR.Halted` reads 1 |
+| `check_cleared` | After a reset: `DMASR` of every included channel halted without error and interrupt flags |
+| `concurrent` | Transfers of both channels, every one programmed before the first completion is awaited |
+| `failed_transfer` | A transfer that ends with an error: the interrupt, the poll of `DMASR.Halted` (it follows the error when the channel has shut down), the error flags and `Err_Irq` in `DMASR`, the write-one-to-clear of `Err_Irq`; optionally without stream data (buffer beyond the top of the address space) |
+
+A scenario can name the included channels and a guard: the expected memory then holds the given number of zero
+bytes before and after every S2MM packet, so that a write outside the packet fails the comparison.
+
+| Scenario | Content | Used by |
+| --- | --- | --- |
+| `dr_reference` | Reset, one MM2S and one S2MM transfer with interrupt above 4 GB at unaligned addresses, one MM2S transfer by polling | TC-PKG-11 (golden files), TC-CO-01 |
+| `dr_random` | Transfers of random channels, lengths (1 byte and the longest length among them) and unaligned addresses, some across 4 KB, by interrupt or polling, then a halt and a restart of each channel; random data without a period | TC-CO-02, TC-CO-05, TC-CO-08 |
+| `dr_concurrent` | Long transfers of both channels at the same time | TC-CO-03 |
+| `dr_errors` | Read and write errors, an S2MM packet longer than its buffer, buffers beyond the top of the address space, each followed by a transfer of the other channel and a reset | TC-CO-04 |
+| `dr_single` | One transfer of one channel without a reset | TC-CO-06 |
 
 `run.py` calls the model in a VUnit `pre_config` of each core test configuration, which writes the files into the
 output directory of the test; the bench finds them with `output_path(runner_cfg)`. No generated file is committed.

@@ -89,25 +89,34 @@ def load_requirements():
 
 
 def load_tests():
-    """Test cases of the verification plans: test ID -> requirement IDs. Also returns the test names of the plans
-    that no testbench of the repository runs."""
+    """Test cases of the verification plans that a testbench of their module runs: test ID -> requirement IDs. Also
+    returns the test names of the plans that no testbench of their module runs."""
     tests = {}
-    names = set()
+    not_run = []
     for plan in sorted(ROOT.glob("hdl/*/docs/verification_plan.md")):
-        for row in table_rows(plan.read_text(encoding="utf-8")):
+        module_dir = plan.parent.parent
+        run_names = set()
+        for tb in module_dir.glob("tb/*.vhd"):
+            run_names.update(re.findall(r'run\("(test_\w+)"\)', tb.read_text(encoding="utf-8")))
+        run_ids = set()
+        rows = list(table_rows(plan.read_text(encoding="utf-8")))
+        for row in rows:
             if len(row) >= 3 and row[0].startswith("`test_"):
+                name = row[0].split("`")[1]
                 m = re.search(r"\((TC-[A-Z0-9]+-\d+)\)", row[0])
                 tid = m.group(1) if m else row[0]
-                tests.setdefault(tid, set()).update(expand_ids(row[-1]))
-                names.add(row[0].split("`")[1])
-            elif len(row) >= 3 and re.match(r"^TC-[A-Z0-9]+-\d+", row[0]):
+                if name in run_names:
+                    run_ids.add(tid)
+                    tests.setdefault(tid, set()).update(expand_ids(row[-1]))
+                else:
+                    not_run.append(f"{module_dir.name}: {name}")
+        for row in rows:
+            if len(row) >= 3 and re.match(r"^TC-[A-Z0-9]+-\d+", row[0]):
                 # Rows that reference test IDs directly (for example "TC-CO-02 (two configurations)")
                 for tid in re.findall(r"TC-[A-Z0-9]+-\d+", row[0]):
-                    tests.setdefault(tid, set()).update(expand_ids(row[-1]))
-    run_names = set()
-    for tb in ROOT.glob("hdl/*/tb/*.vhd"):
-        run_names.update(re.findall(r'run\("(test_\w+)"\)', tb.read_text(encoding="utf-8")))
-    return tests, sorted(names - run_names)
+                    if tid in run_ids:
+                        tests.setdefault(tid, set()).update(expand_ids(row[-1]))
+    return tests, sorted(not_run)
 
 
 def load_matrix():

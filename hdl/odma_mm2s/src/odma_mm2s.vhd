@@ -95,6 +95,9 @@ architecture rtl of odma_mm2s is
     -- Longest burst of the read master: no AXI burst crosses 4 KB, so longer bursts never occur, and
     -- olo_axi_master_simple of Open Logic 4.7.0-ft.6 does not elaborate with more beats than 4 KB holds
     constant MasterBeats_c : positive := minimum(BurstBeats_g, 4096 / (MemWidth_g / 8));
+    -- Size bits of the read master: one more than the length, as for the write master of odma_s2mm, where the
+    -- word count of olo_axi_master_full of Open Logic 4.7.0-ft.6 wraps in the last user word below 2**size bits (G14)
+    constant SizeBits_c    : positive := LengthWidth_g + 1;
 
     -- Transfer buffer {code, end of packet, length} and response buffer {code}
     constant XferDepth_c : positive := 8;
@@ -140,6 +143,7 @@ architecture rtl of odma_mm2s is
     -- Read master
     signal CmdRd_Addr  : std_logic_vector(AddrWidth_g - 1 downto 0);
     signal CmdRd_Size  : std_logic_vector(LengthWidth_g - 1 downto 0);
+    signal MasterSize  : std_logic_vector(SizeBits_c - 1 downto 0);
     signal CmdRd_Valid : std_logic;
     signal CmdRd_Ready : std_logic;
     signal Rd_Data     : std_logic_vector(StreamWidth_g - 1 downto 0);
@@ -197,7 +201,8 @@ begin
         );
 
     -- *** AXI4 read master with the read data buffer ***
-    RdInjFlip <= flipPattern(RdInjFlip'length, EccInj_Double);
+    RdInjFlip  <= flipPattern(RdInjFlip'length, EccInj_Double);
+    MasterSize <= std_logic_vector(resize(unsigned(CmdRd_Size), SizeBits_c));
 
     i_master : entity olo.olo_ft_axi_master_full
         generic map (
@@ -205,7 +210,7 @@ begin
             AxiDataWidth_g            => MemWidth_g,
             AxiMaxBeats_g             => MasterBeats_c,
             AxiMaxOpenTransactions_g  => 8,
-            UserTransactionSizeBits_g => LengthWidth_g,
+            UserTransactionSizeBits_g => SizeBits_c,
             DataFifoDepth_g           => BufferBeats_g,
             UserDataWidth_g           => StreamWidth_g,
             ImplRead_g                => true,
@@ -215,7 +220,7 @@ begin
             Clk               => Clk,
             Rst               => Rst,
             CmdRd_Addr        => CmdRd_Addr,
-            CmdRd_Size        => CmdRd_Size,
+            CmdRd_Size        => MasterSize,
             CmdRd_LowLat      => '0',
             CmdRd_Valid       => CmdRd_Valid,
             CmdRd_Ready       => CmdRd_Ready,

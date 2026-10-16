@@ -56,7 +56,9 @@ response code (specification section 3.7). A command accepted before a drain is 
 is discarded by MM-2. The response buffer never overflows: every response belongs to an entry of the transfer buffer,
 which has the same depth.
 
-The read master runs with `UserTransactionSizeBits_g` = `LengthWidth_g`, `AxiMaxBeats_g` = the smaller of
+The read master runs with `UserTransactionSizeBits_g` = `LengthWidth_g` + 1 (gap G14 of the architecture: the
+write path of `olo_axi_master_full` of Open Logic 4.7.0-ft.6 stalls after a command whose size lies in the last user
+data word below 2**`UserTransactionSizeBits_g`; the read master uses the same setting), `AxiMaxBeats_g` = the smaller of
 `BurstBeats_g` and the beats of 4 KB (4096 / (`MemWidth_g` / 8); no AXI burst crosses 4 KB, so the bursts are the
 same, and `olo_axi_master_simple` of Open Logic 4.7.0-ft.6 does not elaborate with more beats than 4 KB holds),
 `AxiMaxOpenTransactions_g` = 8, `DataFifoDepth_g` = `BufferBeats_g` (in stream beats), `UserDataWidth_g` =

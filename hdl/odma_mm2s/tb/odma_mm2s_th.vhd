@@ -57,6 +57,7 @@ entity odma_mm2s_th is
         StreamClear  : in    std_logic;                      -- A change restarts the stream counters
         EccInjValid  : in    std_logic_vector(2 downto 0);
         EccInjDouble : in    std_logic;
+        EccInjData   : in    std_logic;
         Obs          : out   Obs_r
     );
 end entity;
@@ -190,7 +191,8 @@ begin
             Ecc_Sec       => EccSec,
             Ecc_Ded       => EccDed,
             EccInj_Valid  => EccInjValid,
-            EccInj_Double => EccInjDouble
+            EccInj_Double => EccInjDouble,
+            EccInj_Data   => EccInjData
         );
 
     -----------------------------------------------------------------------------------------------

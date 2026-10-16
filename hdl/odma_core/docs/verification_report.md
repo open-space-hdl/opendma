@@ -7,7 +7,7 @@ Run on 2026-10-16 with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7, UVVM 2026.03.20: `p
 
 | Testbench or check | Tests | Passed |
 | --- | --- | --- |
-| `odma_core_tb` | 38 (8 test cases in the configurations of verification plan section 2) | 38 |
+| `odma_core_tb` | 43 (9 test cases in the configurations of verification plan section 2) | 43 |
 | `lint/synth_check.py` (TC-CO-09) | 25 (16 configurations synthesised, 9 inconsistent ones rejected) | 25 |
 
 ## 2. Summary
@@ -22,6 +22,7 @@ Findings of the verification:
 | --- | --- |
 | The sequence player passed the whole line of a command as the message of a VVC command; a packet line of more than about 250 characters exceeded the message field of 300 characters and stopped the simulation | The message carries the end of the file name, the line number and the start of the line (`odma_pkg` architecture, section 3.3) |
 | Right after the error interrupt `S2MM_DMASR.Halted` can still read 0: the error flags and `Err_Irq` are set with the result, `Halted` follows when the channel has shut down. \[PG021\] describes the same order for an error (`RS` falls, `Halted` is set when the engine has shut down) | The model polls `Halted` after the error interrupt (`failed_transfer`); the user guide states the order (section 5.4) |
+| The injection flipped parity bits only, so a double error never changed data and a single error never exercised the correction of a data bit: a channel that used the uncorrected word of a buffer would have passed every injection test, and the buffers of one channel could not be told apart | `ECC_INJECT.Data` selects data bits; TC-CO-10, TC-MM-13 and TC-S2-13 inject single errors on a data bit, TC-CO-10 double errors with the consequence of each buffer (`odma_registers` RG-EX-05) |
 | A mutation check found the channel reset and the S2MM drain of the soft reset not observed: with the transfers drained the channels reached the same state without them | TC-CO-05 sends the S2MM packet from a stream peer that is still sending at the reset and counts the beats taken during the reset; TC-CO-06 shows that the soft reset cancels an injection pending in each buffer |
 
 ## 3. Checks of the testbench
@@ -35,19 +36,22 @@ repository passes all of them:
 | The MM2S channel is reset by `Rst` only, not by the soft reset | TC-CO-06 |
 | The S2MM channel is reset by `Rst` only | TC-CO-06 |
 | The S2MM channel does not receive `Drain` | TC-CO-05 |
+| The MM2S transfer and response buffers at exchanged indices (4 and 5) | TC-CO-10 |
+| The MM2S read data buffer at the index of the transfer buffer | TC-CO-10 |
+| The S2MM data and write data buffers at exchanged indices (1 and 3) | TC-CO-10 |
+| The S2MM data and chunk buffers at exchanged indices (1 and 2) | TC-CO-10 |
+| The MM2S channel does not receive the injection mode | TC-CO-10 |
 | The MM2S channel does not receive `Drain` | TC-CO-05 |
 | The idle burst type of an excluded MM2S channel is FIXED | TC-CO-07 (idle monitor) |
 | The error code of the S2MM result does not reach the register interface | TC-CO-04 |
 
-Two faults pass and are not observable at the ports:
+One fault passes and is equivalent by design: `Stopped` of an excluded channel at '0'. `odma_registers` treats a
+channel that is not included as stopped, so the idle value has no effect.
 
-- A permutation of the indices of the three buffers of one channel that is applied in the same way to the events and
-  to the injection (for example indices 4 and 5 exchanged): an injection at an index still reaches a buffer of the
-  channel and its event comes back at the same index. The assignment of an index to the named buffer rests on the
-  bit order of the channel ports, which the unit tests of `odma_mm2s` and `odma_s2mm` verify per buffer, and on the
-  index function `eccIndex` of the core.
-- `Stopped` of an excluded channel at '0': `odma_registers` treats a channel that is not included as stopped, so the
-  idle value has no effect.
+A permutation of the indices of the buffers of one channel, applied in the same way to the events and to the
+injection, is not visible through the counters of single errors: an injection still reaches a buffer of the
+channel and its event comes back at the same index. TC-CO-10 tells every buffer apart by the consequence of a
+double error in data mode, so such a permutation fails it.
 
 ## 4. Generic ranges
 

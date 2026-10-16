@@ -90,8 +90,10 @@ package odma_registers_tb_pkg is
         RstOutLen    : natural;   -- Clock cycles of the last completed reset output pulse
         RstOutDiffer : natural;   -- Clock cycles with different reset outputs
         InjCount     : natural;   -- Error injection strobes
-        InjIdx       : natural;   -- Buffer index and EccInj_Double of the last strobe
+        InjIdx       : natural;   -- Buffer index, EccInj_Double and EccInj_Data of the last strobe
         InjDouble    : std_logic;
+        InjData      : std_logic;
+        InjMode      : std_logic; -- EccInj_Data in the last clock cycle
         InjMulti     : natural;   -- Clock cycles with more than one strobe
     end record;
 

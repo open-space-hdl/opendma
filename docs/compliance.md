@@ -147,10 +147,10 @@ of the published interface included).
 
 | Module | Requirements | Verified by a test case | Without a test case | Waiting for Open Logic |
 | --- | --- | --- | --- | --- |
-| `odma_core` | 13 | 13 | - | - |
+| `odma_core` | 14 | 14 | - | - |
 | `odma_mm2s` | 18 | 17 | - | MM-ER-03 |
 | `odma_pkg` | 10 | 10 | - | - |
 | `odma_registers` | 42 | 42 | - | - |
 | `odma_s2mm` | 21 | 20 | - | S2-RS-05 |
 
-Requirements: 104; without a test case: 0; test cases of the plans not run by a testbench: 0.
+Requirements: 105; without a test case: 0; test cases of the plans not run by a testbench: 0.

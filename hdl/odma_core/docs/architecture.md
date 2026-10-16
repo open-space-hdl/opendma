@@ -48,7 +48,7 @@ can leave them open.
 | `Mm2s_Run`, `Mm2s_Drain`, `S2mm_Run`, `S2mm_Drain` | RG-1, RG-3 | Channel | Channel control |
 | `Mm2s_Stopped`, `S2mm_Stopped` | Channel | RG-1, RG-3 | Channel stopped, nothing outstanding |
 | `Ecc_Sec`, `Ecc_Ded` (16 bits) | Channels (3 bits each) | RG-4 | ECC events in the order of the buffer indices (section 5) |
-| `EccInj_Valid` (16 bits), `EccInj_Double` | RG-4 | Channels | Error injection strobes, mapped back to the 3 bits of each channel |
+| `EccInj_Valid` (16 bits), `EccInj_Double`, `EccInj_Data` | RG-4 | Channels | Error injection strobes, mapped back to the 3 bits of each channel, with the error type and the mode |
 
 The channels are reset by `CoreRst`; the register interface by `Rst` only, so that the soft reset can complete the
 register access that started it.
@@ -69,7 +69,8 @@ function `eccIndex`:
 | 5 | MM2S bit 2 | MM2S response buffer |
 | 6 to 15 | none | '0' (phases b and c, reserved) |
 
-The injection strobes take the same map in the opposite direction; `EccInj_Double` goes to both channels.
+The injection strobes take the same map in the opposite direction; `EccInj_Double` and `EccInj_Data` go to both
+channels.
 
 ## 6. Channels that are not included
 

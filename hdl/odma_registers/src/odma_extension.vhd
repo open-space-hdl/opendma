@@ -61,6 +61,7 @@ entity odma_extension is
         Ecc_Ded       : in    std_logic_vector(15 downto 0);
         EccInj_Valid  : out   std_logic_vector(15 downto 0);
         EccInj_Double : out   std_logic;
+        EccInj_Data   : out   std_logic;
         -- Interrupt
         Ecc_Irq       : out   std_logic
     );
@@ -132,6 +133,7 @@ architecture rtl of odma_extension is
         DedEna    : std_logic;                                -- ECC_ENABLE.Ded
         InjValid  : std_logic_vector(Buffers_c - 1 downto 0);
         InjDouble : std_logic;
+        InjData   : std_logic;
         Irq       : std_logic;
     end record;
 
@@ -201,6 +203,7 @@ begin
                     end loop;
 
                     v.InjDouble := Rb_WrData(EccInjectDouble_c);
+                    v.InjData   := Rb_WrData(EccInjectData_c);
                 end if;
             elsif Cnt_v then
                 -- ECC_COUNT_n: any write clears both counters of buffer n
@@ -255,6 +258,7 @@ begin
     Rb_RdData     <= (Mon_DedCnt & Mon_SecCnt) when r.RdCnt = '1' else r.RdData;
     EccInj_Valid  <= r.InjValid;
     EccInj_Double <= r.InjDouble;
+    EccInj_Data   <= r.InjData;
     Ecc_Irq       <= r.Irq;
 
     -- *** Sequential Process ***
@@ -270,6 +274,7 @@ begin
                 r.DedEna    <= '0';
                 r.InjValid  <= (others => '0');
                 r.InjDouble <= '0';
+                r.InjData   <= '0';
                 r.Irq       <= '0';
             end if;
         end if;

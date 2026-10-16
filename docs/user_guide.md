@@ -111,6 +111,14 @@ injection (register map). The FT buffer indices are 0 MM2S read data, 1 S2MM dat
 data, 4 MM2S transfer and 5 MM2S response; the other indices count nothing in phase a. Software written for
 \[PG021\] does not access the window.
 
+`ECC_INJECT` flips one bit (single error) or two bits (double error) of the next word written to the selected
+buffer, in one of two modes:
+
+| `ECC_INJECT.Data` | Bits flipped | Effect |
+| --- | --- | --- |
+| 0 (after every reset) | Parity bits of the code | The data never changes: a single error is corrected, a double error is detected and counted. Safe in a running system |
+| 1 | Data bits 0 and 1 | A single error is corrected (data unchanged). A double error corrupts the word: a byte of the MM2S stream (index 0), of the S2MM packet in memory (indices 1 and 3), the length of the MM2S packet (index 4), the result code of the MM2S transfer (index 5, `DMADecErr`) or the length of an S2MM chunk (index 2). For tests only |
+
 ## 6. Protection scope
 
 The core is designed for radiation environments together with the triple modular redundancy (TMR) of the synthesis
@@ -119,7 +127,7 @@ TMR for all other logic:
 
 | Part | Protection | Indication and test |
 | --- | --- | --- |
-| The six FT buffers: MM2S read data, transfer and response buffers; S2MM data, chunk and write data buffers | SECDED ECC of the Open Logic ft entities: a single error is corrected, a double error is detected and counted; the data of a double error is passed on as read, and the transfer result is not changed | `ECC_COUNT_0` to `ECC_COUNT_5`, `ECC_STATUS`, `Ecc_Irq` with `ECC_ENABLE`; error injection through `ECC_INJECT` |
+| The six FT buffers: MM2S read data, transfer and response buffers; S2MM data, chunk and write data buffers | SECDED ECC of the Open Logic ft entities: a single error is corrected, a double error is detected and counted; the word of a double error is passed on as read (corrupted data, length or result code of the transfer it belongs to), and the core does not turn the double error into a transfer error | `ECC_COUNT_0` to `ECC_COUNT_5`, `ECC_STATUS`, `Ecc_Irq` with `ECC_ENABLE`; error injection through `ECC_INJECT` (parity mode non-destructive, data mode corrupts data with a double error, section 5.5) |
 | Clock domain crossings and reset synchronisers | The core has none (one clock domain); an `olo_ft_fifo_async` placed at a port by the integrator uses triplicated synchronisers (`SyncTmr_g` = true) | none |
 | State machines | Recovery state through the `when others` branch and the reset | none |
 | All other logic: registers of the control and data paths, counters, pointers, pipeline registers | TMR of the synthesis tool (for example `syn_radhardlevel` = `tmr` with Synplify, or the equivalent setting of the tool chain). The core adds no protection of its own for this logic; without TMR, an upset in it is not covered | synthesis report |

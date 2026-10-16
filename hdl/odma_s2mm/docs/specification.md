@@ -70,7 +70,7 @@ several buffers (phase b, gap G10), keyhole writes (phase b, gap G1) and the sta
 
 | ID | Requirement | PG021 items |
 | --- | --- | --- |
-| S2-FT-01 | The data buffer, the chunk buffer and the write data buffer of the write master shall be protected by SECDED ECC; every corrected single error and every detected double error shall raise one pulse on the `Ecc_Sec` or `Ecc_Ded` bit of its buffer; `EccInj_Valid` of a buffer with `EccInj_Double` shall flip one or two bits of its next codeword. | none (architecture P5) |
+| S2-FT-01 | The data buffer, the chunk buffer and the write data buffer of the write master shall be protected by SECDED ECC; every corrected single error and every detected double error shall raise one pulse on the `Ecc_Sec` or `Ecc_Ded` bit of its buffer; `EccInj_Valid` of a buffer with `EccInj_Double` and `EccInj_Data` shall flip one or two parity bits or data bits of its next codeword. | none (architecture P5) |
 
 ### 3.7 Requirements waiting for Open Logic
 

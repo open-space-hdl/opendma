@@ -83,5 +83,6 @@ at least one test case; the RTL of the repository passes all of them:
 | The ECC event of the data buffer is not qualified by the handshake | TC-S2-13 |
 | The halt decision does not see the stored descriptors | TC-S2-11 |
 | The write master runs with `LengthWidth_g` size bits (gap G14) | TC-S2-16 |
+| A single error in data mode flips two data bits (the word is corrupted instead of corrected) | TC-S2-13 |
 
 The recovery branches of the state machines (`when others`) cannot be reached through the ports.

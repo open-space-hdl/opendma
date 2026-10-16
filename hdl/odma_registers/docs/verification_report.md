@@ -54,5 +54,7 @@ passes all of them:
 | An S2MM slave error does not set `DMAIntErr` | TC-RG-08 |
 | `Run` falls with the halt request before the command is accepted | TC-RG-07 |
 | Register writes are taken during a soft reset | TC-RG-10 |
+| `ECC_INJECT.Data` is not taken with the strobe | TC-RG-13 |
+| The injection mode is not reset | TC-RG-13 |
 
 The recovery branches of the state machines (`when others`) cannot be reached through the ports.

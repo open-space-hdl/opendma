@@ -100,7 +100,7 @@ such as the programming sequences (`SEQ.*`, owner CO-1), are verified by the req
 | RG-EX-02 | The window shall hold read-only configuration words with the values of all generics of the core. | none (extension) |
 | RG-EX-03 | The window shall hold, for every FT buffer of the configuration, a single error (SEC) and a double error (DED) event counter that saturates; the counters of an index without a buffer of the configuration shall stay 0. A write to the counter word of a buffer shall clear its counters, and a write of 1 to a clear bit shall clear all counters; an event in the same cycle as a clear shall be counted. | none (extension, architecture P5) |
 | RG-EX-04 | The window shall hold a SEC and a DED event flag (R/WC) with enables; `Ecc_Irq` shall be high while an enabled flag is set. | none (extension) |
-| RG-EX-05 | The window shall hold an error injection control that flips one bit (single error) or two bits (double error) of the next codeword written to a selected FT buffer, through the error injection inputs of the buffer; the selection of an index without a buffer of the configuration shall have no effect. | none (extension) |
+| RG-EX-05 | The window shall hold an error injection control that flips one bit (single error) or two bits (double error) of the next codeword written to a selected FT buffer, through the error injection inputs of the buffer, in parity mode parity bits (the data never changes) and in data mode data bits; the mode shall be taken with each injection and shall be parity mode after a hard or soft reset; the selection of an index without a buffer of the configuration shall have no effect. | none (extension) |
 
 ## 4. Interpretations of the published interface
 

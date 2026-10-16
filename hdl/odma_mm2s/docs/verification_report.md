@@ -86,5 +86,6 @@ at least one test case; the RTL of the repository passes all of them:
 | Every later burst of a command reads the address of the first burst (`olo_axi_master_simple`) | TC-MM-03 |
 | The read address is 256 bytes too high | TC-MM-01 |
 | The address after a 4 KB boundary is 4096 bytes too high (`olo_axi_master_simple`) | TC-MM-03 |
+| A single error in data mode flips two data bits (the word is corrupted instead of corrected) | TC-MM-13 |
 
 The recovery branches of the state machines (`when others`) cannot be reached through the ports.

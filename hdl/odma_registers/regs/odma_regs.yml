@@ -184,6 +184,7 @@ registers:
       - {name: Buffer, bits: "3:0", access: WO, reset: 0, description: Index of the buffer (register map page, section FT buffers)}
       - {name: Double, bits: "8", access: WO, reset: 0, description: "1: double error (two bits), 0: single error (one bit)"}
       - {name: Inject, bits: "9", access: W1, reset: 0, description: Flips the bits of the next codeword written to the buffer}
+      - {name: Data, bits: "10", access: WO, reset: 0, description: "1: data bits (single: data bit 0, double: data bits 0 and 1, the word is corrupted), 0: parity bits (the data never changes)"}
 
 arrays:
   - name: ECC_COUNT

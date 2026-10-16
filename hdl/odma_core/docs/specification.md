@@ -61,6 +61,7 @@ streams and the micro DMA configuration (phase c) follow.
 | ID | Requirement | PG021 items |
 | --- | --- | --- |
 | CO-FT-01 | The FT buffers of the channels shall appear in the extension window at the indices of the `odma_registers` architecture (section 8): 0 MM2S read data, 1 S2MM data, 2 S2MM chunk, 3 S2MM write data, 4 MM2S transfer, 5 MM2S response. An injection at an index shall reach that buffer only; the corrected single error of a transfer through it shall be counted at that index only and set the SEC flag and `Ecc_Irq` when enabled; indices of an excluded channel or of a later phase shall count nothing. Without `ExtRegs_g` the window reads 0 and `Ecc_Irq` stays low. | none (extension) |
+| CO-FT-02 | In data mode of the error injection (`ECC_INJECT.Data`), a single error injected at any index shall be corrected, so that data, lengths and results are unchanged; a double error shall corrupt the word of its buffer, which is passed on as read: index 0 and 1 a byte of the stream or of the memory, index 3 a byte written to the memory, index 4 the length of the MM2S packet, index 5 the result code of the MM2S transfer, index 2 the length of the S2MM chunk. | none (extension) |
 
 ## 4. Interpretations
 
@@ -73,7 +74,7 @@ The core adds no interpretation of \[PG021\]; it inherits those of `odma_registe
 | --- | --- | --- |
 | Inconsistent generics | Assertions of `odma_core` at elaboration | Elaboration stops with a message naming the generic (CO-CF-02) |
 | Transfer error of a channel | Result of the channel | Channel halts with its error flags; the other channel continues (CO-ER-01, CO-ER-02) |
-| Single or double error in an FT buffer | SEC and DED outputs of the buffers | Counted at the index of the buffer (CO-FT-01) |
+| Single or double error in an FT buffer | SEC and DED outputs of the buffers | Counted at the index of the buffer (CO-FT-01); the word of a double error is passed on as read (CO-FT-02) |
 
 ## 6. Configuration parameters
 

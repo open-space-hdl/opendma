@@ -113,7 +113,8 @@ entity odma_registers is
         Ecc_Sec           : in    std_logic_vector(15 downto 0)                := (others => '0');
         Ecc_Ded           : in    std_logic_vector(15 downto 0)                := (others => '0');
         EccInj_Valid      : out   std_logic_vector(15 downto 0);
-        EccInj_Double     : out   std_logic
+        EccInj_Double     : out   std_logic;
+        EccInj_Data       : out   std_logic
     );
 end entity;
 
@@ -647,6 +648,7 @@ begin
                 Ecc_Ded       => Ecc_Ded,
                 EccInj_Valid  => EccInj_Valid,
                 EccInj_Double => EccInj_Double,
+                EccInj_Data   => EccInj_Data,
                 Ecc_Irq       => Ecc_Irq
             );
 
@@ -656,6 +658,7 @@ begin
         Ext_RdData    <= (others => '0');
         EccInj_Valid  <= (others => '0');
         EccInj_Double <= '0';
+        EccInj_Data   <= '0';
         Ecc_Irq       <= '0';
     end generate;
 

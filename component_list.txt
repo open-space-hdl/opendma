@@ -1,1 +1,2 @@
 # OpenDMA modules in dependency order (compiled into the library opendma by run.py)
+hdl/odma_pkg

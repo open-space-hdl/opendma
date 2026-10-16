@@ -145,6 +145,6 @@ of the published interface included).
 
 | Module | Requirements | Verified by a test case | Without a test case |
 | --- | --- | --- | --- |
-| - | 0 | 0 | - |
+| `odma_pkg` | 9 | 9 | - |
 
-Requirements: 0; without a test case: 0; test cases of the plans not run by a testbench: 0.
+Requirements: 9; without a test case: 0; test cases of the plans not run by a testbench: 0.

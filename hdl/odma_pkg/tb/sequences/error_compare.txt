@@ -1,0 +1,2 @@
+# A register compare that fails
+R 0x0C 0x00000000

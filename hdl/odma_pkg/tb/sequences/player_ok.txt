@@ -1,0 +1,20 @@
+# Every command of the sequence player against the register stub of odma_pkg_th
+L player test: register accesses
+W 0x00 0xA5A5A5A5
+R 0x00 0xA5A5A5A5
+R 0x0C 0x12340000 0xFFFF0000
+W 0x08 100
+P 0x08 0 0xFFFFFFFF 1000
+L player test: interrupt signals
+W 0x04 0x00000001
+I MM2S 1 100
+W 0x04 0x00000002
+I S2MM 1 100
+I MM2S 0 100
+W 0x04 0x00000000
+I S2MM 0 100
+L player test: streams
+S 01 02 03 04 05 06 07
+E 01 02 03 04 05 06 07
+A
+	D	10

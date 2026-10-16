@@ -9,6 +9,7 @@ readback, ECC counters and error injection.
 | --- | --- |
 | [Specification](docs/specification.md) | Requirements, interpretations of the published interface |
 | [Architecture](docs/architecture.md) | Entities, ports, channel state machine, soft reset, extension window |
+| [Register map](docs/register_map.md) | Registers and fields (generated from `regs/odma_regs.yml`) |
 | [Verification plan](docs/verification_plan.md) | Test cases |
 
 Tests: `python run.py "*odma_registers*"`

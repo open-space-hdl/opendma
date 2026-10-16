@@ -1,1 +1,2 @@
 hdl/odma_pkg/src/odma_pkg.vhd
+hdl/odma_registers/src/odma_regs_pkg.vhd

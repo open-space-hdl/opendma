@@ -54,6 +54,8 @@ jobs:
           python -m pip install --no-build-isolation -r requirements.txt
       - name: VHDL lint (VSG)
         run: python lint/lint.py
+      - name: Register map up to date
+        run: python tools/regmap.py --check
       - name: Traceability to the published interface
         run: python tools/compliance.py --check
       - name: Compile order up to date

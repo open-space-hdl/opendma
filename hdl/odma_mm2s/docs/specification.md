@@ -39,7 +39,8 @@ command). Packets of several buffers (phase b, gap G10), keyhole reads (phase b,
 | MM-RD-02 | No read burst shall cross a 4 KB address boundary or have more than `BurstBeats_g` beats. | `FEAT.4K`, `FEAT.BURST` |
 | MM-RD-03 | A read burst shall be requested only when the data buffer of the channel can take all its beats, so that a stream peer that holds `TReady` low never holds the R channel of the memory. | none (architecture D3) |
 | MM-RD-04 | A command whose buffer reaches beyond the top of the address space shall cause no read and no stream beat; its result shall carry the decode error and 0 bytes (interpretation I5). | `MM2S_DMASR.DMADecErr` |
-| MM-RD-05 | With the memory and the stream peer always ready, the channel shall send one stream beat per clock cycle during a transfer of at least 64 burst beats. | none (performance) |
+| MM-RD-05 | With the stream peer always ready, a memory that takes every read burst at once and returns its beats without wait states, and at least 8 stream beats per burst (`BurstBeats_g` x `MemWidth_g` / `StreamWidth_g` >= 8), the channel shall send one stream beat per clock cycle during a transfer of 64 bursts. | none (performance) |
+| MM-RD-06 | A command of length 0 shall cause no read and no stream beat; its result shall carry the internal error code and 0 bytes (interpretation M3). | none (internal interface) |
 
 ### 3.3 Stream output (MM-2)
 
@@ -53,7 +54,7 @@ command). Packets of several buffers (phase b, gap G10), keyhole reads (phase b,
 
 | ID | Requirement | PG021 items |
 | --- | --- | --- |
-| MM-ER-01 | A read response SLVERR of any beat of a transfer shall give its result the slave error code, a response DECERR the decode error code; with responses of both kinds, the first one decides (gap G5). | `MM2S_DMASR.DMASlvErr`, `MM2S_DMASR.DMADecErr` |
+| MM-ER-01 | A read response other than OKAY on any beat of a transfer shall give its result an error code, the slave error or the decode error. | `MM2S_DMASR.DMASlvErr` |
 | MM-ER-02 | A transfer with an error response shall still send all its beats with the `TKeep` and `TLast` of MM-ST-01 and MM-ST-02 (interpretation I11). | `MM2S_DMASR.DMASlvErr` |
 
 ### 3.5 Halt and drain
@@ -67,7 +68,17 @@ command). Packets of several buffers (phase b, gap G10), keyhole reads (phase b,
 
 | ID | Requirement | PG021 items |
 | --- | --- | --- |
-| MM-FT-01 | The read data buffer shall be protected by SECDED ECC; every beat with a corrected single error or a detected double error shall raise one pulse on `Ecc_Sec` or `Ecc_Ded`; `EccInj_Valid` with `EccInj_Double` shall flip one or two bits of the next codeword written to the buffer. | none (architecture P5) |
+| MM-FT-01 | The read data buffer, the transfer buffer and the response buffer shall be protected by SECDED ECC; every word read from a buffer with a corrected single error or a detected double error shall raise one pulse on the bit of that buffer in `Ecc_Sec` or `Ecc_Ded`; `EccInj_Valid` of a buffer with `EccInj_Double` shall flip one or two bits of the next codeword written to that buffer. | none (architecture P5) |
+
+### 3.7 Requirements waiting for Open Logic
+
+Open Logic 4.7.0-ft.6 reports a failed read command of `olo_ft_axi_master_full` without its response code (gap G5 of
+the architecture). Until the release with the response code, the channel gives every failed transfer the slave error
+code; the requirement below takes effect with that release.
+
+| ID | Requirement | PG021 items |
+| --- | --- | --- |
+| MM-ER-03 | The error code of MM-ER-01 shall be the slave error for SLVERR and the decode error for DECERR; with responses of both kinds in one transfer, the first one decides (gap G5). | `MM2S_DMASR.DMASlvErr`, `MM2S_DMASR.DMADecErr` |
 
 ## 4. Interpretations
 
@@ -78,14 +89,16 @@ command). Packets of several buffers (phase b, gap G10), keyhole reads (phase b,
 | I11 | Streams potentially terminated early on error | The transfer is sent completely (MM-ER-02); the stream peer sees a complete packet, software sees the error |
 | M1 | Reads at beat granularity are not described | The other bytes of the first and the last memory word are read and discarded (MM-RD-01, architecture P6) |
 | M2 | A double error in the read data buffer is not part of PG021 | The beat is sent as read from the buffer and counted (MM-FT-01, extension window); the transfer result is not changed, so the register interface keeps its PG021 behaviour |
+| M3 | A buffer length of 0 is an internal error of a descriptor in Scatter/Gather Mode (Table 31, `DMAIntErr`) | The channel ends a command of length 0 without a read and with the internal error code (MM-RD-06); the register interface of DR mode never issues one |
 
 ## 5. Error conditions
 
 | Condition | Detection | Response |
 | --- | --- | --- |
-| SLVERR or DECERR on a read beat | Response code of the read master (G5) | Transfer completed on the stream, result with the error code (MM-ER-01, MM-ER-02) |
+| SLVERR or DECERR on a read beat | `Rd_Error` of the read master (the response code with gap G5) | Transfer completed on the stream, result with the error code (MM-ER-01, MM-ER-02, MM-ER-03) |
 | Buffer beyond the top of the address space | `beyondTop` of `odma_pkg` | No access, result with the decode error (MM-RD-04) |
-| Single or double error in the read data buffer | ECC of the buffer | `Ecc_Sec`, `Ecc_Ded` pulses (MM-FT-01) |
+| Command of length 0 | Length of the command | No access, result with the internal error (MM-RD-06) |
+| Single or double error in an FT buffer | ECC of the buffer | `Ecc_Sec`, `Ecc_Ded` pulses (MM-FT-01) |
 
 ## 6. Configuration parameters
 

@@ -349,10 +349,12 @@ both at tag 4.7.0-ft.6.
 | G10 | Packets of several buffers with any lengths and addresses (Tables 30 and 37) | Every command delivers its data starting in lane 0; Open Logic has no stream byte realigner | New in open-logic-ft: a stream realigner that shifts a byte stream by a runtime lane offset with carry between beats (data and `TKeep` in and out), for MM-2 (join) and S2-1 (split) | b |
 | G11 | Descriptor fetch and update of 8 to 13 words | 32-bit user and AXI width supported, unaligned not needed | No gap | b |
 | G12 | Stream width at most the memory width, both powers of two; up to 16 outstanding bursts | `AxiDataWidth_g` an integer multiple of `UserDataWidth_g`; at most 8 open transactions | No gap: every width pair of \[PG021\] Table 44 is valid; 8 open transactions per direction | a |
+| G13 | Bursts of up to 256 beats at every data width (`c_mm2s_burst_size`, `c_s2mm_burst_size` up to 256 with up to 1024 bits) | `olo_axi_master_simple` does not elaborate when `AxiMaxBeats_g` exceeds the beats of 4 KB (`4096 / (AxiDataWidth_g / 8)`): a slice of its 4 KB beat count is out of range | No change needed: MM-1 and S2-2 run the masters with at most the beats of 4 KB; no AXI burst crosses 4 KB, so the bursts are the same. The defect is corrected in open-logic-ft | a |
 
 G1, G5 and G10 are additions to open-logic-ft; their requirement specifications follow the review of this
-architecture. G5 is needed in phase a, G1 and G10 in phase b. Until G5 is available, the error flags of MM-1 and
-S2-2 cannot distinguish the two error responses.
+architecture. G5 is needed in phase a, G1 and G10 in phase b. Until G5 is available, MM-1 and S2-2 report every
+failed transfer with the slave error code; the requirements that distinguish the two error responses are listed as
+waiting for Open Logic in their module specifications.
 
 ## 9 Verification architecture
 

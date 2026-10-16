@@ -178,6 +178,9 @@ def main():
             status = "Verified"
         elif not req_ids and (phase in phases_open or not owner_modules(owner) & specified):
             status = "Planned"
+        elif req_ids:
+            status = "Not verified"
+            missing.append(item)
         else:
             status = "Not traced"
             missing.append(item)
@@ -214,7 +217,7 @@ def main():
         OUT.write_text("\n".join(lines), encoding="utf-8", newline="\n")
         print(f"written {OUT.relative_to(ROOT)}")
     for item in missing:
-        print(f"item not traced: {item}")
+        print(f"item without a test case: {item}")
     for r in untested:
         print(f"requirement without a test case: {r}")
     for n in not_run:

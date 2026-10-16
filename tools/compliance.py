@@ -16,7 +16,9 @@ and S2MM_. A requirement traces to an item when it names the item or a part of i
 MM2S_DMACR.RS and would trace to an item MM2S_DMACR).
 
 A module is in specification while it has no testbench (hdl/<module>/tb/*_tb.vhd): its requirements and test cases
-are listed as planned. An item without a verified requirement is planned while its development phase is open in
+are listed as planned. A requirement or a test case in a section of a specification or a verification plan whose
+heading contains "waiting for Open Logic" needs a change of Open Logic that is not released yet: it is listed as
+planned, never counts as verified and need not be run. An item without a verified requirement is planned while its development phase is open in
 docs/roadmap.md or while none of its owner modules has a testbench yet. With --check the file is not written; the exit
 code is 1 when an item that is not planned has no test case, when a requirement of a module with a testbench has no
 test case or when a test case of such a module is not run by its testbench.
@@ -79,15 +81,38 @@ def expand_ids(cell):
     return ids
 
 
+WAITING_RE = re.compile(r"^(#+) .*waiting for Open Logic", re.I)
+
+
+def split_waiting(text):
+    """Splits a document into its text outside and inside the sections that wait for Open Logic."""
+    normal, waiting = [], []
+    level = 0
+    for line in text.splitlines():
+        heading = re.match(r"^(#+) ", line)
+        if heading and level and len(heading.group(1)) <= level:
+            level = 0
+        m = WAITING_RE.match(line)
+        if m:
+            level = len(m.group(1))
+        (waiting if level else normal).append(line)
+    return "\n".join(normal), "\n".join(waiting)
+
+
 def load_requirements():
-    """Requirements of the module specifications: ID -> (module, item keys)."""
+    """Requirements of the module specifications: ID -> (module, item keys), and the IDs that wait for Open Logic."""
     reqs = {}
+    waiting = set()
     for spec in sorted(ROOT.glob("hdl/*/docs/specification.md")):
         module = spec.parent.parent.name
-        for row in table_rows(spec.read_text(encoding="utf-8")):
-            if len(row) >= 3 and REQ_ID_RE.match(row[0]):
-                reqs[row[0]] = (module, keys(row[-1]))
-    return reqs
+        normal, later = split_waiting(spec.read_text(encoding="utf-8"))
+        for text, is_waiting in ((normal, False), (later, True)):
+            for row in table_rows(text):
+                if len(row) >= 3 and REQ_ID_RE.match(row[0]):
+                    reqs[row[0]] = (module, keys(row[-1]))
+                    if is_waiting:
+                        waiting.add(row[0])
+    return reqs, waiting
 
 
 def tested_modules():
@@ -106,7 +131,8 @@ def load_tests():
         for tb in module_dir.glob("tb/*.vhd"):
             run_names.update(re.findall(r'run\("(test_\w+)"\)', tb.read_text(encoding="utf-8")))
         run_ids = set()
-        rows = list(table_rows(plan.read_text(encoding="utf-8")))
+        # Test cases that wait for Open Logic are neither required to run nor counted
+        rows = list(table_rows(split_waiting(plan.read_text(encoding="utf-8"))[0]))
         for row in rows:
             if len(row) >= 3 and row[0].startswith("`test_"):
                 name = row[0].split("`")[1]
@@ -160,7 +186,7 @@ def test_key(tid):
 
 
 def main():
-    reqs = load_requirements()
+    reqs, waiting = load_requirements()
     tests, not_run = load_tests()
     matrix = load_matrix()
     phases_open = open_phases()
@@ -178,9 +204,10 @@ def main():
         "",
         "An item is listed with every requirement that traces to it and with the test cases that verify these",
         "requirements. An item is verified when every requirement that traces to it is verified by a test case, and",
-        "partly verified while the other requirements belong to modules without a testbench yet. An item is planned",
-        "while its development phase is open or none of its owner modules has a testbench yet. The interpretations of",
-        "the published interface are listed in section 6 of the architecture and in the module specifications.",
+        "partly verified while the other requirements belong to modules without a testbench yet or wait for a change",
+        "of Open Logic. An item is planned while its development phase is open, none of its owner modules has a",
+        "testbench yet or all its requirements wait for Open Logic. The interpretations of the published interface",
+        "are listed in section 6 of the architecture and in the module specifications.",
         "",
         "| Item | PG021 reference | Owner | Phase | Requirements | Test cases | Status |",
         "| --- | --- | --- | --- | --- | --- | --- |",
@@ -190,7 +217,8 @@ def main():
     for item, reference, owner, phase in matrix:
         req_ids = sorted(r for r, (_, rk) in reqs.items() if matches(rk, item))
         test_ids = sorted({t for t, ids in tests.items() if ids & set(req_ids)}, key=test_key)
-        verified = {r for r in req_ids if any(r in ids for ids in tests.values())}
+        verified = {r for r in req_ids if r not in waiting and any(r in ids for ids in tests.values())}
+        pending = {r for r in req_ids if r in waiting or reqs[r][0] not in tested}
         if owner.startswith("Out of scope"):
             status = "Out of scope"
         elif req_ids and verified == set(req_ids):
@@ -199,7 +227,7 @@ def main():
             # The other requirements belong to modules without a testbench; a gap of a module with a testbench
             # fails the requirement check below
             status = "Partly verified"
-        elif phase in phases_open or not owner_modules(owner) & tested:
+        elif phase in phases_open or not owner_modules(owner) & tested or (req_ids and set(req_ids) <= pending):
             status = "Planned"
         elif req_ids:
             status = "Not verified"
@@ -219,18 +247,21 @@ def main():
         "Requirements of the module specifications and the test cases that verify them (requirements without an item",
         "of the published interface included).",
         "",
-        "| Module | Requirements | Verified by a test case | Without a test case |",
-        "| --- | --- | --- | --- |",
+        "| Module | Requirements | Verified by a test case | Without a test case | Waiting for Open Logic |",
+        "| --- | --- | --- | --- | --- |",
     ]
     covered = set().union(*tests.values()) if tests else set()
-    untested = sorted(r for r, (m, _) in reqs.items() if r not in covered and m in tested)
+    untested = sorted(r for r, (m, _) in reqs.items() if r not in covered and m in tested and r not in waiting)
     for module in sorted(specified):
         ids = [r for r, (m, _) in reqs.items() if m == module]
-        gaps = [r for r in ids if r not in covered]
+        later = [r for r in ids if r in waiting]
+        gaps = [r for r in ids if r not in covered and r not in waiting]
+        done = [r for r in ids if r in covered and r not in waiting]
         if module in tested:
-            lines.append(f"| `{module}` | {len(ids)} | {len(ids) - len(gaps)} | {', '.join(gaps) or '-'} |")
+            lines.append(f"| `{module}` | {len(ids)} | {len(done)} | {', '.join(gaps) or '-'} | "
+                         f"{', '.join(later) or '-'} |")
         else:
-            lines.append(f"| `{module}` | {len(ids)} | - | planned (no testbench yet) |")
+            lines.append(f"| `{module}` | {len(ids)} | - | planned (no testbench yet) | {', '.join(later) or '-'} |")
     if not specified:
         lines.append("| - | 0 | 0 | - |")
     lines += [

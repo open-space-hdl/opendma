@@ -890,12 +890,13 @@ begin
                 -- The FT buffers of the excluded channel count nothing and take no injection
                 if ExtRegs_g then
 
-                    for i in 0 to 3 loop
+                    for i in 0 to 5 loop
                         pulseEcc(true, i, 1);
                     end loop;
 
                     Exp_v := x"00000001" when IncludeMm2s_g else Zero_c;
                     chk(EccCount_c, Exp_v, "buffer 0");
+                    chk(EccCount_c + 20, Exp_v, "buffer 5");
                     Exp_v := x"00000001" when IncludeS2mm_g else Zero_c;
                     chk(EccCount_c + 12, Exp_v, "buffer 3");
                     -- Buffer 0 of MM2S or buffer 3 of S2MM
@@ -914,14 +915,18 @@ begin
                 pulseEcc(false, 3, 2);
                 pulseEcc(true, 1, 1);
                 pulseEcc(false, 2, 1);
+                pulseEcc(true, 4, 2);
+                pulseEcc(false, 5, 3);
                 pulseEcc(true, 15, 4);
                 pulseEcc(false, 15, 4);
-                pulseEcc(true, 4, 1);
+                pulseEcc(true, 6, 1);
                 chk(EccCount_c, x"00010003", "buffer 0");
                 chk(EccCount_c + 4, x"00000001", "buffer 1");
                 chk(EccCount_c + 8, x"00010000", "buffer 2");
                 chk(EccCount_c + 12, x"00020002", "buffer 3");
-                chk(EccCount_c + 16, Zero_c, "index 4 without a buffer");
+                chk(EccCount_c + 16, x"00000002", "buffer 4");
+                chk(EccCount_c + 20, x"00030000", "buffer 5");
+                chk(EccCount_c + 24, Zero_c, "index 6 without a buffer");
                 chk(EccCount_c + 60, Zero_c, "index 15 without a buffer");
                 -- ECC_STATUS and Ecc_Irq with and without the enables
                 chk(EccStatus_c, x"00000003", "ECC_STATUS");
@@ -946,7 +951,7 @@ begin
                 chk(EccCount_c, x"00010003", "buffer 0 kept");
                 wr(EccCtrl_c, x"00000001");
 
-                for n in 0 to 3 loop
+                for n in 0 to 5 loop
                     chk(EccCount_c + 4 * n, Zero_c, "all counters cleared");
                 end loop;
 

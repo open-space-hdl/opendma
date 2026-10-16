@@ -46,7 +46,8 @@ test can place buffers anywhere in a 64-bit space, also at the top of a 32-bit s
 | `setStall(idx, percent)` | 0 | Share of cycles in which the model holds `AwReady`, `WReady`, `ArReady` and `RValid` low (0 to 90) |
 | `setLatency(idx, cycles)` | 0 | Additional cycles before the first read beat of a burst and before a write response |
 
-Backdoor and statistics: `write8`, `read8`, `fill` (count pattern), `clearStats`, `bytesWritten`, `lowestWritten`,
+Backdoor and statistics: `write8`, `read8`, `fill` (the bytes of `odmaMemByte`, a function of every address bit
+and a seed that no shift of the address reproduces), `clearStats`, `bytesWritten`, `lowestWritten`,
 `highestWritten`, `beatsRead`, `bursts` (accepted AW and AR), `maxOutstanding` (largest number of accepted bursts
 without response, per direction).
 

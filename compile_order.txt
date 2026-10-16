@@ -4,3 +4,6 @@ hdl/odma_registers/src/odma_regs_pkg.vhd
 hdl/odma_registers/src/odma_interrupt.vhd
 hdl/odma_registers/src/odma_extension.vhd
 hdl/odma_registers/src/odma_registers.vhd
+hdl/odma_mm2s/src/odma_mm2s_stream.vhd
+hdl/odma_mm2s/src/odma_mm2s_command.vhd
+hdl/odma_mm2s/src/odma_mm2s.vhd

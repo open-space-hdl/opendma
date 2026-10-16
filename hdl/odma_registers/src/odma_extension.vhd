@@ -81,6 +81,7 @@ architecture rtl of odma_extension is
     begin
         Mask_v(0)          := choose(IncludeMm2s_g, '1', '0');
         Mask_v(3 downto 1) := (others => choose(IncludeS2mm_g, '1', '0'));
+        Mask_v(5 downto 4) := (others => choose(IncludeMm2s_g, '1', '0'));
         return Mask_v;
     end function;
 

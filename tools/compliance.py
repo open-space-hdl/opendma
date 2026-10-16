@@ -177,9 +177,10 @@ def main():
         "## 1. Items of the published interface",
         "",
         "An item is listed with every requirement that traces to it and with the test cases that verify these",
-        "requirements. An item is planned while its development phase is open or none of its owner modules has a",
-        "testbench yet. The interpretations of the published interface are listed in section 6 of the architecture and",
-        "in the module specifications.",
+        "requirements. An item is verified when every requirement that traces to it is verified by a test case, and",
+        "partly verified while the other requirements belong to modules without a testbench yet. An item is planned",
+        "while its development phase is open or none of its owner modules has a testbench yet. The interpretations of",
+        "the published interface are listed in section 6 of the architecture and in the module specifications.",
         "",
         "| Item | PG021 reference | Owner | Phase | Requirements | Test cases | Status |",
         "| --- | --- | --- | --- | --- | --- | --- |",
@@ -189,10 +190,15 @@ def main():
     for item, reference, owner, phase in matrix:
         req_ids = sorted(r for r, (_, rk) in reqs.items() if matches(rk, item))
         test_ids = sorted({t for t, ids in tests.items() if ids & set(req_ids)}, key=test_key)
+        verified = {r for r in req_ids if any(r in ids for ids in tests.values())}
         if owner.startswith("Out of scope"):
             status = "Out of scope"
-        elif test_ids:
+        elif req_ids and verified == set(req_ids):
             status = "Verified"
+        elif verified:
+            # The other requirements belong to modules without a testbench; a gap of a module with a testbench
+            # fails the requirement check below
+            status = "Partly verified"
         elif phase in phases_open or not owner_modules(owner) & tested:
             status = "Planned"
         elif req_ids:

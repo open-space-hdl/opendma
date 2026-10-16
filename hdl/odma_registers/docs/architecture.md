@@ -30,14 +30,15 @@ the registers of this module, is reset by the core reset `CoreRst` = `Rst` or th
 | `Mm2sCmd_Length` | `LengthWidth_g` | out | Bytes of the transfer |
 | `Mm2sCmd_Sof`, `Mm2sCmd_Eof` | 1 | out | Start and end of packet ('1' in DR mode) |
 | `Mm2sCmd_Keyhole` | 1 | out | Non-incrementing bursts (phase b; '0' in DR mode, interpretation I1) |
-| `Mm2sRes_Valid`, `Mm2sRes_Ready` | 1 | in, out | Transfer result handshake of the MM2S channel |
+| `Mm2sRes_Valid`, `Mm2sRes_Ready` | 1 | in, out | Transfer result handshake of the MM2S channel (`Mm2sRes_Ready` = '1') |
 | `Mm2sRes_Bytes` | `LengthWidth_g` | in | Transferred bytes |
 | `Mm2sRes_Err` | 2 | in | Error code (`XferErr_t` of `odma_pkg`) |
 | `Mm2s_Run` | 1 | out | The channel may accept commands |
 | `Mm2s_Drain` | 1 | out | Stop accepting and issuing, drain the accepted transfers (soft reset) |
 | `Mm2s_Stopped` | 1 | in | No transfer accepted and not completed, no AXI transaction outstanding |
 | `Mm2sRes_Eof` | 1 | in | End of packet: the transfer completed |
-| `S2mmCmd_*`, `S2mmRes_*`, `S2mm_Run`, `S2mm_Drain`, `S2mm_Stopped` | as MM2S | | The same for the S2MM channel; `S2mmCmd_Length` is the buffer length, `S2mmRes_Bytes` the bytes written, `S2mmRes_Eof` the end of the packet in the buffer |
+| `S2mmCmd_Valid`, `S2mmCmd_Ready`, `S2mmCmd_Addr`, `S2mmCmd_Length`, `S2mmCmd_Keyhole` | as MM2S | | Transfer command of the S2MM channel; `S2mmCmd_Length` is the buffer length; the command has no start and end of packet |
+| `S2mmRes_*`, `S2mm_Run`, `S2mm_Drain`, `S2mm_Stopped` | as MM2S | | The same for the S2MM channel; `S2mmRes_Bytes` is the bytes written, `S2mmRes_Eof` the end of the packet in the buffer |
 | `Mm2s_Irq`, `S2mm_Irq`, `Ecc_Irq` | 1 | out | Interrupt outputs |
 | `Mm2s_RstOut`, `S2mm_RstOut` | 1 | out | Reset outputs of the stream peers |
 | `Ecc_Sec`, `Ecc_Ded` | `EccBuffers_c` | in | SEC and DED event pulses of the FT buffers (index per section 8) |
@@ -45,7 +46,9 @@ the registers of this module, is reset by the core reset `CoreRst` = `Rst` or th
 | `EccInj_Double` | 1 | out | '1': flip two bits, '0': flip one bit of the injected codeword |
 
 The generics are those of section 6 of the specification. `EccBuffers_c` = 16, the fixed size of the buffer index
-space of the extension window.
+space of the extension window. The inputs of the channels and the ECC inputs have defaults (`Cmd_Ready` '0',
+`Res_Valid` '0', `Stopped` '1', `Ecc_Sec` and `Ecc_Ded` 0), so that a channel that is not included needs no
+connection. The control outputs of a channel that is not included stay '0' (`Cmd_Valid`, `Run`, `Drain`, `Irq`).
 
 ## 4. Register bank (RG-1)
 
@@ -73,18 +76,24 @@ One state machine per channel holds the run state and the transfer in progress.
 | From | Condition | To | Action |
 | --- | --- | --- | --- |
 | `Halted_s` | `DMACR.RS` written 1, no error flag set | `Started_s` | `Run` = '1' |
+| `Halted_s`, `Stopping_s` | non-zero write of the length register | unchanged | The length is stored, no command (interpretation I7) |
 | `Started_s`, `Done_s` | non-zero write of the length register | `Busy_s` | Capture address and length, `Cmd_Valid` until `Cmd_Ready` |
 | `Busy_s` | result without error, end of packet, no halt pending | `Done_s` | `IOC_Irq` event; S2MM: `S2MM_LENGTH` := `Res_Bytes` |
 | `Busy_s` | result with error | `Stopping_s` | Error flags (RG-SR-05, RG-SR-06), `RS` := 0, `Err_Irq` event, `Run` = '0' |
-| `Busy_s` | `DMACR.RS` written 0 | `Busy_s` | `Run` = '0', halt pending; the channel completes or ends the transfer in progress (interpretation I8) |
+| `Busy_s` | `DMACR.RS` written 0 | `Busy_s` | Halt pending; `Run` = '0' once the command is accepted; the channel completes or ends the transfer in progress (interpretation I8) |
 | `Busy_s` | result without error, halt pending | `Stopping_s` | `IOC_Irq` event and S2MM length update only when the result has the end of packet |
 | `Started_s`, `Done_s` | `DMACR.RS` written 0 | `Stopping_s` | `Run` = '0' |
 | `Stopping_s` | `Stopped` = '1' | `Halted_s` | |
 | any | illegal state | `Halted_s` | Recovery (`when others`) |
 
 A command is issued by the state machine only in `Busy_s` and only once (`Cmd_Valid` falls with the handshake). The
-command fields are registers captured at the length write, so later writes to the address registers do not change
-the transfer in progress (RG-AR-08). A result is always accepted (`Res_Ready` = '1').
+command address is a register captured at the length write, so later writes to the address registers do not change
+the transfer in progress (RG-AR-08); the command length is the length register, which no write changes in `Busy_s`.
+A result is always accepted (`Res_Ready` = '1'). A halt request while the command waits for `Cmd_Ready` keeps `Run`
+at '1' until the command is accepted, because a channel accepts commands only while `Run` is '1'; the command is
+never withdrawn. `DMACR.RS` = 1 is taken only in `Halted_s` without an error flag; in the other states a write of 1
+leaves `RS` unchanged, in particular at 0 while the channel stops (interpretation R8 of the specification). A write
+of `DMACR` with `Reset` = 1 only starts the soft reset; the other bits of that write are not taken.
 
 The end-of-packet flag of a result tells whether the transfer completed: an MM2S result always carries it in DR mode
 (the channel sends a transfer to its end, also after a halt request), an S2MM result carries it when the packet ended
@@ -97,18 +106,18 @@ rest of the packet up to `TLast` and return a result without the end of packet: 
 | Register | Implementation |
 | --- | --- |
 | `DMACR` | `RS`, `Keyhole`, `CyclicBD`, `IOC_IrqEn`, `Dly_IrqEn`, `Err_IrqEn`, `IRQThreshold` (write of 0 ignored), `IRQDelay` as flip-flops; bit 1 constant 1; `Reset` reads the busy level of `odma_soft_reset` |
-| `DMASR` | `Halted` and `Idle` decoded from the state; `SGIncld` constant; error flags as flip-flops set by results; interrupt flags from `odma_interrupt`; `IRQThresholdSts` = `IRQThreshold`; the other bits constant 0 |
+| `DMASR` | `Halted` and `Idle` decoded from the state; `SGIncld` constant; error flags as flip-flops set by results (an S2MM result with the slave or the decode error also sets `DMAIntErr`; the MM2S channel never returns the internal error code in DR mode, so `MM2S_DMASR.DMAIntErr` reads 0); interrupt flags from `odma_interrupt`; `IRQThresholdSts` = `IRQThreshold`; `Dly_Irq` and the other bits constant 0 |
 | `*_SA`, `*_SA_MSB`, `*_DA`, `*_DA_MSB` | `AddrWidth_g` flip-flops per channel; the bits of the MSB register exist only above 32 address bits |
 | `*_LENGTH` | `LengthWidth_g` flip-flops per channel; written by software as RG-AR-07 allows, by the S2MM result on completion |
 
 ## 5. Interrupt controller (RG-2, `odma_interrupt`)
 
-Inputs per channel: the enables from `DMACR`, the events `IocEvt` and `ErrEvt` (one cycle each), the W1C write of
-`DMASR` (bits 12 to 14 of the write data with a strobe). Flags: `IocFlag` is set by `IocEvt`, `ErrFlag` by `ErrEvt`;
-a W1C write clears the flags with a 1 in their bit unless an event of the same cycle sets them (RG-IR-03). `DlyFlag`
-is constant 0 in DR mode. Output: `Irq` = registered OR of (`IocFlag` and `IocEn`), (`DlyFlag` and `DlyEn`) and
-(`ErrFlag` and `ErrEn`) (RG-IR-04). In phase b the entity adds the threshold counter and the delay timer; the ports
-are already present (`Threshold`, `Delay`, `PacketEvt`) and unused in DR mode.
+Inputs per channel: the enables `Ena_Ioc` and `Ena_Err` from `DMACR`, the events `Evt_Ioc` and `Evt_Err` (one
+cycle each, combinational from the result handshake), the clears `Clr_Ioc` and `Clr_Err` (a write of `DMASR` with a
+1 in bit 12 or 14). Flags: `Flag_Ioc` is set by `Evt_Ioc`, `Flag_Err` by `Evt_Err`; a clear resets a flag unless an
+event of the same cycle sets it (RG-IR-03). Output: `Irq` = registered OR of (`Flag_Ioc` and `Ena_Ioc`) and
+(`Flag_Err` and `Ena_Err`) (RG-IR-04). `Dly_Irq` reads 0 in DR mode; phase b adds the threshold counter, the delay
+timer and the delay flag with their ports.
 
 ## 6. Reset controller (RG-3, `odma_soft_reset`)
 
@@ -120,8 +129,12 @@ are already present (`Threshold`, `Delay`, `PacketEvt`) and unused in DR mode.
 
 The register writes of software are ignored from `Drain_s` to the end of `Reset_s` (RG-RS-04). `Drain` tells the
 channels to stop accepting commands and stream data, to discard read data and to complete the accepted AXI
-transactions (architecture D8); `Stopped` reports that nothing is outstanding. The illegal-state recovery leads to
-`Idle_s`.
+transactions (architecture D8); `Stopped` reports that nothing is outstanding, and a channel that is not included
+counts as stopped. The illegal-state recovery leads to `Idle_s`.
+
+`olo_axi_lite_slave`, `odma_soft_reset` and the read strobe register of the register bank are reset by `Rst` only,
+so that an access in progress at the start of the reset phase completes with OKAY. A read during the reset phase
+returns the reset values, with `DMACR.Reset` = 1.
 
 ## 7. Extension window (RG-4, `odma_extension`)
 
@@ -140,8 +153,13 @@ transactions (architecture D8); `Stopped` reports that nothing is outstanding. T
 | 0x140 + 4 x n | `ECC_COUNT_n` | RC | Bits 15 to 0 the SEC counter, 31 to 16 the DED counter of buffer n (n = 0 to 15); any write clears both |
 
 The counters are those of `olo_ft_ecc_monitor` (`Channels_g` = 16, `CounterWidth_g` = 16): the window reads a
-counter through its read port and clears it with the read-and-clear of the same port on a write. Without `ExtRegs_g`
-the window reads 0, `Ecc_Irq` stays low and no injection strobe is issued.
+counter through its read port and clears it with the read-and-clear of the same port on a write. The `In_Valid`
+inputs of the monitor are set for the buffers of the configuration only (section 8), so the counters of the other
+indices stay 0; `ECC_INJECT` gives no strobe for them either. The `ECC_STATUS` flags are set by the event outputs of
+the monitor, `Ecc_Irq` is registered one clock cycle after them. `EccInj_Valid` is a strobe of one clock cycle on the
+selected index, `EccInj_Double` holds the error type of the last injection; the buffer turns it into the flip pattern
+of its `ErrInj_BitFlip` input and applies it to the next codeword written. Without `ExtRegs_g` the window reads 0,
+`Ecc_Irq` stays low and no injection strobe is issued.
 
 ## 8. FT buffer index
 
@@ -159,9 +177,13 @@ Buffers of an excluded channel or a later phase count nothing.
 
 ## 9. Timing
 
-- Register read latency: 4 clock cycles from the address handshake to `RValid` (`olo_axi_lite_slave` plus the read
-  register); write: 4 clock cycles to `BValid`.
-- A length write issues the command in the clock cycle after the write; the state change to `Busy_s` and
+- Register read: `RValid` rises 3 clock cycles after the clock cycle of the read address handshake (read strobe of
+  `olo_axi_lite_slave` in the next cycle, read data one cycle later, `RValid` in the cycle after).
+- Register write: with the write data present, `BValid` rises 2 clock cycles after the clock cycle of the write
+  address handshake. The write takes effect at the end of the clock cycle in which `BValid` rises.
+- A length write raises `Cmd_Valid` in the clock cycle after it takes effect; the state change to `Busy_s` and
   `DMASR.Idle` = 0 are visible to the next read.
-- A result updates the status registers and raises the interrupt event in the clock cycle after its handshake; the
-  interrupt output follows one clock cycle later.
+- A result updates the status registers and the interrupt flags at the end of the clock cycle of its handshake; the
+  interrupt output follows one clock cycle later. A clear of a flag (write of `DMASR`) and a result in the same
+  clock cycle leave the flag set, so a result whose handshake is in or after the clock cycle in which `BValid` of the
+  clearing write rises is never lost.

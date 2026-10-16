@@ -42,12 +42,12 @@ such as the programming sequences (`SEQ.*`, owner CO-1), are verified by the req
 
 | ID | Requirement | PG021 items |
 | --- | --- | --- |
-| RG-CR-01 | `DMACR.RS` (bit 0) shall be read/write with reset value 0. Writing 1 while the channel is halted and no error flag of the channel is set shall start the channel; writing 1 while an error flag is set shall have no effect (interpretation I3). Writing 0 while the channel runs shall request a halt. | `*_DMACR.RS` |
+| RG-CR-01 | `DMACR.RS` (bit 0) shall be read/write with reset value 0. Writing 1 while the channel is halted and no error flag of the channel is set shall start the channel; writing 1 while an error flag is set (interpretation I3) or while the channel is stopping after a halt request (before `DMASR.Halted` is 1) shall have no effect, and `RS` shall stay 0. Writing 0 while the channel runs shall request a halt. | `*_DMACR.RS` |
 | RG-CR-02 | When a transfer result of the channel carries an error, `DMACR.RS` shall be cleared. | `*_DMACR.RS` |
 | RG-CR-03 | `DMACR` bit 1 shall read 1, bits 11 to 5 and bit 15 shall read 0. | `*_DMACR.Reserved` |
 | RG-CR-04 | In DR mode, `DMACR.Keyhole` (bit 3), `DMACR.CyclicBD` (bit 4), `DMACR.Dly_IrqEn` (bit 13) and `DMACR.IRQDelay` (bits 31 to 24) shall be read/write with reset value 0 and have no function; `DMACR.IRQThreshold` (bits 23 to 16) shall be read/write with reset value 0x01 and no function, and a write of 0x00 to it shall leave it unchanged. | `MAP.ACCESS` |
 | RG-CR-05 | `DMACR.IOC_IrqEn` (bit 12, interpretation I2) and `DMACR.Err_IrqEn` (bit 14) shall be read/write with reset value 0. | `*_DMACR.IOC_IrqEn`, `*_DMACR.Err_IrqEn` |
-| RG-CR-06 | Writing 1 to `DMACR.Reset` (bit 2) of either channel shall start the soft reset of the whole core (section 3.5); `DMACR.Reset` of both channels shall read 1 while the soft reset is in progress and 0 otherwise. | `*_DMACR.Reset` |
+| RG-CR-06 | Writing 1 to `DMACR.Reset` (bit 2) of either channel shall start the soft reset of the whole core (section 3.5); the other bits of that write shall not be taken. `DMACR.Reset` of both channels shall read 1 while the soft reset is in progress and 0 otherwise. | `*_DMACR.Reset` |
 
 ### 3.3 Status registers (RG-1, RG-2)
 
@@ -98,9 +98,9 @@ such as the programming sequences (`SEQ.*`, owner CO-1), are verified by the req
 | --- | --- | --- |
 | RG-EX-01 | The window shall hold a read-only identification word 0x4F444D41 ("ODMA" in ASCII) and a read-only version word (major, minor and patch level of the core). | none (extension) |
 | RG-EX-02 | The window shall hold read-only configuration words with the values of all generics of the core. | none (extension) |
-| RG-EX-03 | The window shall hold, for every FT buffer of the configuration, a single error (SEC) and a double error (DED) event counter that saturates; a write to the counter word of a buffer shall clear its counters, and a write of 1 to a clear bit shall clear all counters; an event in the same cycle as a clear shall be counted. | none (extension, architecture P5) |
+| RG-EX-03 | The window shall hold, for every FT buffer of the configuration, a single error (SEC) and a double error (DED) event counter that saturates; the counters of an index without a buffer of the configuration shall stay 0. A write to the counter word of a buffer shall clear its counters, and a write of 1 to a clear bit shall clear all counters; an event in the same cycle as a clear shall be counted. | none (extension, architecture P5) |
 | RG-EX-04 | The window shall hold a SEC and a DED event flag (R/WC) with enables; `Ecc_Irq` shall be high while an enabled flag is set. | none (extension) |
-| RG-EX-05 | The window shall hold an error injection control that flips one bit (single error) or two bits (double error) of the next codeword written to a selected FT buffer, through the error injection inputs of the buffer. | none (extension) |
+| RG-EX-05 | The window shall hold an error injection control that flips one bit (single error) or two bits (double error) of the next codeword written to a selected FT buffer, through the error injection inputs of the buffer; the selection of an index without a buffer of the configuration shall have no effect. | none (extension) |
 
 ## 4. Interpretations of the published interface
 
@@ -118,6 +118,7 @@ such as the programming sequences (`SEQ.*`, owner CO-1), are verified by the req
 | R5 | Accesses during a soft reset | Writes ignored, reads answered (RG-RS-04) |
 | R6 | Both `DMACR.Reset` bits during a soft reset | Both read 1 (RG-CR-06) |
 | R7 | Writes not affected by the strobes (Register Space note) | All 32 bits taken; also for partial strobes (RG-IF-03) |
+| R8 | `RS` = 1 written while the channel stops after a halt request | No effect, the channel halts; software waits for `Halted` before a restart (RG-CR-01) |
 
 ## 5. Error conditions
 

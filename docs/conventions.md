@@ -58,7 +58,8 @@ document. This page lists the rules and the few OpenDMA-specific additions.
   every item of the published interface in the traceability matrix (architecture section 10) by the test cases of its
   requirements, and every test case of a plan is run by a testbench. `python tools/compliance.py` writes the
   compliance matrix; `python tools/compliance.py --check` fails on a gap. A module without a testbench is in
-  specification: its requirements and the items it owns are listed as planned until its testbench exists.
+  specification: its requirements and the items it owns are listed as planned until its testbench exists. A core is
+  admitted only when every module has its testbench, so no module of an admitted core is in specification.
 
 ## The published interface
 

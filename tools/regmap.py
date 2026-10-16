@@ -220,10 +220,10 @@ def vhdl(reg_id, regs, arrays):
         lines.append("")
         lines += aligned(decls)
     lines.append("")
-    lines += section("Reset values of the registers whose fields all have a fixed reset value")
+    lines += section("Reset values (fixed contents) of the registers whose fields all have a fixed value")
     decls = [(f"Reg{camel(r.name)}Reset_c", "std_logic_vector(31 downto 0)", f'x"{r.reset:08X}"')
              for r in regs + [r for _, aregs in arrays for r in aregs]
-             if r.reset is not None and any(f.access != "RO" for f in r.fields)]
+             if r.reset is not None]
     lines += aligned(decls)
     lines += ["", "end package;", ""]
     return "\n".join(lines)
@@ -310,9 +310,9 @@ def header(reg_id, regs, arrays):
             if f.hi is not None:
                 items.append((f"ODMA_{r.name}_{f.name.upper()}_MASK", f"0x{f.mask:X}u"))
         lines += [""] + defines(items)
-    lines += ["", "/* Reset values of the registers whose fields all have a fixed reset value */"]
+    lines += ["", "/* Reset values (fixed contents) of the registers whose fields all have a fixed value */"]
     items = [(f"ODMA_{r.name}_RESET", f"0x{r.reset:08X}u") for r in regs + [r for _, aregs in arrays for r in aregs]
-             if r.reset is not None and any(f.access != "RO" for f in r.fields)]
+             if r.reset is not None]
     lines += defines(items)
     lines += ["", "#endif /* ODMA_REGS_H */", ""]
     return "\n".join(lines)

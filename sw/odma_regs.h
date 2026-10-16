@@ -232,13 +232,16 @@
 #define ODMA_ECC_COUNT_DED_SHIFT 16u
 #define ODMA_ECC_COUNT_DED_MASK  0xFFFFu
 
-/* Reset values of the registers whose fields all have a fixed reset value */
+/* Reset values (fixed contents) of the registers whose fields all have a fixed value */
 #define ODMA_MM2S_DMACR_RESET  0x00010002u
 #define ODMA_MM2S_SA_RESET     0x00000000u
 #define ODMA_MM2S_SA_MSB_RESET 0x00000000u
 #define ODMA_S2MM_DMACR_RESET  0x00010002u
 #define ODMA_S2MM_DA_RESET     0x00000000u
 #define ODMA_S2MM_DA_MSB_RESET 0x00000000u
+#define ODMA_EXT_ID_RESET      0x4F444D41u
+#define ODMA_EXT_VERSION_RESET 0x00000100u
+#define ODMA_ECC_INFO_RESET    0x00001010u
 #define ODMA_ECC_CTRL_RESET    0x00000000u
 #define ODMA_ECC_STATUS_RESET  0x00000000u
 #define ODMA_ECC_ENABLE_RESET  0x00000000u

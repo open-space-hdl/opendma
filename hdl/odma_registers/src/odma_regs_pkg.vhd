@@ -202,18 +202,21 @@ package odma_regs_pkg is
     constant EccCountDedHi_c : natural := 31;
 
     -----------------------------------------------------------------------------------------------
-    -- Reset values of the registers whose fields all have a fixed reset value
+    -- Reset values (fixed contents) of the registers whose fields all have a fixed value
     -----------------------------------------------------------------------------------------------
-    constant RegMm2sDmacrReset_c : std_logic_vector(31 downto 0) := x"00010002";
-    constant RegMm2sSaReset_c    : std_logic_vector(31 downto 0) := x"00000000";
-    constant RegMm2sSaMsbReset_c : std_logic_vector(31 downto 0) := x"00000000";
-    constant RegS2mmDmacrReset_c : std_logic_vector(31 downto 0) := x"00010002";
-    constant RegS2mmDaReset_c    : std_logic_vector(31 downto 0) := x"00000000";
-    constant RegS2mmDaMsbReset_c : std_logic_vector(31 downto 0) := x"00000000";
-    constant RegEccCtrlReset_c   : std_logic_vector(31 downto 0) := x"00000000";
-    constant RegEccStatusReset_c : std_logic_vector(31 downto 0) := x"00000000";
-    constant RegEccEnableReset_c : std_logic_vector(31 downto 0) := x"00000000";
-    constant RegEccInjectReset_c : std_logic_vector(31 downto 0) := x"00000000";
-    constant RegEccCountReset_c  : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegMm2sDmacrReset_c  : std_logic_vector(31 downto 0) := x"00010002";
+    constant RegMm2sSaReset_c     : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegMm2sSaMsbReset_c  : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegS2mmDmacrReset_c  : std_logic_vector(31 downto 0) := x"00010002";
+    constant RegS2mmDaReset_c     : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegS2mmDaMsbReset_c  : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegExtIdReset_c      : std_logic_vector(31 downto 0) := x"4F444D41";
+    constant RegExtVersionReset_c : std_logic_vector(31 downto 0) := x"00000100";
+    constant RegEccInfoReset_c    : std_logic_vector(31 downto 0) := x"00001010";
+    constant RegEccCtrlReset_c    : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegEccStatusReset_c  : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegEccEnableReset_c  : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegEccInjectReset_c  : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegEccCountReset_c   : std_logic_vector(31 downto 0) := x"00000000";
 
 end package;

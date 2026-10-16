@@ -199,14 +199,14 @@ transactions of a port use the same ID, as \[AXI\] allows for masters without re
 
 | Generic | \[PG021\] Table 44 parameter | Range | Default | Phase |
 | --- | --- | --- | --- | --- |
-| `IncludeSg_g` | `c_include_sg` | boolean | false | b (false only before) |
+| `IncludeSg_g` | `c_include_sg` | boolean | false (\[PG021\]: 1) | a (false), b (true) |
 | `IncludeMm2s_g`, `IncludeS2mm_g` | `c_include_mm2s`, `c_include_s2mm` | boolean | true | a |
 | `LengthWidth_g` | `c_sg_length_width` | 8 to 26 | 14 | a |
 | `AddrWidth_g` | `c_addr_width` | 32 to 64 | 32 | a |
 | `Mm2sMemWidth_g`, `S2mmMemWidth_g` | `c_m_axi_mm2s_data_width`, `c_m_axi_s2mm_data_width` | 32, 64, 128, 256, 512, 1024 | 32 | a |
 | `Mm2sStreamWidth_g`, `S2mmStreamWidth_g` | `c_m_axis_mm2s_tdata_width`, `c_s_axis_s2mm_tdata_width` | 8, 16, ..., 1024, at most the memory width | 32 | a |
 | `Mm2sBurstBeats_g`, `S2mmBurstBeats_g` | `c_mm2s_burst_size`, `c_s2mm_burst_size` | 2, 4, ..., 256 | 16 | a |
-| `StsCntrlStrm_g` | `c_sg_include_stscntrl_strm` | boolean | false | c |
+| `StsCntrlStrm_g` | `c_sg_include_stscntrl_strm` | boolean | false (\[PG021\]: 1) | c |
 | `UseRxLength_g` | `c_sg_use_stsapp_length` | boolean | false | c |
 | `MicroDma_g` | `c_micro_dma` | boolean | false | c |
 | `Mm2sBufferBeats_g`, `S2mmBufferBeats_g` | none: depth of the data buffer of a channel in stream beats | at least two bursts | four bursts | a |
@@ -215,6 +215,11 @@ transactions of a port use the same ID, as \[AXI\] allows for masters without re
 The parameters of \[PG021\] Table 44 that have no generic: `c_enable_multi_channel`, `c_num_mm2s_channels` and
 `c_num_s2mm_channels` (multichannel mode, out of scope), `c_prmry_is_aclk_async` (one clock domain, D1),
 `c_include_mm2s_dre` and `c_include_s2mm_dre` (unaligned transfers are always supported, D2).
+
+Two defaults differ from \[PG021\] on purpose and stay as they are: `IncludeSg_g` and `StsCntrlStrm_g` default to
+false, so that the default configuration is the smallest one (DR mode without control and status streams) and an
+instantiation that relies on the defaults keeps its configuration when later phases add functions. A configuration
+taken from a system with the vendor core sets both generics explicitly.
 
 ### Architecture decisions
 
@@ -230,7 +235,7 @@ The parameters of \[PG021\] Table 44 that have no generic: `c_enable_multi_chann
 | D8 | A soft reset (`DMACR.Reset` of either channel) stops both channels at once and completes every issued AXI transaction (read data is discarded, buffered write chunks are written); then the whole core is reset, and `Reset` reads 0 again. The reset outputs of the stream peers are active during the hard reset and during the soft reset. Streams are cut: `M_Mm2s_Valid` may fall before `TLast` | \[PG021\] Tables 6 and 16 (reset of the whole core, pending transfers flushed or completed, streams terminated early, reset outputs of Table 3). The AXI4 memory protocol is never violated; the stream peers restart from their reset outputs |
 | D9 | Each channel has one interrupt output, level and high-active: the OR of the IOC, delay and error flags that are enabled, registered | \[PG021\] Table 3 (`mm2s_introut`, `s2mm_introut`) and the enables of Tables 6 and 16 |
 | D10 | The register port is `olo_axi_lite_slave` with 32-bit data and a 10-bit address. A write uses all 32 bits of `WData` whatever `WStrb` holds; reserved bits read their defined value (bit 1 of DMACR reads 1); addresses without a register read 0 and ignore writes; every access gets an OKAY response | \[PG021\] section "Register Space" (write data not affected by the strobes) and Tables 4 to 24; a defined response keeps software that probes the map running |
-| D11 | Configuration by the generics of section 6 "Generics", named after the user parameters of \[PG021\] Table 44, with the same ranges and defaults where a parameter exists | The configuration of an existing system maps one to one; the driver configuration (device tree, generated parameters) stays valid |
+| D11 | Configuration by the generics of section 6 "Generics", named after the user parameters of \[PG021\] Table 44, with the same ranges and, except `IncludeSg_g` and `StsCntrlStrm_g`, the same defaults where a parameter exists | The configuration of an existing system maps one to one; the driver configuration (device tree, generated parameters) stays valid |
 | D12 | The extension window 0x100 to 0x1FF (with `ExtRegs_g`) holds an identification and configuration readback, the ECC event counters of all FT buffers (`olo_ft_ecc_monitor`) and the error injection controls. Software written for \[PG021\] never accesses it; without `ExtRegs_g` it reads 0 | P4: FT additions outside the compatible map |
 | D13 | (Phase b) The descriptor engine has its own AXI4 master (`M_AxiSg_*`, 32-bit data) shared by both channels through a round-robin arbiter; a descriptor is fetched as a whole (8 words, or 13 with the user application fields) into an FT buffer, one descriptor ahead of the one in progress; the status is written back with one write (STATUS, and APP0 to APP4 of the last S2MM descriptor of a packet with the status stream) | Separate descriptor port as in \[PG021\] Figure 1; prefetching hides the fetch latency between descriptors |
 | D14 | (Phase b) Packets of several descriptors are joined (MM2S) and split (S2MM) by a byte-lane realigner on the stream side, so that buffers of any length and address form one contiguous packet | \[PG021\] Tables 30 and 37 allow any buffer length per descriptor; the memory master delivers each buffer starting in lane 0 (section 8, G10) |
@@ -244,7 +249,7 @@ interpretations that concern them.
 
 | ID | Item | \[PG021\] | OpenDMA |
 | --- | --- | --- | --- |
-| I1 | `MM2S_DMACR.Keyhole`, `S2MM_DMACR.Keyhole` in DR mode | Table 6 calls the MM2S bit non-functional in DR mode, Table 16 does not restrict the S2MM bit | Keyhole works in both channels and both modes (phase b). A driver that sets the bit expects non-incrementing bursts |
+| I1 | `MM2S_DMACR.Keyhole`, `S2MM_DMACR.Keyhole` in DR mode | Table 6 calls the MM2S bit non-functional in DR mode, Table 16 does not restrict the S2MM bit | As published (P4): the MM2S bit is stored but has no function in DR mode; the S2MM bit works in both modes, the MM2S bit in SG mode (phase b) |
 | I2 | `MM2S_DMACR.IOC_IrqEn` | Table 6 lists bit 1, Figure 3 and Table 16 bit 12 | Bit 12 in both channels |
 | I3 | `DMACR.RS` after an error | The error clears `RS`; restarting without a reset is not described | `RS` = 1 has no effect while an error flag is set (D7) |
 | I4 | S2MM packet longer than the buffer in DR mode | Table 24 calls it undefined, Table 17 defines `DMAIntErr` | D6 |

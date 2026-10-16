@@ -11,13 +11,15 @@ implementation written from the published product guide; it contains no code, te
 
 ## Status
 
-**In development.** The [architecture](docs/architecture.md) is defined; no module is implemented yet. The
+**In development.** Phase a, Direct Register Mode, is implemented and verified in simulation with GHDL; the
+QuestaSim runs with code coverage are open. Scatter/Gather Mode and the control and status streams follow. The
 [roadmap](docs/roadmap.md) lists the development phases and the state of every module.
 
 ## Documentation
 
 | Document | Content |
 | --- | --- |
+| [docs/user_guide.md](docs/user_guide.md) | User guide: sources, generics, interfaces, programming sequence, protection scope, performance, conformance |
 | [docs/architecture.md](docs/architecture.md) | Architecture: building blocks, items of the published interface they own, Open Logic usage, verification |
 | [docs/compliance.md](docs/compliance.md) | Compliance matrix: requirements and test cases of every item of the published interface (generated) |
 | [hdl/odma_registers/docs/register_map.md](hdl/odma_registers/docs/register_map.md) | Register map (generated; C header `sw/odma_regs.h`) |

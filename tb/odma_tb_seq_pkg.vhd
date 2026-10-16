@@ -175,9 +175,25 @@ package body odma_tb_seq_pkg is
         variable IsMm2s_v   : boolean;
         variable Match_v    : boolean;
 
-        impure function ctx return string is
+        -- Message of a command: the end of the file name, the line number and the start of the line, short
+        -- enough for the message field of a VVC command (300 characters)
+        function shortName return string is
+            constant Name_c : natural := 100;
         begin
-            return fileName & ":" & integer'image(LineNo_v) & ": " & Orig_v.all;
+            if fileName'length > Name_c then
+                return "..." & fileName(fileName'high - Name_c + 1 to fileName'high);
+            end if;
+            return fileName;
+        end function;
+
+        impure function ctx return string is
+            constant Text_c : natural := 60;
+        begin
+            if Orig_v.all'length > Text_c then
+                return shortName & ":" & integer'image(LineNo_v) & ": " &
+                       Orig_v.all(Orig_v.all'low to Orig_v.all'low + Text_c - 1) & " ...";
+            end if;
+            return shortName & ":" & integer'image(LineNo_v) & ": " & Orig_v.all;
         end function;
 
         -- Reads a register through the VVC and waits for the result

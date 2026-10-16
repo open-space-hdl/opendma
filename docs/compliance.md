@@ -21,12 +21,12 @@ are listed in section 6 of the architecture and in the module specifications.
 | `MAP.ENDIAN` | Figure 2, little-endian registers | RG-1 | a | RG-IF-04 | TC-RG-01 | Verified |
 | `MAP.WSTRB` | Register Space, note on the write strobes | RG-1 | a | RG-IF-03 | TC-RG-02 | Verified |
 | `MAP.ACCESS` | Register Access Type Description (RO, R/W, R/WC) | RG-1 | a | RG-CR-04, RG-IR-03, RG-MAP-02 | TC-RG-02, TC-RG-04, TC-RG-09 | Verified |
-| `MM2S_DMACR.RS` | Tables 6, 16, bit 0 | RG-1 | a | MM-HA-01, RG-CR-01, RG-CR-02 | TC-MM-11, TC-RG-03, TC-RG-07, TC-RG-08 | Verified |
-| `S2MM_DMACR.RS` | Tables 6, 16, bit 0 | RG-1 | a | RG-CR-01, RG-CR-02, S2-HA-01, S2-HA-03 | TC-RG-03, TC-RG-07, TC-RG-08, TC-S2-11 | Verified |
+| `MM2S_DMACR.RS` | Tables 6, 16, bit 0 | RG-1 | a | CO-SQ-04, MM-HA-01, RG-CR-01, RG-CR-02 | TC-CO-02, TC-MM-11, TC-RG-03, TC-RG-07, TC-RG-08 | Verified |
+| `S2MM_DMACR.RS` | Tables 6, 16, bit 0 | RG-1 | a | CO-SQ-04, RG-CR-01, RG-CR-02, S2-HA-01, S2-HA-03 | TC-CO-02, TC-RG-03, TC-RG-07, TC-RG-08, TC-S2-11 | Verified |
 | `MM2S_DMACR.Reserved` | Tables 6, 16, bits 1, 11 to 5, 15 | RG-1 | a | RG-CR-03 | TC-RG-01 | Verified |
 | `S2MM_DMACR.Reserved` | Tables 6, 16, bits 1, 11 to 5, 15 | RG-1 | a | RG-CR-03 | TC-RG-01 | Verified |
-| `MM2S_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | MM-HA-02, RG-CR-06, RG-RS-02, RG-RS-04 | TC-MM-12, TC-RG-10 | Verified |
-| `S2MM_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | RG-CR-06, RG-RS-02, RG-RS-04, S2-HA-02 | TC-RG-10, TC-S2-12 | Verified |
+| `MM2S_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | CO-ER-02, CO-RS-01, MM-HA-02, RG-CR-06, RG-RS-02, RG-RS-04 | TC-CO-04, TC-CO-05, TC-CO-06, TC-MM-12, TC-RG-10 | Verified |
+| `S2MM_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | CO-ER-02, CO-RS-01, RG-CR-06, RG-RS-02, RG-RS-04, S2-HA-02 | TC-CO-04, TC-CO-05, TC-CO-06, TC-RG-10, TC-S2-12 | Verified |
 | `MM2S_DMACR.Keyhole` | Tables 6, 16, bit 3 | MM-1 (MM2S), S2-2 (S2MM) | b | - | - | Planned |
 | `S2MM_DMACR.Keyhole` | Tables 6, 16, bit 3 | MM-1 (MM2S), S2-2 (S2MM) | b | - | - | Planned |
 | `MM2S_DMACR.CyclicBD` | Tables 6, 16, bit 4 | SG-1 | b | - | - | Planned |
@@ -50,11 +50,11 @@ are listed in section 6 of the architecture and in the module specifications.
 | `MM2S_DMASR.SGIncld` | Tables 7, 17, bit 3 | RG-1 | a | RG-SR-03 | TC-RG-01 | Verified |
 | `S2MM_DMASR.SGIncld` | Tables 7, 17, bit 3 | RG-1 | a | RG-SR-03 | TC-RG-01 | Verified |
 | `MM2S_DMASR.DMAIntErr` | Table 7, bit 4 | SG-1 | b | - | - | Planned |
-| `S2MM_DMASR.DMAIntErr` | Table 17, bit 4 | S2-1 | a | RG-SR-06, S2-RS-02 | TC-RG-08, TC-S2-08 | Verified |
-| `MM2S_DMASR.DMASlvErr` | Tables 7, 17, bit 5 | MM-1 (MM2S), S2-2 (S2MM) | a | MM-ER-01, MM-ER-02, MM-ER-03, RG-SR-05 | TC-MM-09, TC-RG-08 | Partly verified |
-| `S2MM_DMASR.DMASlvErr` | Tables 7, 17, bit 5 | MM-1 (MM2S), S2-2 (S2MM) | a | RG-SR-05, S2-RS-03, S2-RS-05 | TC-RG-08, TC-S2-09 | Partly verified |
-| `MM2S_DMASR.DMADecErr` | Tables 7, 17, bit 6 | MM-1 (MM2S), S2-2 (S2MM) | a | MM-ER-03, MM-RD-04, RG-SR-05 | TC-MM-07, TC-MM-10, TC-RG-08 | Partly verified |
-| `S2MM_DMASR.DMADecErr` | Tables 7, 17, bit 6 | MM-1 (MM2S), S2-2 (S2MM) | a | RG-SR-05, S2-RS-05, S2-WR-04 | TC-RG-08, TC-S2-10 | Partly verified |
+| `S2MM_DMASR.DMAIntErr` | Table 17, bit 4 | S2-1 | a | CO-ER-01, RG-SR-06, S2-RS-02 | TC-CO-04, TC-RG-08, TC-S2-08 | Verified |
+| `MM2S_DMASR.DMASlvErr` | Tables 7, 17, bit 5 | MM-1 (MM2S), S2-2 (S2MM) | a | CO-ER-01, MM-ER-01, MM-ER-02, MM-ER-03, RG-SR-05 | TC-CO-04, TC-MM-09, TC-RG-08 | Partly verified |
+| `S2MM_DMASR.DMASlvErr` | Tables 7, 17, bit 5 | MM-1 (MM2S), S2-2 (S2MM) | a | CO-ER-01, RG-SR-05, S2-RS-03, S2-RS-05 | TC-CO-04, TC-RG-08, TC-S2-09 | Partly verified |
+| `MM2S_DMASR.DMADecErr` | Tables 7, 17, bit 6 | MM-1 (MM2S), S2-2 (S2MM) | a | CO-ER-01, MM-ER-03, MM-RD-04, RG-SR-05 | TC-CO-04, TC-MM-07, TC-MM-10, TC-RG-08 | Partly verified |
+| `S2MM_DMASR.DMADecErr` | Tables 7, 17, bit 6 | MM-1 (MM2S), S2-2 (S2MM) | a | CO-ER-01, RG-SR-05, S2-RS-05, S2-WR-04 | TC-CO-04, TC-RG-08, TC-S2-10 | Partly verified |
 | `MM2S_DMASR.SGIntErr` | Tables 7, 17, bit 8 | SG-1 | b | - | - | Planned |
 | `S2MM_DMASR.SGIntErr` | Tables 7, 17, bit 8 | SG-1 | b | - | - | Planned |
 | `MM2S_DMASR.SGSlvErr` | Tables 7, 17, bit 9 | SG-3 | b | - | - | Planned |
@@ -65,8 +65,8 @@ are listed in section 6 of the architecture and in the module specifications.
 | `S2MM_DMASR.IOC_Irq` | Tables 7, 17, bit 12 | RG-2 | a | RG-IR-01 | TC-RG-04, TC-RG-05, TC-RG-07 | Verified |
 | `MM2S_DMASR.Dly_Irq` | Tables 7, 17, bit 13 | RG-2 | b | - | - | Planned |
 | `S2MM_DMASR.Dly_Irq` | Tables 7, 17, bit 13 | RG-2 | b | - | - | Planned |
-| `MM2S_DMASR.Err_Irq` | Tables 7, 17, bit 14 | RG-2 | a | RG-IR-02 | TC-RG-08 | Verified |
-| `S2MM_DMASR.Err_Irq` | Tables 7, 17, bit 14 | RG-2 | a | RG-IR-02 | TC-RG-08 | Verified |
+| `MM2S_DMASR.Err_Irq` | Tables 7, 17, bit 14 | RG-2 | a | CO-ER-01, RG-IR-02 | TC-CO-04, TC-RG-08 | Verified |
+| `S2MM_DMASR.Err_Irq` | Tables 7, 17, bit 14 | RG-2 | a | CO-ER-01, RG-IR-02 | TC-CO-04, TC-RG-08 | Verified |
 | `MM2S_DMASR.IRQThresholdSts` | Tables 7, 17, bits 23 to 16 | RG-2 | b | - | - | Planned |
 | `S2MM_DMASR.IRQThresholdSts` | Tables 7, 17, bits 23 to 16 | RG-2 | b | - | - | Planned |
 | `MM2S_DMASR.IRQDelaySts` | Tables 7, 17, bits 31 to 24 | RG-2 | b | - | - | Planned |
@@ -113,32 +113,32 @@ are listed in section 6 of the architecture and in the module specifications.
 | `DESC.S2MM_APP` | Table 39, APP0 to APP3 | S2-3 | c | - | - | Planned |
 | `DESC.S2MM_APP4` | Table 40, APP4 and receive length | S2-3 | c | - | - | Planned |
 | `DESCMGMT.TAIL` | Section "Descriptor Management", tail pointer mode | SG-1 | b | - | - | Planned |
-| `STRM.MM2S` | Section "MM2S Descriptor Settings and AXI Control Stream", Figure 37 (data stream) | MM-2 | a | MM-IF-02, MM-ST-01, MM-ST-02 | TC-MM-01, TC-MM-02, TC-MM-04, TC-MM-14 | Verified |
-| `STRM.S2MM` | Section "S2MM Descriptor Settings and AXI Status Stream", Figure 39 (data stream) | S2-1 | a | S2-IF-02, S2-ST-01, S2-ST-02, S2-WR-01, S2-WR-02 | TC-S2-01, TC-S2-02, TC-S2-03, TC-S2-05, TC-S2-07, TC-S2-08, TC-S2-11, TC-S2-14, TC-S2-16 | Verified |
+| `STRM.MM2S` | Section "MM2S Descriptor Settings and AXI Control Stream", Figure 37 (data stream) | MM-2 | a | CO-IF-02, MM-IF-02, MM-ST-01, MM-ST-02 | TC-CO-02, TC-MM-01, TC-MM-02, TC-MM-04, TC-MM-14 | Verified |
+| `STRM.S2MM` | Section "S2MM Descriptor Settings and AXI Status Stream", Figure 39 (data stream) | S2-1 | a | CO-IF-02, S2-IF-02, S2-ST-01, S2-ST-02, S2-WR-01, S2-WR-02 | TC-CO-02, TC-S2-01, TC-S2-02, TC-S2-03, TC-S2-05, TC-S2-07, TC-S2-08, TC-S2-11, TC-S2-14, TC-S2-16 | Verified |
 | `STRM.CNTRL` | Section "AXI Control Stream", Figure 38 | MM-3 | c | - | - | Planned |
 | `STRM.STS` | Section "AXI Status Stream", Figure 40 | S2-3 | c | - | - | Planned |
 | `STRM.RXLENGTH` | Section "Customizing and Generating the Core", Use RxLength In Status Stream | S2-3 | c | - | - | Planned |
-| `IRQ.OUT` | Table 3, interrupt outputs | RG-2 | a | RG-IR-04 | TC-RG-04, TC-RG-05, TC-RG-08 | Verified |
-| `CLK.SYNC` | Section "Clocking", synchronous mode | CO-1 | a | - | - | Planned |
+| `IRQ.OUT` | Table 3, interrupt outputs | RG-2 | a | CO-IF-02, RG-IR-04 | TC-CO-02, TC-RG-04, TC-RG-05, TC-RG-08 | Verified |
+| `CLK.SYNC` | Section "Clocking", synchronous mode | CO-1 | a | CO-IF-01 | TC-CO-02 | Verified |
 | `CLK.ASYNC` | Section "Clocking", asynchronous mode, Table 43 | Out of scope (D1) | - | - | - | Out of scope |
 | `RST.HARD` | Section "Resets" | RG-3 | a | RG-RS-01 | TC-RG-11 | Verified |
-| `RST.OUT` | Table 3, reset outputs of the streams (I12) | RG-3 | a | RG-RS-03 | TC-RG-10 | Verified |
+| `RST.OUT` | Table 3, reset outputs of the streams (I12) | RG-3 | a | CO-IF-02, CO-RS-01, RG-RS-03 | TC-CO-02, TC-CO-05, TC-CO-06, TC-RG-10 | Verified |
 | `FEAT.4K` | Section "Core Overview", 4 KB address boundary | MM-1 (MM2S), S2-2 (S2MM) | a | MM-RD-02, S2-WR-03 | TC-MM-03, TC-S2-04 | Verified |
 | `FEAT.BURST` | Table 44, `c_mm2s_burst_size`, `c_s2mm_burst_size` | MM-1 (MM2S), S2-2 (S2MM) | a | MM-RD-02, S2-WR-03 | TC-MM-03, TC-S2-04 | Verified |
 | `FEAT.UNALIGNED` | Table 44, `c_include_mm2s_dre`, `c_include_s2mm_dre` (D2) | MM-1 (MM2S), S2-2 (S2MM) | a | MM-RD-01, S2-WR-01 | TC-MM-01, TC-MM-02, TC-MM-14, TC-S2-01, TC-S2-02, TC-S2-05, TC-S2-14, TC-S2-16 | Verified |
-| `FEAT.ADDR64` | Table 44, `c_addr_width` | CO-1 | a | - | - | Planned |
-| `FEAT.WIDTH` | Table 44, memory and stream data widths | CO-1 | a | - | - | Planned |
-| `FEAT.LENWIDTH` | Table 44, `c_sg_length_width` | CO-1 | a | - | - | Planned |
-| `FEAT.CHANNEL` | Table 44, `c_include_mm2s`, `c_include_s2mm` | CO-1 | a | - | - | Planned |
+| `FEAT.ADDR64` | Table 44, `c_addr_width` | CO-1 | a | CO-CF-01 | TC-CO-01, TC-CO-02, TC-CO-07, TC-CO-09 | Verified |
+| `FEAT.WIDTH` | Table 44, memory and stream data widths | CO-1 | a | CO-CF-01 | TC-CO-01, TC-CO-02, TC-CO-07, TC-CO-09 | Verified |
+| `FEAT.LENWIDTH` | Table 44, `c_sg_length_width` | CO-1 | a | CO-CF-01 | TC-CO-01, TC-CO-02, TC-CO-07, TC-CO-09 | Verified |
+| `FEAT.CHANNEL` | Table 44, `c_include_mm2s`, `c_include_s2mm` | CO-1 | a | CO-CF-03 | TC-CO-08 | Verified |
 | `FEAT.MICRO` | Table 44, `c_micro_dma`; section "Customizing and Generating the Core" | CO-1 | c | - | - | Planned |
 | `FEAT.MULTICHANNEL` | Section "Multichannel DMA Support" | Out of scope | - | - | - | Out of scope |
-| `SEQ.DR.MM2S` | Section "Programming Sequence", Direct Register Mode, MM2S | CO-1 | a | - | - | Planned |
-| `SEQ.DR.S2MM` | Section "Programming Sequence", Direct Register Mode, S2MM | CO-1 | a | - | - | Planned |
+| `SEQ.DR.MM2S` | Section "Programming Sequence", Direct Register Mode, MM2S | CO-1 | a | CO-SQ-01, CO-SQ-03 | TC-CO-01, TC-CO-02, TC-CO-03, TC-CO-04 | Verified |
+| `SEQ.DR.S2MM` | Section "Programming Sequence", Direct Register Mode, S2MM | CO-1 | a | CO-SQ-02, CO-SQ-03 | TC-CO-01, TC-CO-02, TC-CO-03, TC-CO-04 | Verified |
 | `SEQ.SG.MM2S` | Section "Programming Sequence", Scatter/Gather Mode, MM2S | CO-1 | b | - | - | Planned |
 | `SEQ.SG.S2MM` | Section "Programming Sequence", Scatter/Gather Mode, S2MM | CO-1 | b | - | - | Planned |
 | `SEQ.CYCLIC` | Section "Cyclic DMA Mode", Figure 48 | CO-1 | b | - | - | Planned |
 
-Items: 121; out of scope: 3; partly verified: 4; planned: 73; verified: 41.
+Items: 121; out of scope: 3; partly verified: 4; planned: 66; verified: 48.
 
 ## 2. Requirements
 
@@ -147,9 +147,10 @@ of the published interface included).
 
 | Module | Requirements | Verified by a test case | Without a test case | Waiting for Open Logic |
 | --- | --- | --- | --- | --- |
+| `odma_core` | 13 | 13 | - | - |
 | `odma_mm2s` | 18 | 17 | - | MM-ER-03 |
 | `odma_pkg` | 10 | 10 | - | - |
 | `odma_registers` | 42 | 42 | - | - |
 | `odma_s2mm` | 21 | 20 | - | S2-RS-05 |
 
-Requirements: 91; without a test case: 0; test cases of the plans not run by a testbench: 0.
+Requirements: 104; without a test case: 0; test cases of the plans not run by a testbench: 0.

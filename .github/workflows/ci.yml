@@ -31,6 +31,8 @@ jobs:
           backend: mcode
       - name: Run regression
         run: python run.py -p 4 --xunit-xml results.xml
+      - name: Synthesis check of the generics
+        run: python lint/synth_check.py -j 4
       - name: Publish test results
         if: always()
         uses: actions/upload-artifact@v7

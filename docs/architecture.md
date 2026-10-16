@@ -159,7 +159,7 @@ flag; software recovers with a soft reset.
 | P6 | Memory safety | A transfer writes only the bytes of its buffer (write strobes) and reads only the memory words that contain them (AXI4 reads have no strobes; the other bytes of the first and the last word are read and discarded): S2MM never writes beyond the buffer length, whatever the stream delivers (D6), and a buffer that wraps around the top of the address space is rejected before any access (D7). |
 | P7 | Stream conventions of the family | The first byte of a packet is in byte lane 0, all bytes of a beat are valid except in the last beat, whose valid bytes are contiguous from lane 0 (`TKeep`). The byte at the lowest address of a buffer is the first byte of its stream data. |
 | P8 | Verifiable in isolation | Each module has a specification and a testbench that drives only its ports. The memory model, the stream models and the model of the programming sequences are written independently of the RTL. |
-| P9 | Reuse before design | A function available in Open Logic (AXI master, FIFO, AXI4-Lite slave, arbiter, chunker, ECC monitor) is instantiated, not rewritten. A missing function is added to Open Logic (section 8). |
+| P9 | Reuse before design | A function available in Open Logic (AXI master, FIFO, AXI4-Lite slave, arbiter, pipeline stage, ECC monitor) is instantiated, not rewritten. A missing function is added to Open Logic (section 8). |
 | P10 | No vendor code | The core has no vendor primitive. |
 
 ## 6 Architecture overview
@@ -227,7 +227,7 @@ taken from a system with the vendor core sets both generics explicitly.
 | ID | Decision | Reason |
 | --- | --- | --- |
 | D1 | One clock domain `Clk` for the register port, both channels, the descriptor engine and the stream ports | The synchronous configuration of \[PG021\] section "Clocking"; no clock domain crossing in the core. A system with other stream clocks places `olo_ft_fifo_async` at the stream ports |
-| D2 | Each channel moves its data with one `olo_ft_axi_master_full`: MM2S with the read side only, S2MM with the write side only; user data width = stream width, AXI data width = memory width, maximum burst = burst size generic, transfer size width = `LengthWidth_g` | Transfers at any byte address and of any length in every width configuration (the function of the data realignment engine of \[PG021\], without its limit of 512 stream bits), 4 KB and burst splitting, outstanding bursts and ECC on the data buffers without own logic. Aligned transfers behave identically, so software for a configuration without realignment is unaffected |
+| D2 | Each channel moves its data with one `olo_ft_axi_master_full`: MM2S with the read side only, S2MM with the write side only; user data width = stream width, AXI data width = memory width, maximum burst = burst size generic, transfer size width = `LengthWidth_g` + 1 (G14) | Transfers at any byte address and of any length in every width configuration (the function of the data realignment engine of \[PG021\], without its limit of 512 stream bits), 4 KB and burst splitting, outstanding bursts and ECC on the data buffers without own logic. Aligned transfers behave identically, so software for a configuration without realignment is unaffected |
 | D3 | Both data movers run in their high-latency mode: a read burst is requested only when the read buffer has space for it, a write burst only when its data is in the write buffer | A stalled stream peer never holds the memory bus; a halt or soft reset completes every issued burst without the stream peer (D8) |
 | D4 | MM2S sends a buffer as stream data with the first byte in lane 0. In DR mode every transfer is one packet; in SG mode a packet runs from the descriptor with `TXSOF` to the one with `TXEOF`. `TKeep` of the last beat follows from the length; a transfer is complete when its last beat is accepted by the stream peer | P7; the completion reported to software means that the data has left the core |
 | D5 | S2MM is store-and-forward per chunk: received beats enter an FT data buffer; a chunk ends after one memory burst of data or at `TLast`; the byte count of a complete chunk (from `TKeep` of its last beat) enters a chunk buffer, and only then is its write command issued | The memory master needs the byte count before the data (section 8, G3); no write is issued for data that has not arrived, and no byte after `TLast` is written |
@@ -290,7 +290,7 @@ built from and the items of the published interface it owns (P1).
 
 | ID | Block | Responsibility | Open Logic | \[PG021\] items |
 | --- | --- | --- | --- | --- |
-| S2-1 | Chunk former | Stream input, data buffer, cut into chunks (D5), byte count of the last beat, buffer end and overflow (D6), discard up to `TLast`; phase b: split of a packet at the end of each buffer (D14) | `olo_base_chunker`, `olo_ft_fifo_sync` (data and chunk buffers), realigner (G10) | `STRM.S2MM`, `S2MM_DMASR.DMAIntErr` (DR mode) |
+| S2-1 | Chunk former | Stream input, data buffer, cut into chunks (D5), byte count of the last beat, buffer end and overflow (D6), discard up to `TLast`; phase b: split of a packet at the end of each buffer (D14) | `olo_ft_fifo_sync` (data and chunk buffers), realigner (G10) | `STRM.S2MM`, `S2MM_DMASR.DMAIntErr` (DR mode) |
 | S2-2 | Write command | Write command per chunk at the running address, address wrap check, transfer result after the write response of its last chunk, error collection, halt and drain | `olo_ft_axi_master_full` (write side) | `*_DMASR.DMASlvErr`, `*_DMASR.DMADecErr` (S2MM), `S2MM_DMACR.Keyhole`, `FEAT.4K`, `FEAT.BURST`, `FEAT.UNALIGNED` (S2MM) |
 | S2-3 | Status stream (phase c) | Reception of the flag word and APP0 to APP4, receive length of APP4 | `olo_ft_fifo_sync` | `STRM.STS`, `STRM.RXLENGTH`, `DESC.S2MM_APP*` |
 
@@ -324,8 +324,8 @@ built from and the items of the published interface it owns (P1).
 | Open Logic entity | Used in | Purpose |
 | --- | --- | --- |
 | `olo_ft_axi_master_full` | MM-1, S2-2, SG-3 | AXI4 masters with byte-exact unaligned transfers, burst and 4 KB splitting, ECC on the data buffers |
-| `olo_ft_fifo_sync` | S2-1, SG-1, MM-3, S2-3 | Data and chunk buffers of S2MM, descriptor buffer, control and status stream buffers |
-| `olo_base_chunker` | S2-1 | Cut of the S2MM stream into chunks of one memory burst |
+| `olo_ft_fifo_sync` | MM-1, MM-2, S2-1, SG-1, MM-3, S2-3 | Transfer and response buffers of MM2S, data and chunk buffers of S2MM, descriptor buffer, control and status stream buffers |
+| `olo_base_pl_stage` | MM-2, S2-2 | Register stage of the MM2S stream output, stage of the S2MM write jobs |
 | `olo_base_arb_rr` | SG-3 | Fair choice between the descriptor accesses of both channels |
 | `olo_axi_lite_slave` | RG-1 | AXI4-Lite access to the register file |
 | `olo_ft_ecc_monitor` | RG-4 | SEC and DED counters per buffer |
@@ -338,8 +338,8 @@ both at tag 4.7.0-ft.6.
 | ID | \[PG021\] needs | `olo_axi_master_full` at 4.7.0-ft.6 | Resolution | Phase |
 | --- | --- | --- | --- | --- |
 | G1 | Keyhole: MM2S reads and S2MM writes with non-incrementing (FIXED) bursts of at most 16 beats (`DMACR.Keyhole`, Tables 6 and 16) | INCR bursts only; `AxBurst` is a constant | New in open-logic-ft: a per-command option for FIXED bursts in `olo_axi_master_simple`, `olo_axi_master_full` and their ft variants (address not incremented between bursts, bursts of at most min(`AxiMaxBeats_g`, 16) beats, start address aligned to the AXI data width) | b |
-| G2 | Lengths up to `2**26 - 1` bytes (`LengthWidth_g` 8 to 26) with addresses of 32 to 64 bits | `UserTransactionSizeBits_g` must be smaller than `AxiAddrWidth_g` - 1 (assertion on the derived beat count) | No gap: the largest length width, 26, with the smallest address width, 32, satisfies the rule. OpenDMA sets `UserTransactionSizeBits_g` = `LengthWidth_g`; `synth_check` elaborates both ends | a |
-| G3 | S2MM packets of unknown length: the data arrives before the length is known | Write data is accepted only after the command (alignment) | No change of Open Logic: S2-1 buffers a chunk completely before its command (D5), with `olo_base_chunker` and `olo_ft_fifo_sync` | a |
+| G2 | Lengths up to `2**26 - 1` bytes (`LengthWidth_g` 8 to 26) with addresses of 32 to 64 bits | `UserTransactionSizeBits_g` must be smaller than `AxiAddrWidth_g` - 1 (assertion on the derived beat count) | No gap: the largest length width, 26, with the smallest address width, 32, satisfies the rule. OpenDMA sets `UserTransactionSizeBits_g` = `LengthWidth_g` + 1 (G14); `synth_check` elaborates both ends | a |
+| G3 | S2MM packets of unknown length: the data arrives before the length is known | Write data is accepted only after the command (alignment) | No change of Open Logic: S2-1 buffers a chunk completely before its command (D5), in an `olo_ft_fifo_sync` | a |
 | G4 | `TKeep` of the last MM2S beat; byte count of the last S2MM beat | No byte enables on the user data interfaces | No change of Open Logic: MM-2 derives `TKeep` from the length, S2-1 the byte count from `TKeep` (I10) | a |
 | G5 | SLVERR and DECERR reported separately (`DMASlvErr`, `DMADecErr` in Tables 7, 17, 31 and 38) | `Rd_Error` and `Wr_Error` are pulses without the response code | New in open-logic-ft: the response code of a failed command (the first non-OKAY response, or SLVERR and DECERR flags) next to `Rd_Error` and `Wr_Error` in `olo_axi_master_simple`, `olo_axi_master_full` and their ft variants | a |
 | G6 | AXI cache and protection attributes; user signals | `AxCache` = 0011 and `AxProt` = 000 are constants, no `AxUser` | No gap in scope: the register SG_CTL with the descriptor port attributes exists only in the multichannel mode. A generic for coherent systems is a later option at the core ports | - |

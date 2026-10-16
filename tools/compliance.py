@@ -16,7 +16,8 @@ and S2MM_. A requirement traces to an item when it names the item or a part of i
 MM2S_DMACR.RS and would trace to an item MM2S_DMACR).
 
 A module is in specification while it has no testbench (hdl/<module>/tb/*_tb.vhd): its requirements and test cases
-are listed as planned. A requirement or a test case in a section of a specification or a verification plan whose
+are listed as planned. A test case whose row starts with `lint/synth_check.py` is run by the synthesis check of the
+CI instead of a testbench. A requirement or a test case in a section of a specification or a verification plan whose
 heading contains "waiting for Open Logic" needs a change of Open Logic that is not released yet: it is listed as
 planned, never counts as verified and need not be run. An item without a verified requirement is planned while its development phase is open in
 docs/roadmap.md or while none of its owner modules has a testbench yet. With --check the file is not written; the exit
@@ -30,6 +31,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "compliance.md"
+SYNTH_CHECK = ROOT / "lint" / "synth_check.py"
 KEY_RE = re.compile(r"`([A-Z*][A-Za-z0-9_*]*(?:\.[A-Za-z0-9_]+)*)`")
 REQ_ID_RE = re.compile(r"^[A-Z0-9]+(-[A-Z0-9]+)*-\d{2}$")
 # Owner block prefix of the architecture (section 7) and the module that implements it
@@ -143,6 +145,12 @@ def load_tests():
                     tests.setdefault(tid, set()).update(expand_ids(row[-1]))
                 elif module_dir.name in tested_modules():
                     not_run.append(f"{module_dir.name}: {name}")
+            elif len(row) >= 3 and row[0].startswith("`lint/synth_check.py`") and SYNTH_CHECK.exists():
+                # Checks of the elaboration and the synthesis of the core, run by lint/synth_check.py in the CI
+                m = re.search(r"\((TC-[A-Z0-9]+-\d+)\)", row[0])
+                if m:
+                    run_ids.add(m.group(1))
+                    tests.setdefault(m.group(1), set()).update(expand_ids(row[-1]))
         for row in rows:
             if len(row) >= 3 and re.match(r"^TC-[A-Z0-9]+-\d+", row[0]):
                 # Rows that reference test IDs directly (for example "TC-CO-02 (two configurations)")

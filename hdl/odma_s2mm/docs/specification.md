@@ -36,7 +36,7 @@ several buffers (phase b, gap G10), keyhole writes (phase b, gap G1) and the sta
 | --- | --- | --- |
 | S2-ST-01 | The channel shall accept stream beats into its data buffer only while `Run` is '1' and the buffer has space; while the channel is halted, `S_S2mm_Ready` shall be '0', except while the rest of an interrupted packet is discarded (S2-HA-01) (interpretation I9). | `STRM.S2MM` |
 | S2-ST-02 | The bytes of a beat without `TLast` shall all be taken; of a beat with `TLast`, the bytes up to the first lane whose `TKeep` bit is not set; a last beat without valid bytes shall end the packet (interpretation I10). | `STRM.S2MM` |
-| S2-ST-03 | A packet shall be cut into chunks of `BurstBeats_g` x `MemWidth_g` / `StreamWidth_g` beats, the last chunk ending with the packet; a chunk shall be written only when all its beats are in the data buffer. | none (architecture D5) |
+| S2-ST-03 | A packet shall be cut into chunks of one burst, `ChunkBeats` = B x `MemWidth_g` / `StreamWidth_g` beats with B the smaller of `BurstBeats_g` and the beats of 4 KB (4096 / (`MemWidth_g` / 8)), the last chunk ending with the packet; a chunk shall be written only when all its beats are in the data buffer. | none (architecture D5) |
 
 ### 3.3 Writing the buffer (S2-2)
 
@@ -46,7 +46,8 @@ several buffers (phase b, gap G10), keyhole writes (phase b, gap G1) and the sta
 | S2-WR-02 | No byte outside the buffer (command address to address plus length minus 1) shall be written: write strobes are set only for bytes of the buffer that receive packet data. | `STRM.S2MM` |
 | S2-WR-03 | No write burst shall cross a 4 KB address boundary or have more than `BurstBeats_g` beats; a burst shall be requested only when its data is in the write master. | `FEAT.4K`, `FEAT.BURST` |
 | S2-WR-04 | A command whose buffer reaches beyond the top of the address space shall cause no write and consume no stream data; its result shall carry the decode error and 0 bytes (interpretation I5). | `S2MM_DMASR.DMADecErr` |
-| S2-WR-05 | With the memory always ready, the stream sending without gaps and chunks of at least 8 beats, the channel shall take one stream beat per clock cycle during a packet of at least 64 chunks. | none (performance) |
+| S2-WR-06 | A command with a buffer length of 0 shall cause no write and consume no stream data; its result shall carry the internal error code and 0 bytes (interpretation S4). | none (internal interface) |
+| S2-WR-05 | With the memory always ready, the stream sending without gaps and chunks of at least 64 stream beats, the channel shall take at least 0.9 stream beats per clock cycle on average during a packet of 64 chunks. | none (performance) |
 
 ### 3.4 Results and errors
 
@@ -54,7 +55,7 @@ several buffers (phase b, gap G10), keyhole writes (phase b, gap G1) and the sta
 | --- | --- | --- |
 | S2-RS-01 | When the packet ends in the buffer, the result shall carry the number of bytes written, the end of packet and no error, once the write responses of all its bursts have arrived. | none (architecture D5) |
 | S2-RS-02 | A packet longer than the buffer: the bytes that fit shall be written, the rest of the packet discarded up to its `TLast`, and the result shall carry the internal error code (architecture D6). | `S2MM_DMASR.DMAIntErr` |
-| S2-RS-03 | A write response SLVERR shall give the result the slave error code, DECERR the decode error code, the first error deciding (gap G5); after the first error no further write shall be issued for the packet, and the rest of the packet shall be discarded up to its `TLast`. | `S2MM_DMASR.DMASlvErr`, `S2MM_DMASR.DMADecErr` |
+| S2-RS-03 | A write response other than OKAY shall give the result an error code, the slave error or the decode error, and no end of packet; after the first error no further write shall be issued for the packet, and the rest of the packet shall be discarded up to its `TLast`. | `S2MM_DMASR.DMASlvErr` |
 | S2-RS-04 | A result with an error or without the end of packet shall be returned once no write of the transfer is outstanding, without waiting for the `TLast` of a packet that is being discarded. | none (architecture D7) |
 
 ### 3.5 Halt and drain
@@ -71,6 +72,16 @@ several buffers (phase b, gap G10), keyhole writes (phase b, gap G1) and the sta
 | --- | --- | --- |
 | S2-FT-01 | The data buffer, the chunk buffer and the write data buffer of the write master shall be protected by SECDED ECC; every corrected single error and every detected double error shall raise one pulse on the `Ecc_Sec` or `Ecc_Ded` bit of its buffer; `EccInj_Valid` of a buffer with `EccInj_Double` shall flip one or two bits of its next codeword. | none (architecture P5) |
 
+### 3.7 Requirements waiting for Open Logic
+
+Open Logic 4.7.0-ft.6 reports a failed write command of `olo_ft_axi_master_full` without its response code (gap G5 of
+the architecture). Until the release with the response code, the channel gives every failed transfer the slave error
+code; the requirement below takes effect with that release.
+
+| ID | Requirement | PG021 items |
+| --- | --- | --- |
+| S2-RS-05 | The error code of S2-RS-03 shall be the slave error for SLVERR and the decode error for DECERR; with responses of both kinds in one transfer, the first one decides (gap G5). | `S2MM_DMASR.DMASlvErr`, `S2MM_DMASR.DMADecErr` |
+
 ## 4. Interpretations
 
 | ID | PG021 | OpenDMA |
@@ -82,14 +93,16 @@ several buffers (phase b, gap G10), keyhole writes (phase b, gap G1) and the sta
 | S1 | Table 24: a buffer shorter than the packet gives undefined results; Table 17: `DMAIntErr` | No byte beyond the buffer, the rest discarded, internal error (S2-RS-02) |
 | S2 | Write errors in the middle of a packet are not described | No further write, rest discarded, result once the outstanding writes have answered (S2-RS-03, S2-RS-04) |
 | S3 | A double error in a buffer is not part of PG021 | The data is written as read from the buffer and counted (S2-FT-01, extension window); the result is not changed |
+| S4 | A buffer length of 0 is an internal error of a descriptor in Scatter/Gather Mode (Table 38, `DMAIntErr`) | The channel ends a command of length 0 without a write and with the internal error code (S2-WR-06); the register interface of DR mode never issues one |
 
 ## 5. Error conditions
 
 | Condition | Detection | Response |
 | --- | --- | --- |
 | Packet longer than the buffer | Byte count of the chunks against the buffer length | Bytes that fit written, rest discarded, internal error (S2-RS-02) |
-| SLVERR or DECERR on a write burst | Response code of the write master (G5) | Slave or decode error, rest discarded (S2-RS-03) |
+| SLVERR or DECERR on a write burst | `Wr_Error` of the write master (the response code with gap G5) | Error code, no further write, rest discarded (S2-RS-03, S2-RS-05) |
 | Buffer beyond the top of the address space | `beyondTop` of `odma_pkg` | No write, decode error (S2-WR-04) |
+| Buffer length of 0 | Length of the command | No write, internal error (S2-WR-06) |
 | Single or double error in a buffer | ECC of the buffers | `Ecc_Sec`, `Ecc_Ded` pulses (S2-FT-01) |
 
 ## 6. Configuration parameters

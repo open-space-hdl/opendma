@@ -7,3 +7,7 @@ hdl/odma_registers/src/odma_registers.vhd
 hdl/odma_mm2s/src/odma_mm2s_stream.vhd
 hdl/odma_mm2s/src/odma_mm2s_command.vhd
 hdl/odma_mm2s/src/odma_mm2s.vhd
+hdl/odma_s2mm/src/odma_s2mm_pkg.vhd
+hdl/odma_s2mm/src/odma_s2mm_write.vhd
+hdl/odma_s2mm/src/odma_s2mm_chunker.vhd
+hdl/odma_s2mm/src/odma_s2mm.vhd

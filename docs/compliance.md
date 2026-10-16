@@ -8,63 +8,63 @@ no test case, or when a test case of a plan is not run by a testbench.
 ## 1. Items of the published interface
 
 An item is listed with every requirement that traces to it and with the test cases that verify these
-requirements. An item is planned while its development phase is open or its owner module is not specified
-yet. The interpretations of the published interface are listed in section 6 of the architecture and in the
-module specifications.
+requirements. An item is planned while its development phase is open or none of its owner modules has a
+testbench yet. The interpretations of the published interface are listed in section 6 of the architecture and
+in the module specifications.
 
 | Item | PG021 reference | Owner | Phase | Requirements | Test cases | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | `MAP.SG` | Table 4, SG mode address map | RG-1 | b | - | - | Planned |
-| `MAP.DR` | Table 5, DR mode address map | RG-1 | a | - | - | Planned |
-| `MAP.ENDIAN` | Figure 2, little-endian registers | RG-1 | a | - | - | Planned |
-| `MAP.WSTRB` | Register Space, note on the write strobes | RG-1 | a | - | - | Planned |
-| `MAP.ACCESS` | Register Access Type Description (RO, R/W, R/WC) | RG-1 | a | - | - | Planned |
-| `MM2S_DMACR.RS` | Tables 6, 16, bit 0 | RG-1 | a | - | - | Planned |
-| `S2MM_DMACR.RS` | Tables 6, 16, bit 0 | RG-1 | a | - | - | Planned |
-| `MM2S_DMACR.Reserved` | Tables 6, 16, bits 1, 11 to 5, 15 | RG-1 | a | - | - | Planned |
-| `S2MM_DMACR.Reserved` | Tables 6, 16, bits 1, 11 to 5, 15 | RG-1 | a | - | - | Planned |
-| `MM2S_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | - | - | Planned |
-| `S2MM_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | - | - | Planned |
+| `MAP.DR` | Table 5, DR mode address map | RG-1 | a | RG-IF-01, RG-IF-02, RG-MAP-01, RG-MAP-03, RG-MAP-04, RG-SR-07 | - | Planned |
+| `MAP.ENDIAN` | Figure 2, little-endian registers | RG-1 | a | RG-IF-04 | - | Planned |
+| `MAP.WSTRB` | Register Space, note on the write strobes | RG-1 | a | RG-IF-03 | - | Planned |
+| `MAP.ACCESS` | Register Access Type Description (RO, R/W, R/WC) | RG-1 | a | RG-CR-04, RG-IR-03, RG-MAP-02 | - | Planned |
+| `MM2S_DMACR.RS` | Tables 6, 16, bit 0 | RG-1 | a | MM-HA-01, RG-CR-01, RG-CR-02 | - | Planned |
+| `S2MM_DMACR.RS` | Tables 6, 16, bit 0 | RG-1 | a | RG-CR-01, RG-CR-02, S2-HA-01, S2-HA-03 | - | Planned |
+| `MM2S_DMACR.Reserved` | Tables 6, 16, bits 1, 11 to 5, 15 | RG-1 | a | RG-CR-03 | - | Planned |
+| `S2MM_DMACR.Reserved` | Tables 6, 16, bits 1, 11 to 5, 15 | RG-1 | a | RG-CR-03 | - | Planned |
+| `MM2S_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | MM-HA-02, RG-CR-06, RG-RS-02, RG-RS-04 | - | Planned |
+| `S2MM_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | RG-CR-06, RG-RS-02, RG-RS-04, S2-HA-02 | - | Planned |
 | `MM2S_DMACR.Keyhole` | Tables 6, 16, bit 3 | MM-1 (MM2S), S2-2 (S2MM) | b | - | - | Planned |
 | `S2MM_DMACR.Keyhole` | Tables 6, 16, bit 3 | MM-1 (MM2S), S2-2 (S2MM) | b | - | - | Planned |
 | `MM2S_DMACR.CyclicBD` | Tables 6, 16, bit 4 | SG-1 | b | - | - | Planned |
 | `S2MM_DMACR.CyclicBD` | Tables 6, 16, bit 4 | SG-1 | b | - | - | Planned |
-| `MM2S_DMACR.IOC_IrqEn` | Tables 6, 16, bit 12 (I2) | RG-2 | a | - | - | Planned |
-| `S2MM_DMACR.IOC_IrqEn` | Tables 6, 16, bit 12 (I2) | RG-2 | a | - | - | Planned |
+| `MM2S_DMACR.IOC_IrqEn` | Tables 6, 16, bit 12 (I2) | RG-2 | a | RG-CR-05, RG-IR-04 | - | Planned |
+| `S2MM_DMACR.IOC_IrqEn` | Tables 6, 16, bit 12 (I2) | RG-2 | a | RG-CR-05, RG-IR-04 | - | Planned |
 | `MM2S_DMACR.Dly_IrqEn` | Tables 6, 16, bit 13 | RG-2 | b | - | - | Planned |
 | `S2MM_DMACR.Dly_IrqEn` | Tables 6, 16, bit 13 | RG-2 | b | - | - | Planned |
-| `MM2S_DMACR.Err_IrqEn` | Tables 6, 16, bit 14 | RG-2 | a | - | - | Planned |
-| `S2MM_DMACR.Err_IrqEn` | Tables 6, 16, bit 14 | RG-2 | a | - | - | Planned |
+| `MM2S_DMACR.Err_IrqEn` | Tables 6, 16, bit 14 | RG-2 | a | RG-CR-05, RG-IR-04 | - | Planned |
+| `S2MM_DMACR.Err_IrqEn` | Tables 6, 16, bit 14 | RG-2 | a | RG-CR-05, RG-IR-04 | - | Planned |
 | `MM2S_DMACR.IRQThreshold` | Tables 6, 16, bits 23 to 16 | RG-2 | b | - | - | Planned |
 | `S2MM_DMACR.IRQThreshold` | Tables 6, 16, bits 23 to 16 | RG-2 | b | - | - | Planned |
 | `MM2S_DMACR.IRQDelay` | Tables 6, 16, bits 31 to 24 | RG-2 | b | - | - | Planned |
 | `S2MM_DMACR.IRQDelay` | Tables 6, 16, bits 31 to 24 | RG-2 | b | - | - | Planned |
-| `MM2S_DMASR.Halted` | Tables 7, 17, bit 0 | RG-1 | a | - | - | Planned |
-| `S2MM_DMASR.Halted` | Tables 7, 17, bit 0 | RG-1 | a | - | - | Planned |
-| `MM2S_DMASR.Idle` | Tables 7, 17, bit 1 | RG-1 | a | - | - | Planned |
-| `S2MM_DMASR.Idle` | Tables 7, 17, bit 1 | RG-1 | a | - | - | Planned |
-| `MM2S_DMASR.Reserved` | Tables 7, 17, bits 2, 7, 11, 15 | RG-1 | a | - | - | Planned |
-| `S2MM_DMASR.Reserved` | Tables 7, 17, bits 2, 7, 11, 15 | RG-1 | a | - | - | Planned |
-| `MM2S_DMASR.SGIncld` | Tables 7, 17, bit 3 | RG-1 | a | - | - | Planned |
-| `S2MM_DMASR.SGIncld` | Tables 7, 17, bit 3 | RG-1 | a | - | - | Planned |
+| `MM2S_DMASR.Halted` | Tables 7, 17, bit 0 | RG-1 | a | RG-SR-01 | - | Planned |
+| `S2MM_DMASR.Halted` | Tables 7, 17, bit 0 | RG-1 | a | RG-SR-01 | - | Planned |
+| `MM2S_DMASR.Idle` | Tables 7, 17, bit 1 | RG-1 | a | RG-SR-02 | - | Planned |
+| `S2MM_DMASR.Idle` | Tables 7, 17, bit 1 | RG-1 | a | RG-SR-02 | - | Planned |
+| `MM2S_DMASR.Reserved` | Tables 7, 17, bits 2, 7, 11, 15 | RG-1 | a | RG-SR-04 | - | Planned |
+| `S2MM_DMASR.Reserved` | Tables 7, 17, bits 2, 7, 11, 15 | RG-1 | a | RG-SR-04 | - | Planned |
+| `MM2S_DMASR.SGIncld` | Tables 7, 17, bit 3 | RG-1 | a | RG-SR-03 | - | Planned |
+| `S2MM_DMASR.SGIncld` | Tables 7, 17, bit 3 | RG-1 | a | RG-SR-03 | - | Planned |
 | `MM2S_DMASR.DMAIntErr` | Table 7, bit 4 | SG-1 | b | - | - | Planned |
-| `S2MM_DMASR.DMAIntErr` | Table 17, bit 4 | S2-1 | a | - | - | Planned |
-| `MM2S_DMASR.DMASlvErr` | Tables 7, 17, bit 5 | MM-1 (MM2S), S2-2 (S2MM) | a | - | - | Planned |
-| `S2MM_DMASR.DMASlvErr` | Tables 7, 17, bit 5 | MM-1 (MM2S), S2-2 (S2MM) | a | - | - | Planned |
-| `MM2S_DMASR.DMADecErr` | Tables 7, 17, bit 6 | MM-1 (MM2S), S2-2 (S2MM) | a | - | - | Planned |
-| `S2MM_DMASR.DMADecErr` | Tables 7, 17, bit 6 | MM-1 (MM2S), S2-2 (S2MM) | a | - | - | Planned |
+| `S2MM_DMASR.DMAIntErr` | Table 17, bit 4 | S2-1 | a | RG-SR-06, S2-RS-02 | - | Planned |
+| `MM2S_DMASR.DMASlvErr` | Tables 7, 17, bit 5 | MM-1 (MM2S), S2-2 (S2MM) | a | MM-ER-01, MM-ER-02, RG-SR-05 | - | Planned |
+| `S2MM_DMASR.DMASlvErr` | Tables 7, 17, bit 5 | MM-1 (MM2S), S2-2 (S2MM) | a | RG-SR-05, S2-RS-03 | - | Planned |
+| `MM2S_DMASR.DMADecErr` | Tables 7, 17, bit 6 | MM-1 (MM2S), S2-2 (S2MM) | a | MM-ER-01, MM-RD-04, RG-SR-05 | - | Planned |
+| `S2MM_DMASR.DMADecErr` | Tables 7, 17, bit 6 | MM-1 (MM2S), S2-2 (S2MM) | a | RG-SR-05, S2-RS-03, S2-WR-04 | - | Planned |
 | `MM2S_DMASR.SGIntErr` | Tables 7, 17, bit 8 | SG-1 | b | - | - | Planned |
 | `S2MM_DMASR.SGIntErr` | Tables 7, 17, bit 8 | SG-1 | b | - | - | Planned |
 | `MM2S_DMASR.SGSlvErr` | Tables 7, 17, bit 9 | SG-3 | b | - | - | Planned |
 | `S2MM_DMASR.SGSlvErr` | Tables 7, 17, bit 9 | SG-3 | b | - | - | Planned |
 | `MM2S_DMASR.SGDecErr` | Tables 7, 17, bit 10 | SG-3 | b | - | - | Planned |
 | `S2MM_DMASR.SGDecErr` | Tables 7, 17, bit 10 | SG-3 | b | - | - | Planned |
-| `MM2S_DMASR.IOC_Irq` | Tables 7, 17, bit 12 | RG-2 | a | - | - | Planned |
-| `S2MM_DMASR.IOC_Irq` | Tables 7, 17, bit 12 | RG-2 | a | - | - | Planned |
+| `MM2S_DMASR.IOC_Irq` | Tables 7, 17, bit 12 | RG-2 | a | RG-IR-01 | - | Planned |
+| `S2MM_DMASR.IOC_Irq` | Tables 7, 17, bit 12 | RG-2 | a | RG-IR-01 | - | Planned |
 | `MM2S_DMASR.Dly_Irq` | Tables 7, 17, bit 13 | RG-2 | b | - | - | Planned |
 | `S2MM_DMASR.Dly_Irq` | Tables 7, 17, bit 13 | RG-2 | b | - | - | Planned |
-| `MM2S_DMASR.Err_Irq` | Tables 7, 17, bit 14 | RG-2 | a | - | - | Planned |
-| `S2MM_DMASR.Err_Irq` | Tables 7, 17, bit 14 | RG-2 | a | - | - | Planned |
+| `MM2S_DMASR.Err_Irq` | Tables 7, 17, bit 14 | RG-2 | a | RG-IR-02 | - | Planned |
+| `S2MM_DMASR.Err_Irq` | Tables 7, 17, bit 14 | RG-2 | a | RG-IR-02 | - | Planned |
 | `MM2S_DMASR.IRQThresholdSts` | Tables 7, 17, bits 23 to 16 | RG-2 | b | - | - | Planned |
 | `S2MM_DMASR.IRQThresholdSts` | Tables 7, 17, bits 23 to 16 | RG-2 | b | - | - | Planned |
 | `MM2S_DMASR.IRQDelaySts` | Tables 7, 17, bits 31 to 24 | RG-2 | b | - | - | Planned |
@@ -77,12 +77,12 @@ module specifications.
 | `S2MM_TAILDESC` | Tables 10, 20 | SG-1 | b | - | - | Planned |
 | `MM2S_TAILDESC_MSB` | Tables 11, 21 | SG-1 | b | - | - | Planned |
 | `S2MM_TAILDESC_MSB` | Tables 11, 21 | SG-1 | b | - | - | Planned |
-| `MM2S_SA` | Table 12 | RG-1 | a | - | - | Planned |
-| `MM2S_SA_MSB` | Table 13 | RG-1 | a | - | - | Planned |
-| `MM2S_LENGTH` | Table 14 | RG-1 | a | - | - | Planned |
-| `S2MM_DA` | Table 22 | RG-1 | a | - | - | Planned |
-| `S2MM_DA_MSB` | Table 23 | RG-1 | a | - | - | Planned |
-| `S2MM_LENGTH` | Table 24 | RG-1 | a | - | - | Planned |
+| `MM2S_SA` | Table 12 | RG-1 | a | RG-AR-01, RG-AR-08 | - | Planned |
+| `MM2S_SA_MSB` | Table 13 | RG-1 | a | RG-AR-01 | - | Planned |
+| `MM2S_LENGTH` | Table 14 | RG-1 | a | RG-AR-03, RG-AR-04, RG-AR-07 | - | Planned |
+| `S2MM_DA` | Table 22 | RG-1 | a | RG-AR-02, RG-AR-08 | - | Planned |
+| `S2MM_DA_MSB` | Table 23 | RG-1 | a | RG-AR-02 | - | Planned |
+| `S2MM_LENGTH` | Table 24 | RG-1 | a | RG-AR-03, RG-AR-05, RG-AR-06, RG-AR-07 | - | Planned |
 | `SG_CTL` | Table 15 | Out of scope (multichannel mode) | - | - | - | Out of scope |
 | `DESC.LAYOUT` | Table 25, word offsets, 16-word alignment | SG-1 | b | - | - | Planned |
 | `DESC.NXTDESC` | Tables 26, 33 | SG-1 | b | - | - | Planned |
@@ -111,19 +111,19 @@ module specifications.
 | `DESC.S2MM_APP` | Table 39, APP0 to APP3 | S2-3 | c | - | - | Planned |
 | `DESC.S2MM_APP4` | Table 40, APP4 and receive length | S2-3 | c | - | - | Planned |
 | `DESCMGMT.TAIL` | Section "Descriptor Management", tail pointer mode | SG-1 | b | - | - | Planned |
-| `STRM.MM2S` | Section "MM2S Descriptor Settings and AXI Control Stream", Figure 37 (data stream) | MM-2 | a | - | - | Planned |
-| `STRM.S2MM` | Section "S2MM Descriptor Settings and AXI Status Stream", Figure 39 (data stream) | S2-1 | a | - | - | Planned |
+| `STRM.MM2S` | Section "MM2S Descriptor Settings and AXI Control Stream", Figure 37 (data stream) | MM-2 | a | MM-IF-02, MM-ST-01, MM-ST-02 | - | Planned |
+| `STRM.S2MM` | Section "S2MM Descriptor Settings and AXI Status Stream", Figure 39 (data stream) | S2-1 | a | S2-IF-02, S2-ST-01, S2-ST-02, S2-WR-01, S2-WR-02 | - | Planned |
 | `STRM.CNTRL` | Section "AXI Control Stream", Figure 38 | MM-3 | c | - | - | Planned |
 | `STRM.STS` | Section "AXI Status Stream", Figure 40 | S2-3 | c | - | - | Planned |
 | `STRM.RXLENGTH` | Section "Customizing and Generating the Core", Use RxLength In Status Stream | S2-3 | c | - | - | Planned |
-| `IRQ.OUT` | Table 3, interrupt outputs | RG-2 | a | - | - | Planned |
+| `IRQ.OUT` | Table 3, interrupt outputs | RG-2 | a | RG-IR-04 | - | Planned |
 | `CLK.SYNC` | Section "Clocking", synchronous mode | CO-1 | a | - | - | Planned |
 | `CLK.ASYNC` | Section "Clocking", asynchronous mode, Table 43 | Out of scope (D1) | - | - | - | Out of scope |
-| `RST.HARD` | Section "Resets" | RG-3 | a | - | - | Planned |
-| `RST.OUT` | Table 3, reset outputs of the streams (I12) | RG-3 | a | - | - | Planned |
-| `FEAT.4K` | Section "Core Overview", 4 KB address boundary | MM-1 (MM2S), S2-2 (S2MM) | a | - | - | Planned |
-| `FEAT.BURST` | Table 44, `c_mm2s_burst_size`, `c_s2mm_burst_size` | MM-1 (MM2S), S2-2 (S2MM) | a | - | - | Planned |
-| `FEAT.UNALIGNED` | Table 44, `c_include_mm2s_dre`, `c_include_s2mm_dre` (D2) | MM-1 (MM2S), S2-2 (S2MM) | a | - | - | Planned |
+| `RST.HARD` | Section "Resets" | RG-3 | a | RG-RS-01 | - | Planned |
+| `RST.OUT` | Table 3, reset outputs of the streams (I12) | RG-3 | a | RG-RS-03 | - | Planned |
+| `FEAT.4K` | Section "Core Overview", 4 KB address boundary | MM-1 (MM2S), S2-2 (S2MM) | a | MM-RD-02, S2-WR-03 | - | Planned |
+| `FEAT.BURST` | Table 44, `c_mm2s_burst_size`, `c_s2mm_burst_size` | MM-1 (MM2S), S2-2 (S2MM) | a | MM-RD-02, S2-WR-03 | - | Planned |
+| `FEAT.UNALIGNED` | Table 44, `c_include_mm2s_dre`, `c_include_s2mm_dre` (D2) | MM-1 (MM2S), S2-2 (S2MM) | a | MM-RD-01, S2-WR-01 | - | Planned |
 | `FEAT.ADDR64` | Table 44, `c_addr_width` | CO-1 | a | - | - | Planned |
 | `FEAT.WIDTH` | Table 44, memory and stream data widths | CO-1 | a | - | - | Planned |
 | `FEAT.LENWIDTH` | Table 44, `c_sg_length_width` | CO-1 | a | - | - | Planned |
@@ -145,6 +145,9 @@ of the published interface included).
 
 | Module | Requirements | Verified by a test case | Without a test case |
 | --- | --- | --- | --- |
+| `odma_mm2s` | 16 | - | planned (no testbench yet) |
 | `odma_pkg` | 9 | 9 | - |
+| `odma_registers` | 42 | - | planned (no testbench yet) |
+| `odma_s2mm` | 19 | - | planned (no testbench yet) |
 
-Requirements: 9; without a test case: 0; test cases of the plans not run by a testbench: 0.
+Requirements: 86; without a test case: 0; test cases of the plans not run by a testbench: 0.

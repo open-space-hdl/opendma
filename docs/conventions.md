@@ -57,7 +57,8 @@ document. This page lists the rules and the few OpenDMA-specific additions.
 - Traceability: every requirement of a specification is verified by at least one test case of the verification plan,
   every item of the published interface in the traceability matrix (architecture section 10) by the test cases of its
   requirements, and every test case of a plan is run by a testbench. `python tools/compliance.py` writes the
-  compliance matrix; `python tools/compliance.py --check` fails on a gap.
+  compliance matrix; `python tools/compliance.py --check` fails on a gap. A module without a testbench is in
+  specification: its requirements and the items it owns are listed as planned until its testbench exists.
 
 ## The published interface
 

@@ -1,2 +1,6 @@
 hdl/odma_pkg/src/odma_pkg.vhd
+hdl/odma_registers/src/odma_soft_reset.vhd
 hdl/odma_registers/src/odma_regs_pkg.vhd
+hdl/odma_registers/src/odma_interrupt.vhd
+hdl/odma_registers/src/odma_extension.vhd
+hdl/odma_registers/src/odma_registers.vhd

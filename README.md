@@ -20,6 +20,7 @@ implementation written from the published product guide; it contains no code, te
 | --- | --- |
 | [docs/architecture.md](docs/architecture.md) | Architecture: building blocks, items of the published interface they own, Open Logic usage, verification |
 | [docs/compliance.md](docs/compliance.md) | Compliance matrix: requirements and test cases of every item of the published interface (generated) |
+| [hdl/odma_registers/docs/register_map.md](hdl/odma_registers/docs/register_map.md) | Register map (generated; C header `sw/odma_regs.h`) |
 | [docs/roadmap.md](docs/roadmap.md) | Development phases and module status |
 | [docs/conventions.md](docs/conventions.md) | Coding, verification and repository conventions |
 
@@ -31,8 +32,9 @@ opendma/
 |-- hdl/<module>/     One folder per module: src/, tb/, docs/
 |-- tb/               Verification components shared by the testbenches
 |-- lint/             VSG configuration (Open Logic rules), synthesizability check
-|-- tools/            Compliance matrix generator
+|-- tools/            Compliance matrix and register map generators
 |   `-- docs/         Documentation website (MkDocs)
+|-- sw/               C header of the register map (generated)
 |-- open-logic/       Git submodule: Open Logic (fault-tolerant entities branch)
 |-- uvvm/             Git submodule: UVVM verification framework
 |-- component_list.txt  Modules in dependency order
@@ -62,6 +64,7 @@ Checks besides the regression:
 ```shell
 python lint/lint.py                 # VSG, no errors and no warnings
 python tools/compliance.py --check  # every item of the published interface traced to a test case
+python tools/regmap.py --check      # generated register map files match hdl/odma_registers/regs/odma_regs.yml
 python run.py --compile-order       # compile_order.txt; the CI fails when the file changes
 python -m mkdocs build -f tools/docs/mkdocs.yml  # documentation website, fails on broken links
 ```

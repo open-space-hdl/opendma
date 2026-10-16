@@ -48,12 +48,17 @@ document. This page lists the rules and the few OpenDMA-specific additions.
 - The synthesis sources analyse with `ghdl -a --std=08` without `-frelaxed` and without warnings. Attribute
   specifications use literals, because the expression of an attribute specification must be locally static. Only
   Open Logic and UVVM need `-frelaxed`.
+- The register map has one description, `hdl/odma_registers/regs/odma_regs.yml`. `python tools/regmap.py` generates
+  the VHDL package `odma_regs_pkg`, the register map page and the C header `sw/odma_regs.h` from it;
+  `python tools/regmap.py --check` fails in CI when a generated file is out of date. The registers of the published
+  interface keep the register and field names of PG021; the C header prefixes them with `ODMA_`.
 - `compile_order.txt` lists the synthesis sources of the library `opendma` in compile order. After adding, removing
   or renaming a source file, regenerate it with `python run.py --compile-order`; the CI fails when it is out of date.
 - Traceability: every requirement of a specification is verified by at least one test case of the verification plan,
   every item of the published interface in the traceability matrix (architecture section 10) by the test cases of its
   requirements, and every test case of a plan is run by a testbench. `python tools/compliance.py` writes the
-  compliance matrix; `python tools/compliance.py --check` fails on a gap.
+  compliance matrix; `python tools/compliance.py --check` fails on a gap. A module without a testbench is in
+  specification: its requirements and the items it owns are listed as planned until its testbench exists.
 
 ## The published interface
 

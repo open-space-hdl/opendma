@@ -15,9 +15,11 @@ behaviour key (SEQ.DR.MM2S), written in backticks. The prefix "*_" stands for bo
 and S2MM_. A requirement traces to an item when it names the item or a part of it (MM2S_DMACR.RS traces to
 MM2S_DMACR.RS and would trace to an item MM2S_DMACR).
 
-An item without a requirement is planned while its development phase is open in docs/roadmap.md or while its owner
-module has no specification yet. With --check the file is not written; the exit code is 1 when an item that is not
-planned has no test case, when a requirement has no test case or when a test case of a plan is not run.
+A module is in specification while it has no testbench (hdl/<module>/tb/*_tb.vhd): its requirements and test cases
+are listed as planned. An item without a verified requirement is planned while its development phase is open in
+docs/roadmap.md or while none of its owner modules has a testbench yet. With --check the file is not written; the exit
+code is 1 when an item that is not planned has no test case, when a requirement of a module with a testbench has no
+test case or when a test case of such a module is not run by its testbench.
 """
 
 import re
@@ -88,26 +90,40 @@ def load_requirements():
     return reqs
 
 
+def tested_modules():
+    """Modules with a testbench: their requirements and test cases are checked."""
+    return {tb.parent.parent.name for tb in ROOT.glob("hdl/*/tb/*_tb.vhd")}
+
+
 def load_tests():
-    """Test cases of the verification plans: test ID -> requirement IDs. Also returns the test names of the plans
-    that no testbench of the repository runs."""
+    """Test cases of the verification plans that a testbench of their module runs: test ID -> requirement IDs. Also
+    returns the test names of the plans that no testbench of their module runs."""
     tests = {}
-    names = set()
+    not_run = []
     for plan in sorted(ROOT.glob("hdl/*/docs/verification_plan.md")):
-        for row in table_rows(plan.read_text(encoding="utf-8")):
+        module_dir = plan.parent.parent
+        run_names = set()
+        for tb in module_dir.glob("tb/*.vhd"):
+            run_names.update(re.findall(r'run\("(test_\w+)"\)', tb.read_text(encoding="utf-8")))
+        run_ids = set()
+        rows = list(table_rows(plan.read_text(encoding="utf-8")))
+        for row in rows:
             if len(row) >= 3 and row[0].startswith("`test_"):
+                name = row[0].split("`")[1]
                 m = re.search(r"\((TC-[A-Z0-9]+-\d+)\)", row[0])
                 tid = m.group(1) if m else row[0]
-                tests.setdefault(tid, set()).update(expand_ids(row[-1]))
-                names.add(row[0].split("`")[1])
-            elif len(row) >= 3 and re.match(r"^TC-[A-Z0-9]+-\d+", row[0]):
+                if name in run_names:
+                    run_ids.add(tid)
+                    tests.setdefault(tid, set()).update(expand_ids(row[-1]))
+                elif module_dir.name in tested_modules():
+                    not_run.append(f"{module_dir.name}: {name}")
+        for row in rows:
+            if len(row) >= 3 and re.match(r"^TC-[A-Z0-9]+-\d+", row[0]):
                 # Rows that reference test IDs directly (for example "TC-CO-02 (two configurations)")
                 for tid in re.findall(r"TC-[A-Z0-9]+-\d+", row[0]):
-                    tests.setdefault(tid, set()).update(expand_ids(row[-1]))
-    run_names = set()
-    for tb in ROOT.glob("hdl/*/tb/*.vhd"):
-        run_names.update(re.findall(r'run\("(test_\w+)"\)', tb.read_text(encoding="utf-8")))
-    return tests, sorted(names - run_names)
+                    if tid in run_ids:
+                        tests.setdefault(tid, set()).update(expand_ids(row[-1]))
+    return tests, sorted(not_run)
 
 
 def load_matrix():
@@ -149,6 +165,7 @@ def main():
     matrix = load_matrix()
     phases_open = open_phases()
     specified = {m for m, _ in reqs.values()}
+    tested = tested_modules()
     lines = [
         "# OpenDMA: Compliance Matrix",
         "",
@@ -160,9 +177,9 @@ def main():
         "## 1. Items of the published interface",
         "",
         "An item is listed with every requirement that traces to it and with the test cases that verify these",
-        "requirements. An item is planned while its development phase is open or its owner module is not specified",
-        "yet. The interpretations of the published interface are listed in section 6 of the architecture and in the",
-        "module specifications.",
+        "requirements. An item is planned while its development phase is open or none of its owner modules has a",
+        "testbench yet. The interpretations of the published interface are listed in section 6 of the architecture and",
+        "in the module specifications.",
         "",
         "| Item | PG021 reference | Owner | Phase | Requirements | Test cases | Status |",
         "| --- | --- | --- | --- | --- | --- | --- |",
@@ -176,8 +193,11 @@ def main():
             status = "Out of scope"
         elif test_ids:
             status = "Verified"
-        elif not req_ids and (phase in phases_open or not owner_modules(owner) & specified):
+        elif phase in phases_open or not owner_modules(owner) & tested:
             status = "Planned"
+        elif req_ids:
+            status = "Not verified"
+            missing.append(item)
         else:
             status = "Not traced"
             missing.append(item)
@@ -197,11 +217,14 @@ def main():
         "| --- | --- | --- | --- |",
     ]
     covered = set().union(*tests.values()) if tests else set()
-    untested = sorted(r for r in reqs if r not in covered)
+    untested = sorted(r for r, (m, _) in reqs.items() if r not in covered and m in tested)
     for module in sorted(specified):
         ids = [r for r, (m, _) in reqs.items() if m == module]
         gaps = [r for r in ids if r not in covered]
-        lines.append(f"| `{module}` | {len(ids)} | {len(ids) - len(gaps)} | {', '.join(gaps) or '-'} |")
+        if module in tested:
+            lines.append(f"| `{module}` | {len(ids)} | {len(ids) - len(gaps)} | {', '.join(gaps) or '-'} |")
+        else:
+            lines.append(f"| `{module}` | {len(ids)} | - | planned (no testbench yet) |")
     if not specified:
         lines.append("| - | 0 | 0 | - |")
     lines += [
@@ -214,7 +237,7 @@ def main():
         OUT.write_text("\n".join(lines), encoding="utf-8", newline="\n")
         print(f"written {OUT.relative_to(ROOT)}")
     for item in missing:
-        print(f"item not traced: {item}")
+        print(f"item without a test case: {item}")
     for r in untested:
         print(f"requirement without a test case: {r}")
     for n in not_run:

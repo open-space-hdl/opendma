@@ -42,6 +42,7 @@ nav:
   - Home: README.md
   - Guide:
       - Architecture: docs/architecture.md
+  - Modules: hdl/*/
   - Verification:
       - Compliance matrix: docs/compliance.md
   - Project:

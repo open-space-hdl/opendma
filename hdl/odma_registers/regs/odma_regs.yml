@@ -1,0 +1,207 @@
+# ---------------------------------------------------------------------------------------------------
+# Copyright (c) 2026 by Julian Schneider
+# Authors: Julian Schneider
+# ---------------------------------------------------------------------------------------------------
+# Register map of OpenDMA: the single description from which tools/regmap.py generates the VHDL
+# package hdl/odma_registers/src/odma_regs_pkg.vhd, the documentation hdl/odma_registers/docs/register_map.md
+# and the C header sw/odma_regs.h.
+#
+# Byte addresses of 32-bit registers on the AXI4-Lite port (10-bit address). The registers below 0x100 and their
+# fields carry the names of the AMD AXI DMA product guide PG021 (Table 5 for Direct Register Mode); the descriptions
+# are those of OpenDMA. The window from 0x100 holds the extension registers of OpenDMA.
+#
+# Access per field:
+#   RO   read only
+#   RW   read and write
+#   W1   write one: command, reads as zero
+#   W1C  sticky flag, write one to clear
+#   WO   write only, reads as zero
+#   RC   read only, any write to the register clears it (counters)
+# A reset value written as text depends on generics.
+
+id: 0x4F444D41
+addr_bits: 10
+
+dmacr_fields: &dmacr_fields
+  - {name: RS, bits: "0", access: RW, reset: 0, description: "Run (1) or stop (0) the channel; a start is refused while an error flag of the channel is set"}
+  - {name: Reserved, bits: "1", access: RO, reset: 1, description: Reads 1}
+  - {name: Reset, bits: "2", access: RW, reset: 0, description: "Write 1: soft reset of the whole core (both channels); reads 1 until the reset is complete"}
+  - {name: Keyhole, bits: "3", access: RW, reset: 0, description: "Non-incrementing bursts (keyhole); stored and read back, the bursts stay incrementing in this configuration"}
+  - {name: CyclicBD, bits: "4", access: RW, reset: 0, description: "Cyclic descriptor mode; stored and read back, no function in Direct Register Mode"}
+  - {name: IOC_IrqEn, bits: "12", access: RW, reset: 0, description: "IOC_Irq drives the interrupt output of the channel"}
+  - {name: Dly_IrqEn, bits: "13", access: RW, reset: 0, description: "Dly_Irq drives the interrupt output of the channel (Scatter/Gather Mode)"}
+  - {name: Err_IrqEn, bits: "14", access: RW, reset: 0, description: "Err_Irq drives the interrupt output of the channel"}
+  - {name: IRQThreshold, bits: "23:16", access: RW, reset: 1, description: "Interrupt coalescing threshold (Scatter/Gather Mode); a write of 0 leaves the field unchanged"}
+  - {name: IRQDelay, bits: "31:24", access: RW, reset: 0, description: "Interrupt delay timeout in units of 125 clock cycles (Scatter/Gather Mode); 0 disables the timer"}
+
+dmasr_fields: &dmasr_fields
+  - {name: Halted, bits: "0", access: RO, reset: 1, description: "The channel is stopped (after a reset, a halt or an error)"}
+  - {name: Idle, bits: "1", access: RO, reset: 0, description: "The last transfer is complete and no new one has started; 0 while halted and before the first transfer"}
+  - {name: SGIncld, bits: "3", access: RO, reset: IncludeSg_g, description: "Scatter/Gather Mode included"}
+  - {name: DMAIntErr, bits: "4", access: RO, reset: 0, description: "Internal error: S2MM packet longer than the buffer or S2MM write error; MM2S: 0 in Direct Register Mode"}
+  - {name: DMASlvErr, bits: "5", access: RO, reset: 0, description: "Slave error response (SLVERR) of the memory"}
+  - {name: DMADecErr, bits: "6", access: RO, reset: 0, description: "Decode error response (DECERR) of the memory or a buffer beyond the top of the address space"}
+  - {name: SGIntErr, bits: "8", access: RO, reset: 0, description: "Stale descriptor (Scatter/Gather Mode); 0 in Direct Register Mode"}
+  - {name: SGSlvErr, bits: "9", access: RO, reset: 0, description: "Slave error of a descriptor access (Scatter/Gather Mode); 0 in Direct Register Mode"}
+  - {name: SGDecErr, bits: "10", access: RO, reset: 0, description: "Decode error of a descriptor access (Scatter/Gather Mode); 0 in Direct Register Mode"}
+  - {name: IOC_Irq, bits: "12", access: W1C, reset: 0, description: "A transfer completed"}
+  - {name: Dly_Irq, bits: "13", access: W1C, reset: 0, description: "The delay timer expired (Scatter/Gather Mode); 0 in Direct Register Mode"}
+  - {name: Err_Irq, bits: "14", access: W1C, reset: 0, description: "An error flag of the channel was set"}
+  - {name: IRQThresholdSts, bits: "23:16", access: RO, reset: 1, description: "Remaining coalescing count (Scatter/Gather Mode); the value of DMACR.IRQThreshold in Direct Register Mode"}
+  - {name: IRQDelaySts, bits: "31:24", access: RO, reset: 0, description: "Delay timer (Scatter/Gather Mode); 0 in Direct Register Mode"}
+
+config_fields: &config_fields
+  - {name: MemBytes, bits: "3:0", access: RO, reset: "log2(MemWidth_g / 8)", description: Log2 of the memory data width in bytes}
+  - {name: StreamBytes, bits: "7:4", access: RO, reset: "log2(StreamWidth_g / 8)", description: Log2 of the stream data width in bytes}
+  - {name: BurstBeats, bits: "11:8", access: RO, reset: "log2(BurstBeats_g)", description: Log2 of the longest burst}
+  - {name: BufferBeats, bits: "31:12", access: RO, reset: BufferBeats_g, description: Depth of the data buffer in stream beats}
+
+registers:
+  - name: MM2S_DMACR
+    offset: 0x000
+    description: "MM2S channel control (PG021 Table 6)"
+    fields: *dmacr_fields
+
+  - name: MM2S_DMASR
+    offset: 0x004
+    description: "MM2S channel status (PG021 Table 7)"
+    fields: *dmasr_fields
+
+  - name: MM2S_SA
+    offset: 0x018
+    description: "MM2S buffer address, bits 31 to 0 (PG021 Table 12)"
+    fields:
+      - {name: Address, bits: "31:0", access: RW, reset: 0, description: "Address of the first byte of the buffer, any byte offset; bits at or above AddrWidth_g read 0"}
+
+  - name: MM2S_SA_MSB
+    offset: 0x01C
+    description: "MM2S buffer address, bits 63 to 32 (PG021 Table 13)"
+    fields:
+      - {name: Address, bits: "31:0", access: RW, reset: 0, description: "Address bits 63 to 32; bits at or above AddrWidth_g - 32 read 0"}
+
+  - name: MM2S_LENGTH
+    offset: 0x028
+    description: "MM2S transfer length (PG021 Table 14)"
+    fields:
+      - {name: Length, bits: "LengthWidth_g-1:0", access: RW, reset: 0, description: "Bytes of the transfer; a non-zero write while the channel runs and no transfer is in progress starts the transfer, other writes have no effect on the operation"}
+
+  - name: S2MM_DMACR
+    offset: 0x030
+    description: "S2MM channel control (PG021 Table 16)"
+    fields: *dmacr_fields
+
+  - name: S2MM_DMASR
+    offset: 0x034
+    description: "S2MM channel status (PG021 Table 17)"
+    fields: *dmasr_fields
+
+  - name: S2MM_DA
+    offset: 0x048
+    description: "S2MM buffer address, bits 31 to 0 (PG021 Table 22)"
+    fields:
+      - {name: Address, bits: "31:0", access: RW, reset: 0, description: "Address of the first byte of the buffer, any byte offset; bits at or above AddrWidth_g read 0"}
+
+  - name: S2MM_DA_MSB
+    offset: 0x04C
+    description: "S2MM buffer address, bits 63 to 32 (PG021 Table 23)"
+    fields:
+      - {name: Address, bits: "31:0", access: RW, reset: 0, description: "Address bits 63 to 32; bits at or above AddrWidth_g - 32 read 0"}
+
+  - name: S2MM_LENGTH
+    offset: 0x058
+    description: "S2MM buffer length (PG021 Table 24)"
+    fields:
+      - {name: Length, bits: "LengthWidth_g-1:0", access: RW, reset: 0, description: "Bytes of the buffer; a non-zero write while the channel runs and no transfer is in progress starts the transfer; reads the bytes received after a completed transfer"}
+
+  - name: EXT_ID
+    offset: 0x100
+    description: Identification of OpenDMA
+    fields:
+      - {name: Id, bits: "31:0", access: RO, reset: 0x4F444D41, description: "0x4F444D41 (ODMA in ASCII)"}
+
+  - name: EXT_VERSION
+    offset: 0x104
+    description: Version of the core
+    fields:
+      - {name: Patch, bits: "7:0", access: RO, reset: 0, description: Patch level}
+      - {name: Minor, bits: "15:8", access: RO, reset: 1, description: Minor version}
+      - {name: Major, bits: "23:16", access: RO, reset: 0, description: Major version}
+
+  - name: EXT_CONFIG
+    offset: 0x108
+    description: Configuration of the core
+    fields:
+      - {name: IncludeSg, bits: "0", access: RO, reset: IncludeSg_g, description: Scatter/Gather Mode included}
+      - {name: IncludeMm2s, bits: "1", access: RO, reset: IncludeMm2s_g, description: MM2S channel included}
+      - {name: IncludeS2mm, bits: "2", access: RO, reset: IncludeS2mm_g, description: S2MM channel included}
+      - {name: StsCntrlStrm, bits: "3", access: RO, reset: StsCntrlStrm_g, description: Control and status streams included}
+      - {name: UseRxLength, bits: "4", access: RO, reset: UseRxLength_g, description: Receive length taken from the status stream}
+      - {name: MicroDma, bits: "5", access: RO, reset: MicroDma_g, description: Micro DMA configuration}
+      - {name: LengthWidth, bits: "12:8", access: RO, reset: LengthWidth_g, description: Bits of the length registers}
+      - {name: AddrWidth, bits: "22:16", access: RO, reset: AddrWidth_g, description: Address bits of the memory ports}
+
+  - name: EXT_MM2S_CONFIG
+    offset: 0x10C
+    description: Configuration of the MM2S channel
+    fields: *config_fields
+
+  - name: EXT_S2MM_CONFIG
+    offset: 0x110
+    description: Configuration of the S2MM channel
+    fields: *config_fields
+
+  - name: ECC_INFO
+    offset: 0x120
+    description: ECC counters of the FT buffers
+    fields:
+      - {name: Buffers, bits: "7:0", access: RO, reset: 16, description: Number of buffer indices}
+      - {name: CounterWidth, bits: "12:8", access: RO, reset: 16, description: Bits of each counter}
+
+  - name: ECC_CTRL
+    offset: 0x124
+    description: ECC counter control
+    fields:
+      - {name: ClrAll, bits: "0", access: W1, reset: 0, description: Clears all counters}
+
+  - name: ECC_STATUS
+    offset: 0x128
+    description: ECC event flags
+    fields:
+      - {name: Sec, bits: "0", access: W1C, reset: 0, description: A corrected single error was counted}
+      - {name: Ded, bits: "1", access: W1C, reset: 0, description: A detected double error was counted}
+
+  - name: ECC_ENABLE
+    offset: 0x12C
+    description: ECC interrupt enables
+    fields:
+      - {name: Sec, bits: "0", access: RW, reset: 0, description: "ECC_STATUS.Sec drives Ecc_Irq"}
+      - {name: Ded, bits: "1", access: RW, reset: 0, description: "ECC_STATUS.Ded drives Ecc_Irq"}
+
+  - name: ECC_INJECT
+    offset: 0x130
+    description: Error injection into an FT buffer
+    fields:
+      - {name: Buffer, bits: "3:0", access: WO, reset: 0, description: Index of the buffer (register map page, section FT buffers)}
+      - {name: Double, bits: "8", access: WO, reset: 0, description: "1: double error (two bits), 0: single error (one bit)"}
+      - {name: Inject, bits: "9", access: W1, reset: 0, description: Flips the bits of the next codeword written to the buffer}
+
+arrays:
+  - name: ECC_COUNT
+    base: 0x140
+    stride: 0x4
+    count: 16
+    description: ECC counters of buffer n = 0 to 15
+    registers:
+      - name: ECC_COUNT
+        offset: 0x000
+        description: ECC counters of buffer n
+        fields:
+          - {name: Sec, bits: "15:0", access: RC, reset: 0, description: Corrected single errors (saturating)}
+          - {name: Ded, bits: "31:16", access: RC, reset: 0, description: Detected double errors (saturating)}
+
+# FT buffers of the extension window (index of ECC_COUNT, ECC_INJECT.Buffer, Ecc_Sec and Ecc_Ded)
+buffers:
+  - {index: 0, description: "MM2S read data buffer (olo_ft_axi_master_full)"}
+  - {index: 1, description: "S2MM data buffer (olo_ft_fifo_sync)"}
+  - {index: 2, description: "S2MM chunk buffer (olo_ft_fifo_sync)"}
+  - {index: 3, description: "S2MM write data buffer (olo_ft_axi_master_full)"}

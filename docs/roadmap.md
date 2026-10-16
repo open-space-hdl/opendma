@@ -21,3 +21,14 @@ The core is in development and has no technology readiness level yet. The
 | b | Scatter/Gather Mode: descriptor engine, cyclic mode, interrupt coalescing and delay, keyhole | Open |
 | c | Control and status streams (user application fields), micro mode | Open |
 | d | Driver tests on hardware (bare-metal and Linux on a processor system) | Open |
+
+## Modules
+
+| Module | Blocks (architecture section 7) | Status |
+| --- | --- | --- |
+| `odma_pkg` | Common package; shared verification components (AXI memory model, sequence player) and the model of the programming sequences | Done (GHDL) |
+| `odma_registers` | RG-1 to RG-4 (register interface) | Open |
+| `odma_mm2s` | MM-1 to MM-3 (MM2S channel) | Open |
+| `odma_s2mm` | S2-1 to S2-3 (S2MM channel) | Open |
+| `odma_sg` | SG-1 to SG-3 (Scatter/Gather engine) | Open |
+| `odma_core` | CO-1 (core top level) | Open |

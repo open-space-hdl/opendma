@@ -1,0 +1,4 @@
+# A stream packet that differs from the expected one
+S 01 02 03
+E 01 02 04
+A 1000

@@ -77,6 +77,7 @@ UVVM_COMPONENTS = (
     "bitvis_vip_clock_generator",
     "bitvis_vip_axistream",
     "bitvis_vip_axilite",
+    "bitvis_vip_axi",
 )
 
 

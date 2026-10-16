@@ -1,0 +1,3 @@
+# An interrupt wait whose timeout expires
+W 0x04 0x00000000
+I MM2S 1 50

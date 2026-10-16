@@ -55,6 +55,8 @@ Index of a buffer in `ECC_COUNT`, `ECC_INJECT.Buffer` and the ECC ports; indices
 | 1 | S2MM data buffer (olo_ft_fifo_sync) |
 | 2 | S2MM chunk buffer (olo_ft_fifo_sync) |
 | 3 | S2MM write data buffer (olo_ft_axi_master_full) |
+| 4 | MM2S transfer buffer (olo_ft_fifo_sync) |
+| 5 | MM2S response buffer (olo_ft_fifo_sync) |
 
 ## Fields
 

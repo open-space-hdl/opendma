@@ -169,9 +169,11 @@ of its `ErrInj_BitFlip` input and applies it to the next codeword written. Witho
 | 1 | S2MM data buffer (`olo_ft_fifo_sync` of S2-1) | a |
 | 2 | S2MM chunk buffer (`olo_ft_fifo_sync` of S2-1) | a |
 | 3 | S2MM write data buffer (`olo_ft_axi_master_full`) | a |
-| 4 to 7 | Descriptor buffers and the descriptor port of the Scatter/Gather engine | b |
-| 8, 9 | Control and status stream buffers | c |
-| 10 to 15 | Reserved | |
+| 4 | MM2S transfer buffer (`olo_ft_fifo_sync` of MM-1) | a |
+| 5 | MM2S response buffer (`olo_ft_fifo_sync` of MM-1) | a |
+| 6 to 9 | Descriptor buffers and the descriptor port of the Scatter/Gather engine | b |
+| 10, 11 | Control and status stream buffers | c |
+| 12 to 15 | Reserved | |
 
 Buffers of an excluded channel or a later phase count nothing.
 

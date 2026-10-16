@@ -205,3 +205,5 @@ buffers:
   - {index: 1, description: "S2MM data buffer (olo_ft_fifo_sync)"}
   - {index: 2, description: "S2MM chunk buffer (olo_ft_fifo_sync)"}
   - {index: 3, description: "S2MM write data buffer (olo_ft_axi_master_full)"}
+  - {index: 4, description: "MM2S transfer buffer (olo_ft_fifo_sync)"}
+  - {index: 5, description: "MM2S response buffer (olo_ft_fifo_sync)"}

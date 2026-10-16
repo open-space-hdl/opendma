@@ -42,8 +42,8 @@ package odma_pkg is
     -- Valid bytes of a last beat: the index of the lowest lane whose TKeep bit is not '1'
     function keepBytes (keep : std_logic_vector) return natural;
 
-    -- True when the buffer of bytes bytes (at least 1) from addr does not fit below the top of the
-    -- address space of addr'length bits
+    -- True when the buffer of bytes bytes from addr does not fit below the top of the address space of
+    -- addr'length bits; false for bytes = 0 (an empty buffer touches no byte)
     function beyondTop (
         addr  : unsigned;
         bytes : unsigned) return boolean;
@@ -117,6 +117,9 @@ package body odma_pkg is
         constant Width_c : positive := maximum(addr'length, bytes'length) + 1;
         variable Last_v  : unsigned(Width_c - 1 downto 0);
     begin
+        if bytes = 0 then
+            return false;
+        end if;
         Last_v := resize(addr, Width_c) + resize(bytes, Width_c) - 1;
         return Last_v(Width_c - 1 downto addr'length) /= 0;
     end function;

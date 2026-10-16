@@ -339,6 +339,14 @@ begin
                 check_value(beyondTop(a64(x"FFFF_FFFF_FFFF_FFFF"), to_unsigned(1, 26)), false, ERROR, "64 bit: last byte at the top");
                 check_value(beyondTop(a64(x"FFFF_FFFF_FFFF_FFFF"), to_unsigned(2, 26)), true, ERROR, "64 bit: one byte beyond");
                 check_value(beyondTop(a64(x"0000_0000_FFFF_FFFF"), to_unsigned(2, 26)), false, ERROR, "64 bit: across 4 GB");
+                -- An empty buffer touches no byte: never beyond the top, also at address 0 (no underflow)
+                check_value(beyondTop(x"0000_0000", to_unsigned(0, 26)), false, ERROR, "32 bit: empty buffer at 0");
+                check_value(beyondTop(x"8000_0000", to_unsigned(0, 26)), false, ERROR, "32 bit: empty buffer");
+                check_value(beyondTop(x"FFFF_FFFF", to_unsigned(0, 26)), false, ERROR, "32 bit: empty buffer at the top");
+                check_value(beyondTop(a64(x"0000_0000_0000_0000"), to_unsigned(0, 26)), false, ERROR,
+                            "64 bit: empty buffer at 0");
+                check_value(beyondTop(a64(x"FFFF_FFFF_FFFF_FFFF"), to_unsigned(0, 26)), false, ERROR,
+                            "64 bit: empty buffer at the top");
 
             elsif run("test_config") then
                 log(ID_LOG_HDR, "TC-PKG-04 coreConfigError");

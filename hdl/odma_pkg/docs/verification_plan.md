@@ -22,7 +22,7 @@ Simulator: GHDL; QuestaSim for the coverage batch. Clock 100 MHz.
 | --- | --- | --- |
 | `test_last_keep` (TC-PKG-01) | `lastKeep` for streams of 1, 2, 4, 8, 64 and 128 bytes and lengths 1 to three beats, multiples of the width and 0 | PKG-01 |
 | `test_keep_bytes` (TC-PKG-02) | `keepBytes` for all 256 patterns of 8 lanes against a loop of the bench, and for 128 lanes with the first '0' at every position | PKG-02 |
-| `test_beyond_top` (TC-PKG-03) | `beyondTop` at 32 and 64 address bits: buffers ending at the top fit, one byte more does not; start at 0; length 1 and the largest length | PKG-03 |
+| `test_beyond_top` (TC-PKG-03) | `beyondTop` at 32 and 64 address bits: buffers ending at the top fit, one byte more does not; start at 0; length 1 and the largest length; length 0 at address 0, in the middle and at the top is never beyond the top | PKG-03 |
 | `test_config` (TC-PKG-04) | `coreConfigError` accepts the default and the boundary configurations and names the generic of each inconsistent one (memory width 24 and 2048, stream width above the memory width, burst beats 3 and 512, length width 7 and 27, address width 31 and 65, data buffer of one burst) | PKG-04 |
 | `test_err_codes` (TC-PKG-05) | Values of the error codes: SLVERR and DECERR equal the AXI response codes | PKG-05 |
 | `test_mem_bursts` (TC-PKG-06) | INCR bursts of 1, 2, 16 and 256 beats, unaligned start addresses, partial strobes, FIXED bursts of 1 and 16 beats, addresses below and above 2**32 and at the top of the 64-bit space; written data checked through the backdoor and by read bursts; statistics (bytes written, lowest and highest address, bursts, maximum outstanding); repeated with 50 % backpressure and a latency of 20 cycles | PKG-06 |

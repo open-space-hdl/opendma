@@ -17,7 +17,7 @@
 | `ErrNone_c`, `ErrInt_c`, `ErrSlv_c`, `ErrDec_c` | "00" no error, "01" internal error (`DMAIntErr`), "10" slave error (`DMASlvErr`), "11" decode error (`DMADecErr`); the values of the AXI response codes SLVERR and DECERR |
 | `lastKeep(bytes, w)` | `TKeep` of the last beat of a transfer of `bytes` bytes (an `unsigned`) on a stream of `w` bytes: bit i set for i <= (bytes - 1) mod w (PKG-01). `bytes` = 0 gives all bits clear |
 | `keepBytes(keep)` | Number of valid bytes of a last beat: the index of the lowest '0' of `keep`, or its length when all bits are set (PKG-02) |
-| `beyondTop(addr, bytes)` | True when the buffer from `addr` with `bytes` bytes (`bytes` >= 1) does not fit below the top of the address space of `addr'length` bits: `addr + bytes - 1` overflows `addr'length` bits (PKG-03) |
+| `beyondTop(addr, bytes)` | True when the buffer from `addr` with `bytes` bytes does not fit below the top of the address space of `addr'length` bits: `addr + bytes - 1` overflows `addr'length` bits; false for `bytes` = 0, since an empty buffer touches no byte (PKG-03) |
 | `coreConfigError(...)` | Empty string for a consistent set of core generics, otherwise a message naming the first inconsistent generic (PKG-04); called by an assertion of `odma_core` |
 
 The functions are pure and synthesisable; `lastKeep` and `keepBytes` unroll to one comparison per lane, `beyondTop`

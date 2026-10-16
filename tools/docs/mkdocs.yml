@@ -40,6 +40,10 @@ extra:
 
 nav:
   - Home: README.md
+  - Guide:
+      - Architecture: docs/architecture.md
+  - Verification:
+      - Compliance matrix: docs/compliance.md
   - Project:
       - Roadmap: docs/roadmap.md
       - Conventions: docs/conventions.md

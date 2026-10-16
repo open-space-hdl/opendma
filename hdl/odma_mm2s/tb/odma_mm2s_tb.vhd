@@ -7,7 +7,7 @@
 -- Description
 ---------------------------------------------------------------------------------------------------
 -- VUnit testbench of odma_mm2s: the test cases TC-MM-01 to TC-MM-14 of the verification plan.
--- Expected stream data is the count pattern of the memory model, never taken from the DUT.
+-- Expected stream data is read from the memory model, never taken from the DUT.
 --
 -- Documentation: hdl/odma_mm2s/docs/verification_plan.md
 
@@ -176,12 +176,12 @@ begin
             Cmd_Valid  <= '0';
         end procedure;
 
-        -- The stream checker expects the bytes of the memory from addr as one packet (count pattern)
+        -- The stream checker expects the bytes of the memory from addr as one packet
         procedure expect (
             addr : Addr_t;
             len  : positive) is
         begin
-            Pkts_v.push(to_integer(unsigned(Mem_v.read8(0, addr))), len);
+            Pkts_v.push(addr, len);
             Expected_v := Expected_v + 1;
         end procedure;
 

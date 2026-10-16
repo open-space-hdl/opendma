@@ -129,6 +129,11 @@ begin
         variable Fixed_v : t_slv_array(0 to 15)(63 downto 0);
         variable Zero_v  : t_slv_array(0 to 1)(63 downto 0) := (others => (others => '0'));
         variable Resp_v  : t_xresp_array(0 to 1);
+        variable Base_v  : unsigned(63 downto 0);
+        variable Diff_v  : natural;
+        variable Sh_v    : natural;
+
+        constant One_c : unsigned(63 downto 0) := to_unsigned(1, 64);
 
         -- Checks n bytes from addr of memory instance 0 against the count pattern from seed
         procedure checkBytes (
@@ -497,6 +502,62 @@ begin
                 increment_expected_alerts_and_stop_limit(ERROR, 1);
                 odmaSequence(tb_path(runner_cfg) & "sequences/error_stream.txt", AXILITE_VVCT, 0, AXISTREAM_VVCT,
                              0, 1, Mm2sIrq, S2mmIrq, ClkPeriod_c);
+
+            elsif run("test_mem_fill") then
+                log(ID_LOG_HDR, "TC-PKG-12 address-dependent fill pattern");
+                Base_v := x"0000_0000_0123_0000";
+                Mem_v.fill(2, Base_v, 65536, 7);
+                Bad_v  := 0;
+
+                for i in 0 to 65535 loop
+                    if Mem_v.read8(2, Base_v + i) /= odmaMemByte(Base_v + i, 7) then
+                        Bad_v := Bad_v + 1;
+                    end if;
+                end loop;
+
+                check_value(Bad_v, 0, ERROR, "filled bytes of odmaMemByte");
+
+                -- Shifted windows differ: within the filled range through the backdoor, beyond it by the function
+                for s in 0 to 11 loop
+                    Exp_v  := 1 when s = 0 else
+                              2 when s = 1 else
+                              3 when s = 2 else
+                              64 when s = 3 else
+                              256 when s = 4 else
+                              4096 when s = 5 else
+                              8192 when s = 6 else
+                              32768 when s = 7 else
+                              0;
+                    Sh_v   := 16 when s = 8 else
+                              20 when s = 9 else
+                              32 when s = 10 else
+                              48;
+                    Diff_v := 0;
+
+                    for i in 0 to 255 loop
+                        if s < 8 then
+                            if Mem_v.read8(2, Base_v + i) /= Mem_v.read8(2, Base_v + Exp_v + i) then
+                                Diff_v := Diff_v + 1;
+                            end if;
+                        elsif odmaMemByte(Base_v + i, 7) /= odmaMemByte(Base_v + shift_left(One_c, Sh_v) + i, 7) then
+                            Diff_v := Diff_v + 1;
+                        end if;
+                    end loop;
+
+                    check_value(Diff_v >= 200, ERROR, "window shifted by step " & to_string(s) & ": " &
+                                to_string(Diff_v) & " of 256 bytes differ");
+                end loop;
+
+                -- Another seed gives other bytes
+                Diff_v := 0;
+
+                for i in 0 to 255 loop
+                    if odmaMemByte(Base_v + i, 7) /= odmaMemByte(Base_v + i, 8) then
+                        Diff_v := Diff_v + 1;
+                    end if;
+                end loop;
+
+                check_value(Diff_v >= 200, ERROR, "another seed: " & to_string(Diff_v) & " of 256 bytes differ");
 
             elsif run("test_model_dr") then
                 log(ID_LOG_HDR, "TC-PKG-11 model of the programming sequences");

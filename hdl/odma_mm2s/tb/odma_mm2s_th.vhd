@@ -27,6 +27,7 @@ library olo;
 
 library work;
     use work.odma_pkg.all;
+    use work.odma_tb_memvar_pkg.all;
     use work.odma_mm2s_tb_pkg.all;
 
 ---------------------------------------------------------------------------------------------------
@@ -275,11 +276,11 @@ begin
     -----------------------------------------------------------------------------------------------
     p_monitor : process (Clk_i) is
         variable O_v        : Obs_r;
-        variable ClearOld_v : std_logic := '0';
-        variable Open_v     : boolean   := false;   -- A packet is in progress
-        variable First_v    : natural   := 0;
-        variable PktBytes_v : natural   := 0;
-        variable Count_v    : natural   := 0;
+        variable ClearOld_v : std_logic             := '0';
+        variable Open_v     : boolean               := false;   -- A packet is in progress
+        variable PktAddr_v  : unsigned(63 downto 0) := (others => '0');
+        variable PktBytes_v : natural               := 0;
+        variable Count_v    : natural               := 0;
         variable Bytes_v    : natural;
         variable Gap_v      : boolean;
         variable Exp_v      : natural;
@@ -328,13 +329,13 @@ begin
                         streamError("beat without an expected packet");
                     else
                         Open_v     := true;
-                        First_v    := Pkts_v.headFirst;
+                        PktAddr_v  := Pkts_v.headAddr;
                         PktBytes_v := Pkts_v.headBytes;
                         Count_v    := 0;
                         Pkts_v.pop;
                     end if;
                 end if;
-                -- Bytes of the count pattern, TKeep contiguous from lane 0 and all ones except on the last beat
+                -- Bytes of the memory, TKeep contiguous from lane 0 and all ones except on the last beat
                 Bytes_v := 0;
                 Gap_v   := false;
 
@@ -343,7 +344,7 @@ begin
                         if Gap_v then
                             streamError("TKeep not contiguous");
                         end if;
-                        Exp_v := (First_v + Count_v + Bytes_v) mod 256;
+                        Exp_v := to_integer(unsigned(Mem_v.read8(0, PktAddr_v + Count_v + Bytes_v)));
                         if Open_v and to_integer(unsigned(S_Data(8 * i + 7 downto 8 * i))) /= Exp_v then
                             streamError("byte " & to_string(Count_v + Bytes_v) & " of the packet");
                         end if;

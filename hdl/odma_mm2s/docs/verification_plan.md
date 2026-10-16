@@ -5,10 +5,12 @@
 The channel is verified through its ports: transfer commands and the channel control from the bench, results
 collected by a monitor of the harness, the memory port on the AXI memory model of `tb/` (with its protocol checks,
 error ranges, backpressure and statistics) and the stream port on a stream checker of the harness. The bench fills
-the memory with the count pattern of the memory model and queues the packets it expects (first byte, length); the
-checker compares every byte, `TKeep` and `TLast` with them and raises an alert on a difference or a beat without an
-expected packet. The checker drives `TReady`: always high, high in a given percentage of the clock cycles, held low,
-or low for a number of clock cycles before a given beat. Expected stream data is computed by the bench from the
+the memory with the fill pattern of the memory model, which depends on every address bit (`odmaMemByte`), and queues
+the packets it expects (address, length); the checker compares every byte with the memory contents at its address,
+checks `TKeep` and `TLast` and raises an alert on a difference or a beat without an expected packet. A read from a
+wrong address, also one shifted by a whole burst, by 256 bytes or by 4 KB, therefore delivers other bytes. The
+checker drives `TReady`: always high, high in a given percentage of the clock cycles, held low, or low for a number
+of clock cycles before a given beat. Expected stream data is computed by the bench from the
 memory contents, never by the RTL. The AXI4-Stream VVC of UVVM is not used: its BFM takes at most 32 `TStrb` bits
 (256 data bits), and the checker has no packet size limit.
 

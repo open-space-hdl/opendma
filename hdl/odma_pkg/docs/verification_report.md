@@ -17,16 +17,20 @@ Run on 2026-10-16 with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
 | `test_seq_player` | TC-PKG-09 | PASS |
 | `test_seq_errors` | TC-PKG-10 | PASS |
 | `test_model_dr` | TC-PKG-11 | PASS |
+| `test_mem_fill` | TC-PKG-12 | PASS |
 
 QuestaSim runs with the next batch of features (module workflow of the repository).
 
 ## 2. Summary
 
-All 11 test cases pass; every requirement of the specification is covered (see the verification plan). VSG reports no
+All 12 test cases pass; every requirement of the specification is covered (see the verification plan). VSG reports no
 errors and no warnings.
 
 - The functions agree with the independent computations of the bench for every tested width and length, and the
   configuration check names the generic of every inconsistent configuration.
+- The fill pattern of the memory model gives every byte of a 64 KB range its `odmaMemByte` value; windows of
+  256 bytes shifted by 1 to 32768 bytes and by 2**16 to 2**48 bytes differ from the original in at least 200 bytes,
+  so a read from a wrong address cannot return the expected data.
 - The AXI memory model stores and returns INCR and FIXED bursts byte-exact at aligned and unaligned addresses, below
   and above 4 GB and at the top of the 64-bit space, with and without backpressure and latency; failed write beats
   leave memory unchanged. Each of its eight protocol checks raises exactly the expected alerts.

@@ -32,6 +32,13 @@ package odma_tb_mem_pkg is
     -- Direction of an error range
     type TbDir_t is (TbDirRead, TbDirWrite, TbDirBoth);
 
+    -- Fill pattern: a byte that depends on every bit of the byte address and on the seed. The bytes of
+    -- consecutive addresses advance by a fixed step modulo the prime 65521, so a range read from an
+    -- address shifted by a power of two (a whole burst, 256 bytes, 4 KB, ...) differs from the expected one.
+    function odmaMemByte (
+        addr : unsigned;
+        seed : natural) return std_logic_vector;
+
     type TbMem_t is protected
 
         -- Backdoor access; unwritten bytes read as 0x00
@@ -44,7 +51,7 @@ package odma_tb_mem_pkg is
             idx  : natural;
             addr : unsigned) return std_logic_vector;
 
-        -- Fills n bytes from addr with (seed + i) mod 256
+        -- Fills the n bytes from addr with odmaMemByte(address, seed)
         procedure fill (
             idx  : natural;
             addr : unsigned;
@@ -141,6 +148,21 @@ end package;
 -- Package Body
 ---------------------------------------------------------------------------------------------------
 package body odma_tb_mem_pkg is
+
+    function odmaMemByte (
+        addr : unsigned;
+        seed : natural) return std_logic_vector is
+        constant Addr_c : unsigned(63 downto 0) := resize(addr, 64);
+        variable H_v    : natural               := seed mod 65521 + 1;
+    begin
+
+        for k in 0 to 7 loop
+            H_v := (H_v * 257 + to_integer(Addr_c(8 * k + 7 downto 8 * k)) + 17) mod 65521;
+        end loop;
+
+        H_v := (H_v * 257 + 17) mod 65521;
+        return std_logic_vector(to_unsigned(H_v mod 256, 8) xor to_unsigned(H_v / 256 mod 256, 8));
+    end function;
 
     type TbMem_t is protected body
 
@@ -250,7 +272,7 @@ package body odma_tb_mem_pkg is
         begin
 
             for i in 0 to n - 1 loop
-                write8(idx, Addr_c + i, std_logic_vector(to_unsigned((seed + i) mod 256, 8)));
+                write8(idx, Addr_c + i, odmaMemByte(Addr_c + i, seed));
             end loop;
 
         end procedure;

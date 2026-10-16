@@ -30,6 +30,7 @@ Simulator: GHDL; QuestaSim for the coverage batch. Clock 100 MHz.
 | `test_mem_checks` (TC-PKG-08) | One provocation per protocol check, each expecting exactly one error alert: INCR burst across 4 KB, burst above the configured maximum, FIXED burst of 17 beats, WRAP burst, narrow beat, `WLast` missing on the last beat and set before it (raw driver), a strobed byte outside the write window | PKG-07 |
 | `test_seq_player` (TC-PKG-09) | A sequence file with every command (W, R with and without mask, P that matches after a delay, I for both interrupt signals, S and E of the same packet through the looped streams, A, D, L) executes without alert | PKG-08 |
 | `test_seq_errors` (TC-PKG-10) | A mismatching R, a P and an I whose timeout expires, an E that does not match the sent packet: each raises one error alert that names its line | PKG-08 |
+| `test_mem_fill` (TC-PKG-12) | A fill of 64 KB: every byte is `odmaMemByte` of its address and the seed; windows of 256 bytes at the shifts 1, 2, 3, 64, 256, 4096, 8192 and 32768 bytes differ from the window at the start in at least 200 bytes, and so do windows of the function at the shifts 2**16, 2**20, 2**32 and 2**48; another seed gives other bytes | PKG-10 |
 | `test_model_dr` (TC-PKG-11) | The model generates the reference DR scenario (reset, one MM2S and one S2MM transfer with interrupt, one MM2S transfer by polling, a 64-bit buffer address) in the `pre_config` of the test; the sequence, the memory image and the expected memory equal the golden files written by hand from PG021 chapter 4 | PKG-09 |
 
 ## 4. Requirement coverage
@@ -45,6 +46,7 @@ Simulator: GHDL; QuestaSim for the coverage batch. Clock 100 MHz.
 | PKG-07 | TC-PKG-08 |
 | PKG-08 | TC-PKG-09, TC-PKG-10 |
 | PKG-09 | TC-PKG-11 |
+| PKG-10 | TC-PKG-12 |
 
 ## 5. Negative tests
 

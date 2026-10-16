@@ -44,6 +44,7 @@ Findings:
 | `olo_axi_master_simple` of Open Logic 4.7.0-ft.6 does not elaborate when `AxiMaxBeats_g` exceeds the beats of 4 KB (for example 256 beats of 1024 bits): a slice of its 4 KB beat count is out of range; `ghdl --synth` stops, a simulation stops when the branch is reached | The read master runs with at most the beats of 4 KB (architecture section 4); no AXI burst crosses 4 KB, so the bursts are the same. The configuration `w1024_s1024` simulates `BurstBeats_g` 256 with 1024 bits |
 | A counter of the read commands outstanding at the read master entered `Stopped`; a fault that ignored it passed every test | The counter is removed: a transfer entry with a read is popped only after its response, so an empty transfer buffer already means that no read is outstanding (architecture section 6) |
 | TC-MM-13 injected the error into the first word of a transfer, which left the read data buffer at once; a fault that did not qualify the ECC event with the handshake passed | TC-MM-13 injects into a transfer that waits at the output of the buffers behind another transfer |
+| The memory was filled with a count pattern that repeats every 256 bytes, so a read from an address wrong by a multiple of 256 bytes (a later burst at the address of the first one, a wrong 4 KB page after a split) delivered the expected bytes | The memory model fills a pattern that depends on every address bit (`odmaMemByte`, requirement PKG-10 of `odma_pkg`); the checker compares with the memory contents at the address of each byte. Three address faults are in the table of section 5 |
 
 ## 3. Known deviation
 
@@ -66,8 +67,8 @@ decode error of a buffer beyond the top of the address space (MM-RD-04) is not a
 
 ## 5. Checks of the testbench
 
-Each of the following faults, inserted into a copy of the RTL, fails at least one test case; the RTL of the repository
-passes all of them:
+Each of the following faults, inserted into a copy of the RTL of the channel or of the Open Logic read master, fails
+at least one test case; the RTL of the repository passes all of them:
 
 | Fault | Failing test case |
 | --- | --- |
@@ -81,5 +82,8 @@ passes all of them:
 | `TKeep` of the last beat all ones | TC-MM-02 |
 | The ECC event of the read data buffer is not qualified by the handshake | TC-MM-13 |
 | The response code of the read master is ignored | TC-MM-09 |
+| Every later burst of a command reads the address of the first burst (`olo_axi_master_simple`) | TC-MM-03 |
+| The read address is 256 bytes too high | TC-MM-01 |
+| The address after a 4 KB boundary is 4096 bytes too high (`olo_axi_master_simple`) | TC-MM-03 |
 
 The recovery branches of the state machines (`when others`) cannot be reached through the ports.

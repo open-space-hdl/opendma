@@ -16,6 +16,7 @@
 ---------------------------------------------------------------------------------------------------
 library ieee;
     use ieee.std_logic_1164.all;
+    use ieee.numeric_std.all;
 
 ---------------------------------------------------------------------------------------------------
 -- Package Header
@@ -27,20 +28,20 @@ package odma_mm2s_tb_pkg is
     -- Results kept by the harness: result n is element n mod MaxResults_c
     constant MaxResults_c : positive := 64;
 
-    -- Packets the stream checker expects, in order. Byte n of a packet has the value (First + n) mod 256, the
-    -- count pattern of the memory model (fill); the packet ends with TLast on the beat of its last byte.
+    -- Packets the stream checker expects, in order: the bytes of the memory model from the address of the
+    -- packet; the packet ends with TLast on the beat of its last byte.
     constant MaxPackets_c : positive := 16;
 
     type PktQueue_t is protected
 
         procedure push (
-            first : natural;
+            addr  : unsigned(63 downto 0);
             bytes : positive);
 
         impure function count return natural;
 
-        -- First byte and length of the oldest packet
-        impure function headFirst return natural;
+        -- Address and length of the oldest packet
+        impure function headAddr return unsigned;
 
         impure function headBytes return natural;
 
@@ -100,24 +101,24 @@ package body odma_mm2s_tb_pkg is
     type PktQueue_t is protected body
 
         type Pkt_r is record
-            First : natural;
+            Addr  : unsigned(63 downto 0);
             Bytes : natural;
         end record;
 
         type Pkts_t is array (0 to MaxPackets_c - 1) of Pkt_r;
 
-        variable Pkts_v  : Pkts_t  := (others => (First => 0, Bytes => 0));
+        variable Pkts_v  : Pkts_t  := (others => (Addr => (others => '0'), Bytes => 0));
         variable Head_v  : natural := 0;
         variable Count_v : natural := 0;
 
         procedure push (
-            first : natural;
+            addr  : unsigned(63 downto 0);
             bytes : positive) is
         begin
             assert Count_v < MaxPackets_c
                 report "odma_mm2s_tb_pkg: packet queue full"
                 severity failure;
-            Pkts_v((Head_v + Count_v) mod MaxPackets_c) := (First => first mod 256,
+            Pkts_v((Head_v + Count_v) mod MaxPackets_c) := (Addr => addr,
                                                             Bytes => bytes);
             Count_v                                     := Count_v + 1;
         end procedure;
@@ -127,9 +128,9 @@ package body odma_mm2s_tb_pkg is
             return Count_v;
         end function;
 
-        impure function headFirst return natural is
+        impure function headAddr return unsigned is
         begin
-            return Pkts_v(Head_v).First;
+            return Pkts_v(Head_v).Addr;
         end function;
 
         impure function headBytes return natural is

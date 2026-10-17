@@ -87,11 +87,12 @@ number and the first 60 characters of the line, within the 300 characters of the
 | `S <bytes>` | Queue a packet on the S2MM stream VVC (bytes in hexadecimal, separated by spaces; at most 16384 bytes, the limit of the VVC) |
 | `E <bytes>` | Queue an expected packet on the MM2S stream VVC |
 | `A [<timeout>]` | Wait until the stream VVCs have executed their queues, at most `timeout` clock cycles (default 1000000) |
+| `T <index> [<timeout>]` | Wait until the S packet with the index (counted from 0 in the file, at most 4096 packets) is sent, at most `timeout` clock cycles (default 1000000); later packets may still wait in the queue |
 | `D <cycles>` | Wait |
 | `L <text>` | Log the text |
 
 The AXI4-Lite VVC executes reads and writes on independent channels; the wait after a write keeps the order of the
-file. Register commands, interrupt waits, `A` and `D` first complete the queued register accesses.
+file. Register commands, interrupt waits, `A`, `T` and `D` first complete the queued register accesses.
 
 Memory image files hold one line per range, `<address> <bytes>`; `odmaLoadImage(idx, file)` writes them through
 the backdoor of instance `idx`, `odmaCheckImage(idx, file)` compares them byte by byte and reports the number of
@@ -112,7 +113,7 @@ descriptions of chapter 3, without vendor driver code and independently of the R
 The sequence of a DR transfer follows \[PG021\] chapter 4: `DMACR.RS` = 1 and the interrupt enables, the poll of
 `DMASR.Halted` = 0, the address (and its MSB register for addresses above 32 bits), the length as the last write,
 then the completion (interrupt, `DMASR.IOC_Irq` and `Idle`), the write-one-to-clear of `IOC_Irq`, for S2MM the
-read of the received length. A reset step writes `DMACR.Reset` = 1 of the first included channel and polls until it
+read of the received length; a transfer can set `DMACR.Keyhole`. A reset step writes `DMACR.Reset` = 1 of the first included channel and polls until it
 reads 0. Further steps:
 
 | Step | Sequence |
@@ -121,11 +122,12 @@ reads 0. Further steps:
 | `check_cleared` | After a reset: `DMASR` of every included channel halted without error and interrupt flags |
 | `concurrent` | Transfers of both channels, every one programmed before the first completion is awaited |
 | `failed_transfer` | A transfer that ends with an error: the interrupt, the poll of `DMASR.Halted` (it follows the error when the channel has shut down), the error flags and `Err_Irq` in `DMASR`, the write-one-to-clear of `Err_Irq`; optionally without stream data (buffer beyond the top of the address space) |
-| `sg_start` | \[PG021\] chapter 4, Scatter/Gather Mode steps 1 to 3: `CURDESC` (above 32 address bits also `CURDESC_MSB`, the upper word last), `DMACR` with `RS`, the interrupt enables, the threshold, the delay with `Dly_IrqEn` and `CyclicBD` as given, the poll of `DMASR.Halted` = 0 |
+| `sg_start` | \[PG021\] chapter 4, Scatter/Gather Mode steps 1 to 3: `CURDESC` (above 32 address bits also `CURDESC_MSB`, the upper word last), `DMACR` with `RS`, the interrupt enables, the threshold, the delay with `Dly_IrqEn`, `CyclicBD` and `Keyhole` as given, the poll of `DMASR.Halted` = 0 |
 | `sg_tail` | Step 4: `TAILDESC` and, above 32 address bits, `TAILDESC_MSB` last (interpretation SGI-01 of `odma_sg`) |
 | `sg_descriptors`, `sg_buffers` | A chain into the descriptor image and its expected image; the buffers of given descriptors: MM2S source data into the memory image and the expected packets, S2MM the packets to send and the expected memory with the guard |
 | `sg_complete` | The chain up to the tail completed: `Idle` polled, `IOC_Irq` read, cleared, the interrupt output low, `CURDESC` at the tail |
 | `sg_failed` | An error of the engine or of a transfer: the interrupt, `Halted` polled, the flags (with `IOC_Irq` when a packet completed before), `Err_Irq` cleared, `CURDESC` at the descriptor of the error |
+| `await_sent` | `T` of the sequence player: wait until a given S packet is sent while the later ones still wait, for example before a soft reset while the channel discards the rest of a packet |
 
 A scenario can name the included channels and a guard: the expected memory then holds the given number of zero
 bytes before and after every S2MM packet, so that a write outside the packet fails the comparison.
@@ -135,14 +137,18 @@ bytes before and after every S2MM packet, so that a write outside the packet fai
 | `dr_reference` | Reset, one MM2S and one S2MM transfer with interrupt above 4 GB at unaligned addresses, one MM2S transfer by polling | TC-PKG-11 (golden files), TC-CO-01 |
 | `dr_random` | Transfers of random channels, lengths (1 byte and the longest length among them) and unaligned addresses, some across 4 KB, by interrupt or polling, then a halt and a restart of each channel; random data without a period | TC-CO-02, TC-CO-05, TC-CO-08 |
 | `dr_concurrent` | Long transfers of both channels at the same time | TC-CO-03 |
-| `dr_errors` | Read and write errors, an S2MM packet longer than its buffer, buffers beyond the top of the address space, each followed by a transfer of the other channel and a reset | TC-CO-04 |
+| `dr_errors` | Read and write errors with SLVERR and DECERR, an S2MM packet longer than its buffer, buffers beyond the top of the address space, each followed by a transfer of the other channel and a reset | TC-CO-04 |
 | `dr_single` | One transfer of one channel without a reset | TC-CO-06 |
 | `sg_reference` | Per channel a chain of four descriptors of one packet each, above 32 address bits when the address width allows, the interrupt after every packet; optionally without the soft reset at the start | TC-CO-11, TC-CO-15, TC-CO-17 |
 | `sg_tail_moves` | Chains of 12 descriptors, both channels with the threshold 2, the tail pointer moved by one to four descriptors while the engines work or after they have reached the tail | TC-CO-12 |
 | `sg_cyclic` | Rings of three descriptors in cyclic mode for two laps; S2MM halted, MM2S stopped by a soft reset | TC-CO-13 |
-| `sg_errors` | Failed descriptor fetch, stale descriptor, buffer length 0 and failed status write per channel, each after a soft reset | TC-CO-14 |
+| `sg_errors` | Failed descriptor fetch and status write with SLVERR and DECERR, stale descriptor, buffer length 0 per channel, each after a soft reset | TC-CO-14 |
 | `sg_delay`, `sg_delay_overlap` | The delay timer with the threshold 2: a timeout after one packet, a packet that starts after the completion before it and stops the timer, two packets back to back where the timer runs during the second | TC-CO-16 |
 | `sg_reset_load` | Chains of four descriptors per channel started, without stream packets, for the soft reset under load | TC-CO-17 |
+| `sg_multi_buffer` | Per channel a chain of 12 descriptors forming packets over several buffers at random unaligned addresses; an MM2S packet halted after its first buffer; an S2MM packet with a write error in its first buffer, the next packet directly after it, a soft reset after the end of the discarded packet and the next packet in a new chain | TC-CO-18 |
+| `sg_empty` | An S2MM packet without bytes into one descriptor (interpretation SGI-13 of `odma_sg`) | TC-CO-18 |
+| `keyhole` | Keyhole transfers at the FIFO windows of the core bench: S2MM in DR mode, an MM2S transfer with `Keyhole` set in DR mode, chains of both channels in SG mode | TC-CO-19 |
+| `sg_boundary_rate` | S2MM packets of 16 KB over buffers of a given length, each buffer length in its own address region | TC-CO-20 |
 
 `run.py` calls the model in a VUnit `pre_config` of each core test configuration, which writes the files into the
 output directory of the test; the bench finds them with `output_path(runner_cfg)`. No generated file is committed.

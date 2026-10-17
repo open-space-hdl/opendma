@@ -42,6 +42,9 @@ package odma_tb_seq_pkg is
     -- Largest packet of an S or E command (the limit of the AXI4-Stream VVC)
     constant SeqMaxBytes_c : positive := 16384;
 
+    -- Largest number of S commands of a file that a T command can name
+    constant SeqMaxPackets_c : positive := 4096;
+
     -- Executes the sequence file fileName (commands in hdl/odma_pkg/docs/architecture.md, section 3.3).
     -- Register accesses go to AXI4-Lite VVC axiliteIdx, S packets to AXI4-Stream VVC txIdx, E packets
     -- to AXI4-Stream VVC rxIdx; timeouts count periods of clkPeriod.
@@ -174,6 +177,8 @@ package body odma_tb_seq_pkg is
         variable Level_v    : std_logic;
         variable IsMm2s_v   : boolean;
         variable Match_v    : boolean;
+        variable TxCmd_v    : integer_vector(0 to SeqMaxPackets_c - 1);
+        variable TxCnt_v    : natural := 0;
 
         -- Message of a command: the end of the file name, the line number and the start of the line, short
         -- enough for the message field of a VVC command (300 characters)
@@ -229,7 +234,8 @@ package body odma_tb_seq_pkg is
             -- Numeric arguments of the register, interrupt and delay commands
             NumCnt_v := 0;
             IsMm2s_v := false;
-            if Cmd_v = 'W' or Cmd_v = 'R' or Cmd_v = 'P' or Cmd_v = 'I' or Cmd_v = 'D' or Cmd_v = 'A' then
+            if Cmd_v = 'W' or Cmd_v = 'R' or Cmd_v = 'P' or Cmd_v = 'I' or Cmd_v = 'D' or Cmd_v = 'A' or
+               Cmd_v = 'T' then
 
                 loop
                     getToken(Lin_v, Tok_v);
@@ -312,6 +318,11 @@ package body odma_tb_seq_pkg is
                         alert(TB_ERROR, ctx & ": packet without bytes", Scope_c);
                     elsif Cmd_v = 'S' then
                         axistream_transmit(AxisVvct, txIdx, Bytes_v(0 to ByteCnt_v - 1), ctx);
+                        -- The command index of the packet, for a T command
+                        if TxCnt_v < SeqMaxPackets_c then
+                            TxCmd_v(TxCnt_v) := get_last_received_cmd_idx(AxisVvct, txIdx);
+                        end if;
+                        TxCnt_v := TxCnt_v + 1;
                     else
                         axistream_expect(AxisVvct, rxIdx, Bytes_v(0 to ByteCnt_v - 1), ctx);
                     end if;
@@ -323,6 +334,18 @@ package body odma_tb_seq_pkg is
                     await_completion(AxiliteVvct, axiliteIdx, 1 ms, ctx);
                     await_completion(AxisVvct, txIdx, to_integer(unsigned(Nums_v(0))) * clkPeriod, ctx);
                     await_completion(AxisVvct, rxIdx, to_integer(unsigned(Nums_v(0))) * clkPeriod, ctx);
+
+                when 'T' =>
+                    if NumCnt_v < 2 then
+                        Nums_v(1) := std_logic_vector(to_unsigned(1000000, 32));
+                    end if;
+                    await_completion(AxiliteVvct, axiliteIdx, 1 ms, ctx);
+                    if NumCnt_v = 0 or to_integer(unsigned(Nums_v(0))) >= minimum(TxCnt_v, SeqMaxPackets_c) then
+                        alert(TB_ERROR, ctx & ": no S command with this index before the line", Scope_c);
+                    else
+                        await_completion(AxisVvct, txIdx, TxCmd_v(to_integer(unsigned(Nums_v(0)))),
+                                         to_integer(unsigned(Nums_v(1))) * clkPeriod, ctx);
+                    end if;
 
                 when 'D' =>
                     await_completion(AxiliteVvct, axiliteIdx, 1 ms, ctx);

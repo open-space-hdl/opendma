@@ -260,10 +260,20 @@ that take longer to transfer than a fetch follow each other without a gap on the
 buffers runs at the descriptor rate.
 
 An S2MM packet over several buffers waits at every buffer boundary inside the packet: the channel takes the next
-buffer only after the write responses of the full one, so the stream input pauses for about 10 clock cycles plus the
-write response latency of the memory. The verification report of `odma_core` lists the measured pause and rate for
-buffers of 1 KB and 4 KB; packets that fit into one buffer do not pause. The MM2S join of several buffers costs at
-most one clock cycle per packet.
+buffer only after the data of the full one is written and its write responses have arrived. Measured in the core
+bench (TC-CO-20) with packets of 16 KB, a stream without gaps and a memory that is always ready apart from the write
+response latency:
+
+| Memory / stream width, burst beats | Write response latency | Pause per buffer boundary | Beats per clock cycle, 1 KB buffers | Beats per clock cycle, 4 KB buffers |
+| --- | --- | --- | --- | --- |
+| 32 / 32 bits, 16 beats (the defaults) | 0 | 69 clock cycles | 0.57 | 0.65 |
+| 32 / 32 bits, 16 beats (the defaults) | 50 | 119 clock cycles | 0.51 | 0.63 |
+| 512 / 256 bits, 4 beats | 0 | 21 clock cycles | 0.32 | 0.38 |
+| 512 / 256 bits, 4 beats | 50 | 71 clock cycles | 0.22 | 0.34 |
+
+The pause grows by one clock cycle per clock cycle of write response latency. Packets that fit into one buffer do not
+pause; buffers of several KB keep the loss small. The MM2S join of several buffers costs at most one clock cycle per
+packet.
 
 ## 8. Integration constraints
 

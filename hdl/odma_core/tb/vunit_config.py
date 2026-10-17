@@ -118,6 +118,35 @@ def files_sg_soft_reset(g, path):
     odma_model.sg_reference(g["AddrWidth_g"], g["LengthWidth_g"], channels(g)).write(Path(path) / "after")
 
 
+def chunk_bytes(g, prefix):
+    """Bytes of an S2MM chunk: one burst of at most 4 KB (odma_s2mm S2-ST-03)."""
+    mem = g[f"{prefix}MemWidth_g"] // 8
+    return min(g[f"{prefix}BurstBeats_g"], 4096 // mem) * mem
+
+
+def keyhole_configs(g):
+    """The SG configurations and the DR configurations default, aw64 and s2mm_only (verification plan, section 2)."""
+    key = (g["AddrWidth_g"], g["LengthWidth_g"], g["IncludeMm2s_g"], g["IncludeS2mm_g"], g["ExtRegs_g"])
+    return sg(g) or key in ((32, 14, True, True, True), (64, 20, True, True, True), (32, 14, False, True, True))
+
+
+def files_sg_multi(g, path):
+    odma_model.sg_multi_buffer(g["AddrWidth_g"], g["LengthWidth_g"], channels(g), chunk_bytes(g, "S2mm")).write(
+        Path(path) / "multi")
+    if g["IncludeS2mm_g"]:
+        odma_model.sg_empty(g["AddrWidth_g"], g["LengthWidth_g"]).write(Path(path) / "empty")
+
+
+def files_keyhole(g, path):
+    mem = {"MM2S": g["Mm2sMemWidth_g"] // 8, "S2MM": g["S2mmMemWidth_g"] // 8}
+    odma_model.keyhole(g["AddrWidth_g"], g["LengthWidth_g"], channels(g), mem, sg=g["IncludeSg_g"]).write(path)
+
+
+def files_sg_rate(g, path):
+    for name, buf in (("r1k", 1024), ("r4k", 4096)):
+        odma_model.sg_boundary_rate(g["AddrWidth_g"], g["LengthWidth_g"], buf).write(Path(path) / name)
+
+
 def files_sg_ecc(g, path):
     odma_model.sg_reference(g["AddrWidth_g"], g["LengthWidth_g"], channels(g), reset=False).write(path)
 
@@ -146,6 +175,9 @@ TESTS = {
     "test_sg_delay": (sg, files_sg_delay),
     "test_sg_soft_reset": (sg, files_sg_soft_reset),
     "test_sg_ecc_index": (sg, files_sg_ecc),
+    "test_sg_multi_buffer": (sg, files_sg_multi),
+    "test_keyhole": (keyhole_configs, files_keyhole),
+    "test_sg_boundary_rate": (lambda g: sg(g) and g["IncludeS2mm_g"], files_sg_rate),
 }
 
 

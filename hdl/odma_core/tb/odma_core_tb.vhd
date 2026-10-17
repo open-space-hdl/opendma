@@ -118,6 +118,16 @@ architecture sim of odma_core_tb is
     -- ERR_DESC_READ_BASE, ERR_DESC_WRITE_BASE)
     constant ErrDescReadBase_c  : unsigned(63 downto 0) := x"0000_0000_0006_0000";
     constant ErrDescWriteBase_c : unsigned(63 downto 0) := x"0000_0000_0007_0000";
+    -- DECERR ranges of the model (ERR_READ_DEC_BASE and the others)
+    constant DecReadBase_c      : unsigned(63 downto 0) := x"0000_0000_0004_1000";
+    constant DecWriteBase_c     : unsigned(63 downto 0) := x"0000_0000_0005_1000";
+    constant DecDescReadBase_c  : unsigned(63 downto 0) := x"0000_0000_0006_1000";
+    constant DecDescWriteBase_c : unsigned(63 downto 0) := x"0000_0000_0007_1000";
+    -- FIFO windows of the model for keyhole transfers (KEYHOLE_WIN, KEYHOLE_BACK)
+    constant KhWinRd_c          : unsigned(63 downto 0) := x"0000_0000_0070_0000";
+    constant KhWinWr_c          : unsigned(63 downto 0) := x"0000_0000_0074_0000";
+    constant KhBackRd_c         : unsigned(63 downto 0) := x"0000_0000_0078_0000";
+    constant KhBackWr_c         : unsigned(63 downto 0) := x"0000_0000_007C_0000";
     constant Ones_c             : Word_t                := x"FFFFFFFF";
     constant Zero_c             : Word_t                := x"00000000";
 
@@ -148,7 +158,11 @@ architecture sim of odma_core_tb is
     signal EccIrq     : std_logic;
     signal Mm2sRstOut : std_logic;
     signal S2mmRstOut : std_logic;
-    signal PeerBytes  : natural := 0;
+    signal PeerBytes  : natural                       := 0;
+    signal PeerEmpty  : std_logic                     := '0';
+    signal FixedRd    : std_logic_vector(63 downto 0) := (others => '0');
+    signal FixedWr    : std_logic_vector(63 downto 0) := (others => '0');
+    signal ObsClear   : std_logic                     := '0';
     signal Obs        : CoreObs_r;
 
     -- n ones from bit 0
@@ -256,6 +270,10 @@ begin
             Mm2sRstOut => Mm2sRstOut,
             S2mmRstOut => S2mmRstOut,
             PeerBytes  => PeerBytes,
+            PeerEmpty  => PeerEmpty,
+            FixedRd    => FixedRd,
+            FixedWr    => FixedWr,
+            ObsClear   => ObsClear,
             Obs        => Obs
         );
 
@@ -263,17 +281,21 @@ begin
     -- Test control
     -----------------------------------------------------------------------------------------------
     p_control : process is
-        variable Data_v   : Word_t;
-        variable CmdIdx_v : natural;
-        variable Result_v : bitvis_vip_axilite.vvc_cmd_pkg.t_vvc_result;
-        variable Ar_v     : natural;
-        variable Aw_v     : natural;
-        variable Len_v    : natural;
-        variable Mm2s_v   : boolean;
-        variable Counts_v : boolean;
-        variable Ded_v    : boolean;
-        variable Exp_v    : t_slv_array(0 to 255)(7 downto 0);
-        variable Base_v   : unsigned(63 downto 0);
+        variable Data_v      : Word_t;
+        variable CmdIdx_v    : natural;
+        variable Result_v    : bitvis_vip_axilite.vvc_cmd_pkg.t_vvc_result;
+        variable Ar_v        : natural;
+        variable Aw_v        : natural;
+        variable Len_v       : natural;
+        variable Mm2s_v      : boolean;
+        variable Counts_v    : boolean;
+        variable Ded_v       : boolean;
+        variable Exp_v       : t_slv_array(0 to 255)(7 downto 0);
+        variable Base_v      : unsigned(63 downto 0);
+        variable Cnt_v       : integer;
+        variable RateBeats_v : natural;
+        variable Cyc1k_v     : integer;
+        variable Cyc4k_v     : integer;
 
         impure function hex (ofs : natural) return string is
         begin
@@ -500,6 +522,8 @@ begin
                 log(ID_LOG_HDR, "TC-CO-04 errors end to end and their recovery");
                 Mem_v.setError(MemRd_c, 0, ErrReadBase_c, ErrReadBase_c + ErrSize_c - 1, "10", TbDirRead);
                 Mem_v.setError(MemWr_c, 0, ErrWriteBase_c, ErrWriteBase_c + ErrSize_c - 1, "10", TbDirWrite);
+                Mem_v.setError(MemRd_c, 1, DecReadBase_c, DecReadBase_c + ErrSize_c - 1, "11", TbDirRead);
+                Mem_v.setError(MemWr_c, 1, DecWriteBase_c, DecWriteBase_c + ErrSize_c - 1, "11", TbDirWrite);
                 scenario("", "dr_errors");
 
             elsif run("test_soft_reset_load") then
@@ -798,6 +822,8 @@ begin
                 log(ID_LOG_HDR, "TC-CO-14 errors of Scatter/Gather Mode and their recovery");
                 Mem_v.setError(MemSg_c, 0, ErrDescReadBase_c, ErrDescReadBase_c + ErrSize_c - 1, "10", TbDirRead);
                 Mem_v.setError(MemSg_c, 1, ErrDescWriteBase_c, ErrDescWriteBase_c + ErrSize_c - 1, "10", TbDirWrite);
+                Mem_v.setError(MemSg_c, 2, DecDescReadBase_c, DecDescReadBase_c + ErrSize_c - 1, "11", TbDirRead);
+                Mem_v.setError(MemSg_c, 3, DecDescWriteBase_c, DecDescWriteBase_c + ErrSize_c - 1, "11", TbDirWrite);
                 scenario("", "sg_errors");
 
             elsif run("test_sg_delay") then
@@ -876,6 +902,77 @@ begin
                 Mem_v.setStall(MemRd_c, 0);
                 Mem_v.setStall(MemWr_c, 0);
                 scenario("after/", "sg_reference after the soft reset");
+
+            elsif run("test_sg_multi_buffer") then
+                log(ID_LOG_HDR, "TC-CO-18 packets of several buffers");
+                Mem_v.setError(MemWr_c, 0, ErrWriteBase_c, ErrWriteBase_c + ErrSize_c - 1, "10", TbDirWrite);
+                scenario("multi/", "sg_multi_buffer");
+                Mem_v.clearErrors(MemWr_c);
+                if IncludeS2mm_g then
+                    -- A packet without bytes from the stream peer (odma_sg interpretation SGI-13)
+                    PeerEmpty <= '1';
+                    scenario("empty/", "sg_empty");
+                    check_value(Obs.PeerDone, ERROR, "the packet without bytes was taken");
+                    PeerEmpty <= '0';
+                end if;
+
+            elsif run("test_keyhole") then
+                log(ID_LOG_HDR, "TC-CO-19 keyhole transfers with FIXED bursts");
+                Mem_v.setFifo(MemRd_c, KhWinRd_c, KhBackRd_c);
+                Mem_v.setFifo(MemWr_c, KhWinWr_c, KhBackWr_c);
+                FixedRd <= std_logic_vector(KhWinRd_c);
+                FixedWr <= std_logic_vector(KhWinWr_c);
+                scenario("", "keyhole");
+                -- MM2S: FIXED bursts in SG mode only (interpretation I1); S2MM in both modes
+                if IncludeMm2s_g and IncludeSg_g then
+                    check_value(Obs.ArFixed > 0, ERROR, "FIXED read bursts of the MM2S keyhole descriptors");
+                else
+                    check_value(Obs.ArFixed, 0, ERROR, "no FIXED read burst: MM2S keyhole without function in DR mode");
+                end if;
+                if IncludeS2mm_g then
+                    check_value(Obs.AwFixed > 0, ERROR, "FIXED write bursts of the S2MM keyhole transfers");
+                end if;
+                check_value(Obs.FixBad, 0, ERROR, "every FIXED burst at most 16 beats at the window word");
+
+            elsif run("test_sg_boundary_rate") then
+                log(ID_LOG_HDR, "TC-CO-20 S2MM packets over buffers of 1 KB and 4 KB");
+
+                for lat in 0 to 1 loop
+                    Mem_v.setLatency(MemWr_c, 50 * lat);
+
+                    for b in 0 to 1 loop
+                        ObsClear <= not ObsClear;
+                        wait for 2 * ClkPeriod_c;
+                        if b = 0 then
+                            scenario("r1k/", "buffers of 1 KB");
+                        else
+                            scenario("r4k/", "buffers of 4 KB");
+                        end if;
+                        if b = 0 then
+                            Cyc1k_v := Obs.S2Last - Obs.S2First + 1;
+                        else
+                            Cyc4k_v := Obs.S2Last - Obs.S2First + 1;
+                        end if;
+                        log(ID_SEQUENCER, "TC-CO-20 buffers of " & to_string(4 ** b) & " KB, write response latency " &
+                            to_string(50 * lat) & ": " & to_string(Obs.S2Beats) & " beats in " &
+                            to_string(Obs.S2Last - Obs.S2First + 1) & " clock cycles");
+                        RateBeats_v := Obs.S2Beats;
+                    end loop;
+
+                    -- The pause per buffer boundary: the difference of the two runs over the difference of the
+                    -- numbers of boundaries inside the packets (2 packets of 16 KB)
+                    Len_v := minimum(1024, MaxLen_c);
+                    Cnt_v := 2 * ((16384 + Len_v - 1) / Len_v - 1);
+                    Len_v := minimum(4096, MaxLen_c);
+                    Cnt_v := Cnt_v - 2 * ((16384 + Len_v - 1) / Len_v - 1);
+                    if Cnt_v > 0 then
+                        log(ID_SEQUENCER, "TC-CO-20 write response latency " & to_string(50 * lat) & ": " &
+                            to_string((Cyc1k_v - Cyc4k_v) / Cnt_v) & " clock cycles per buffer boundary, " &
+                            to_string(RateBeats_v * 100 / Cyc4k_v) & " beats per 100 clock cycles with 4 KB");
+                    end if;
+                end loop;
+
+                Mem_v.setLatency(MemWr_c, 0);
 
             elsif run("test_sg_ecc_index") then
                 log(ID_LOG_HDR, "TC-CO-15 FT buffers 6 to 9 of the Scatter/Gather engine");

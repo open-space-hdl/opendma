@@ -33,6 +33,13 @@ package odma_core_tb_pkg is
         SgUpdate : natural;
         SgRDone  : natural; -- Read bursts of the descriptor port whose last beat the core took
         SgBDone  : natural; -- Write responses of the descriptor port the core took
+        ArFixed  : natural; -- FIXED bursts of the MM2S and the S2MM memory port
+        AwFixed  : natural;
+        FixBad   : natural; -- FIXED bursts of more than 16 beats or at another address than FixedRd/FixedWr
+        S2Beats  : natural; -- S2MM stream beats, the clock cycles of the first and the last since ObsClear toggled
+        S2First  : natural;
+        S2Last   : natural;
+        Cycle    : natural;
     end record;
 
 end package;

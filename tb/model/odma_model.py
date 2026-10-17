@@ -44,6 +44,7 @@ class Regs:
     # DMACR fields
     RS = 1 << 0
     RESET = 1 << 2
+    KEYHOLE = 1 << 3
     CYCLIC_BD = 1 << 4
     IOC_IRQ_EN = 1 << 12
     DLY_IRQ_EN = 1 << 13
@@ -97,6 +98,7 @@ class Scenario:
         self.expected = []    # (address, bytes)
         self.desc_memory = []     # (address, bytes): descriptors (Scatter/Gather Mode)
         self.desc_expected = []   # (address, bytes): descriptors after the scenario
+        self.sent = 0             # S packets in the file
 
     # -----------------------------------------------------------------------------------------------------------------
     # Primitives of the sequence file
@@ -117,7 +119,16 @@ class Scenario:
         self.lines.append(f"I {channel} {level} {self.timeout}")
 
     def packet(self, command, data):
+        """Queues a packet; returns the index of an S packet in the file (for await_sent)."""
         self.lines.append(f"{command} " + " ".join(f"{b:02X}" for b in data))
+        if command == "S":
+            self.sent += 1
+            return self.sent - 1
+        return None
+
+    def await_sent(self, index):
+        """Waits until the S packet with the index is sent, while later packets may still wait."""
+        self.lines.append(f"T {index} {self.timeout}")
 
     # -----------------------------------------------------------------------------------------------------------------
     # Steps
@@ -137,14 +148,17 @@ class Scenario:
         for ch in self.channels:
             self.read_reg(Regs.BASE[ch] + Regs.DMASR, Regs.HALTED, Regs.STATE)
 
-    def start(self, channel, irq=True):
-        """PG021 chapter 4, DR mode steps 1 and 2: run/stop bit, halted bit deasserts, interrupt enables."""
+    def start(self, channel, irq=True, keyhole=False):
+        """PG021 chapter 4, DR mode steps 1 and 2: run/stop bit, halted bit deasserts, interrupt enables; keyhole:
+        DMACR.Keyhole (Table 16; MM2S without function in DR mode, interpretation I1)."""
         base = Regs.BASE[channel]
+        kh = Regs.KEYHOLE if keyhole else 0
         self.comment(f"start {channel}")
-        self.write_reg(base + Regs.DMACR, Regs.IRQ_THRESHOLD_RESET | Regs.RS)
+        self.write_reg(base + Regs.DMACR, Regs.IRQ_THRESHOLD_RESET | Regs.RS | kh)
         self.poll_reg(base + Regs.DMASR, 0, Regs.HALTED)
         if irq:
-            self.write_reg(base + Regs.DMACR, Regs.IRQ_THRESHOLD_RESET | Regs.RS | Regs.IOC_IRQ_EN | Regs.ERR_IRQ_EN)
+            self.write_reg(base + Regs.DMACR,
+                           Regs.IRQ_THRESHOLD_RESET | Regs.RS | Regs.IOC_IRQ_EN | Regs.ERR_IRQ_EN | kh)
 
     def halt(self, channel):
         """PG021 Table 6: run/stop bit 0; DMASR.Halted follows once the channel has stopped."""
@@ -253,14 +267,15 @@ class Scenario:
         if self.addr_width > 32:
             self.write_reg(base + reg + 4, value >> 32)
 
-    def sg_start(self, channel, curdesc, threshold=1, cyclic=False, delay=0):
+    def sg_start(self, channel, curdesc, threshold=1, cyclic=False, delay=0, keyhole=False):
         """Steps 1 to 3: CURDESC, the run/stop bit with the interrupt enables, the threshold and the delay (with
         Dly_IrqEn when not 0), Halted deasserts."""
         base = Regs.BASE[channel]
         self.comment(f"start {channel} at descriptor 0x{curdesc:X}")
         self._pointer(channel, Regs.CURDESC, curdesc)
         dmacr = (delay << 24 | threshold << 16 | Regs.RS | Regs.IOC_IRQ_EN | Regs.ERR_IRQ_EN
-                 | (Regs.DLY_IRQ_EN if delay else 0) | (Regs.CYCLIC_BD if cyclic else 0))
+                 | (Regs.DLY_IRQ_EN if delay else 0) | (Regs.CYCLIC_BD if cyclic else 0)
+                 | (Regs.KEYHOLE if keyhole else 0))
         self.write_reg(base + Regs.DMACR, dmacr)
         self.poll_reg(base + Regs.DMASR, 0, Regs.HALTED)
 
@@ -338,12 +353,13 @@ def _words(nxt, channel, b):
 
 
 def status_word(channel, b, errors=0):
-    """Status of a descriptor after its transfer (Tables 31 and 38): transferred bytes, RXSOF and RXEOF (S2MM), the
-    error flags, Cmplt only without an error (interpretation SGI-02)."""
+    """Status of a descriptor after its transfer (Tables 31 and 38): transferred bytes, RXSOF and RXEOF (S2MM; RXSOF
+    also for a packet without bytes, interpretation SGI-13), the error flags, Cmplt only without an error
+    (interpretation SGI-02)."""
     n = b.length if channel == "MM2S" else len(b.data)
     s = n | errors | (0 if errors else 1 << 31)
     if channel == "S2MM":
-        s |= (1 << 27 if b.sof and n else 0) | (1 << 26 if b.eof else 0)
+        s |= (1 << 27 if b.sof else 0) | (1 << 26 if b.eof else 0)
     return s
 
 
@@ -381,6 +397,8 @@ class SgChain:
 DESC_BASE = {"MM2S": 0x0020_0000, "S2MM": 0x0030_0000}
 ERR_DESC_READ_BASE = 0x0006_0000      # the core bench answers reads with SLVERR here
 ERR_DESC_WRITE_BASE = 0x0007_0000     # and writes with SLVERR here
+ERR_DESC_READ_DEC_BASE = 0x0006_1000  # reads with DECERR
+ERR_DESC_WRITE_DEC_BASE = 0x0007_1000  # writes with DECERR
 
 
 def _desc_base(channel, addr_width, high=False):
@@ -407,6 +425,8 @@ SEQ_MAX_BYTES = 16384
 # Regions of the memory model that the core tests set to respond with SLVERR (hdl/odma_core/docs/verification_plan.md)
 ERR_READ_BASE = 0x0004_0000
 ERR_WRITE_BASE = 0x0005_0000
+ERR_READ_DEC_BASE = 0x0004_1000       # DECERR ranges of the core bench
+ERR_WRITE_DEC_BASE = 0x0005_1000
 ERR_SIZE = 0x1000
 
 
@@ -419,11 +439,11 @@ class Buffers:
     """Buffers that do not overlap, at unaligned addresses, in a low region and, above 32 address bits, in a region
     that sets the most significant address bit."""
 
-    def __init__(self, addr_width, rng):
+    def __init__(self, addr_width, rng, offset=0):
         self.rng = rng
-        self.cursor = [0x0010_0000]
+        self.cursor = [0x0010_0000 + offset]
         if addr_width > 32:
-            self.cursor.append((1 << (addr_width - 1)) + 0x0010_0000)
+            self.cursor.append((1 << (addr_width - 1)) + 0x0010_0000 + offset)
 
     def take(self, n, cross=False):
         """Address of a buffer of n bytes; cross: the buffer crosses a 4 KB boundary (n >= 2)."""
@@ -495,7 +515,7 @@ def dr_errors(addr_width=32, length_width=14, seed=3):
     longer than its buffer and buffers of both channels beyond the top of the address space (OpenDMA interpretation
     I5: decode error without an access and without stream data), each followed by a transfer of the other channel
     without a reset and by a soft reset; the memory model answers SLVERR in ERR_READ_BASE (reads) and ERR_WRITE_BASE
-    (writes)."""
+    (writes), DECERR in ERR_READ_DEC_BASE and ERR_WRITE_DEC_BASE."""
     rng = random.Random(seed)
     buffers = Buffers(32, rng)
     s = Scenario("dr_errors", addr_width=addr_width, guard=16)
@@ -515,9 +535,18 @@ def dr_errors(addr_width=32, length_width=14, seed=3):
     s.failed_transfer(DrTransfer("MM2S", ERR_READ_BASE + 0x13, random_bytes(64, rng)), Regs.DMA_SLV_ERR)
     good("S2MM", 100)
     restart()
+    s.comment("MM2S read DECERR: the packet is sent completely, DMADecErr")
+    s.failed_transfer(DrTransfer("MM2S", ERR_READ_DEC_BASE + 0x13, random_bytes(64, rng)), Regs.DMA_DEC_ERR)
+    good("S2MM", 100)
+    restart()
     s.comment("S2MM write error: DMASlvErr with DMAIntErr, the rest of the packet discarded")
     s.failed_transfer(DrTransfer("S2MM", ERR_WRITE_BASE + 0x21, random_bytes(100, rng), buffer_len=128),
                       Regs.DMA_SLV_ERR | Regs.DMA_INT_ERR)
+    good("MM2S", 100)
+    restart()
+    s.comment("S2MM write DECERR: DMADecErr with DMAIntErr")
+    s.failed_transfer(DrTransfer("S2MM", ERR_WRITE_DEC_BASE + 0x21, random_bytes(100, rng), buffer_len=128),
+                      Regs.DMA_DEC_ERR | Regs.DMA_INT_ERR)
     good("MM2S", 100)
     restart()
     s.comment("S2MM packet longer than the buffer: DMAIntErr, no byte beyond the buffer")
@@ -661,8 +690,9 @@ def sg_cyclic(addr_width=32, length_width=14, channels=("MM2S", "S2MM"), seed=13
 def sg_errors(addr_width=32, length_width=14, channels=("MM2S", "S2MM"), seed=14):
     """Errors of Scatter/Gather Mode and their recovery by a soft reset: a descriptor fetch with SLVERR (SGSlvErr),
     a stale descriptor (SGIntErr), a buffer length of 0 (DMAIntErr in DMASR and in the status, Cmplt 0) and a status
-    write with SLVERR (SGSlvErr); the memory model of the descriptor port answers SLVERR in ERR_DESC_READ_BASE (reads)
-    and ERR_DESC_WRITE_BASE (writes). MM2S: the failing fetch and the stale descriptor are the second descriptor, and
+    write with SLVERR (SGSlvErr), the fetch and the status write also with DECERR (SGDecErr); the memory model of the
+    descriptor port answers SLVERR in ERR_DESC_READ_BASE (reads) and ERR_DESC_WRITE_BASE (writes), DECERR in
+    ERR_DESC_READ_DEC_BASE and ERR_DESC_WRITE_DEC_BASE. MM2S: the failing fetch and the stale descriptor are the second descriptor, and
     the first one, already issued, completes with its packet. S2MM: they are the first descriptor; a later one would
     halt the channel while the packet of the first one arrives, which then ends early (interpretation I8)."""
     rng = random.Random(seed)
@@ -699,6 +729,26 @@ def sg_errors(addr_width=32, length_width=14, channels=("MM2S", "S2MM"), seed=14
             s.sg_tail(ch, err)
             s.sg_failed(ch, Regs.SG_SLV_ERR, err)
 
+        # DECERR on the fetch of the same descriptor: SGDecErr (SG-ER-04)
+        s.reset()
+        s.comment(f"{ch}: fetch with DECERR")
+        if ch == "MM2S":
+            c = chain(ch, 2)
+            c.addrs[1] = ERR_DESC_READ_DEC_BASE
+            s.sg_descriptors(c, [0])
+            s.desc_memory = [d for d in s.desc_memory if d[0] != c.addrs[1]]
+            s.desc_expected = [d for d in s.desc_expected if d[0] != c.addrs[1]]
+            s.sg_start(ch, c.addrs[0])
+            s.sg_tail(ch, c.addrs[1])
+            s.sg_buffers(c, [0])
+            s.lines.append("A")
+            s.sg_failed(ch, Regs.SG_DEC_ERR, c.addrs[1], ioc=True)
+        else:
+            err = ERR_DESC_READ_DEC_BASE + 0x40
+            s.sg_start(ch, err)
+            s.sg_tail(ch, err)
+            s.sg_failed(ch, Regs.SG_DEC_ERR, err)
+
         s.reset()
         if ch == "MM2S":
             s.comment("MM2S: stale second descriptor")
@@ -729,16 +779,18 @@ def sg_errors(addr_width=32, length_width=14, channels=("MM2S", "S2MM"), seed=14
         s.sg_tail(ch, c.addrs[1])
         s.sg_failed(ch, Regs.DMA_INT_ERR, c.addrs[0])
 
-        s.reset()
-        s.comment(f"{ch}: status write with SLVERR")
-        c = chain(ch, 2, base=ERR_DESC_WRITE_BASE + (0x400 if ch == "S2MM" else 0))
-        s.desc_memory += c.image()
-        s.desc_expected += c.expected([])
-        s.sg_start(ch, c.addrs[0])
-        s.sg_tail(ch, c.addrs[0])
-        s.sg_buffers(c, [0])
-        s.lines.append("A")
-        s.sg_failed(ch, Regs.SG_SLV_ERR, c.addrs[0])
+        for code, base, label in ((Regs.SG_SLV_ERR, ERR_DESC_WRITE_BASE, "SLVERR"),
+                                  (Regs.SG_DEC_ERR, ERR_DESC_WRITE_DEC_BASE, "DECERR")):
+            s.reset()
+            s.comment(f"{ch}: status write with {label}")
+            c = chain(ch, 2, base=base + (0x400 if ch == "S2MM" else 0))
+            s.desc_memory += c.image()
+            s.desc_expected += c.expected([])
+            s.sg_start(ch, c.addrs[0])
+            s.sg_tail(ch, c.addrs[0])
+            s.sg_buffers(c, [0])
+            s.lines.append("A")
+            s.sg_failed(ch, code, c.addrs[0])
     s.reset()
     s.check_cleared()
     return s
@@ -847,10 +899,247 @@ def sg_reset_load(addr_width=32, length_width=14, channels=("MM2S", "S2MM"), see
     return s
 
 
+
+# FIFO windows of the core bench for keyhole transfers (PKG-12): the k-th beat at the window word reaches the k-th
+# word of the backing range
+KEYHOLE_WIN = {"MM2S": 0x0070_0000, "S2MM": 0x0074_0000}
+KEYHOLE_BACK = {"MM2S": 0x0078_0000, "S2MM": 0x007C_0000}
+
+# Status flags of a descriptor (Tables 31 and 38)
+ST_DMA_INT_ERR = 1 << 28
+ST_DMA_SLV_ERR = 1 << 29
+
+
+def _groups(rng, total, largest):
+    """Sizes of groups of descriptors (packets), each 1 to largest, that add up to total."""
+    out = []
+    while total > 0:
+        n = min(rng.randint(1, largest), total)
+        out.append(n)
+        total -= n
+    return out
+
+
+def _guarded(s, addr, data):
+    """Expected S2MM memory: the bytes and the unwritten guard bytes around them."""
+    if data:
+        s.expected.append((addr, data))
+    if s.guard:
+        s.expected.append((addr - s.guard, bytes(s.guard)))
+        s.expected.append((addr + len(data), bytes(s.guard)))
+
+
+def sg_multi_buffer(addr_width=32, length_width=14, channels=("MM2S", "S2MM"), s2mm_chunk=64, seed=18):
+    """Packets of several descriptors (Tables 30 and 37). MM2S: a chain of 12 descriptors forming packets of one to
+    five buffers (TXSOF on the first, TXEOF on the last), every buffer at a random address and of a random length, the
+    first of 1 byte; then a packet of three descriptors with the tail at the first and a halt, which ends the packet
+    with TLast on its last byte (interpretation M4). S2MM: 12 buffers holding packets over one to four buffers, the
+    first packet ending exactly at a buffer end; then a packet over three buffers whose first buffer lies in the SLVERR
+    range ERR_WRITE_BASE (at most one chunk, s2mm_chunk bytes, so the error is that of the full buffer), the next
+    packet sent directly after it, a soft reset after the end of the discarded packet and the next packet in a new
+    chain."""
+    rng = random.Random(seed)
+    buffers = Buffers(addr_width, rng)
+    s = Scenario("sg_multi_buffer", addr_width=addr_width, channels=channels, guard=16)
+    limit = min(_length_limit(length_width), 2000)
+    s.reset()
+    s.check_cleared()
+    if "MM2S" in channels:
+        s.comment("MM2S: packets of one to five descriptors")
+        descs = []
+        for g in _groups(rng, 12, 5):
+            data = b""
+            for j in range(g):
+                n = 1 if not descs else rng.randint(1, limit)
+                d = random_bytes(n, rng)
+                descs.append(SgBuffer(buffers.take(n, cross=rng.random() < 0.3), n, d, sof=j == 0, eof=j == g - 1))
+                s.memory.append((descs[-1].addr, d))
+                data += d
+            s.packet("E", data)
+        c = SgChain("MM2S", _desc_base("MM2S", addr_width, high=True), descs)
+        s.sg_descriptors(c, range(12))
+        s.sg_start("MM2S", c.addrs[0])
+        s.sg_tail("MM2S", c.addrs[11])
+        s.lines.append("A")
+        s.sg_complete("MM2S", c.addrs[11])
+    if "S2MM" in channels:
+        s.comment("S2MM: packets over one to four buffers")
+        descs = []
+        for gi, g in enumerate(_groups(rng, 12, 4)):
+            lens = [rng.randint(1, limit) for _ in range(g)]
+            total = sum(lens)
+            size = total if gi == 0 else rng.randint(total - lens[-1] + 1, total)
+            data = random_bytes(size, rng)
+            s.packet("S", data)
+            off = 0
+            for j, n in enumerate(lens):
+                part = data[off:off + n]
+                off += n
+                descs.append(SgBuffer(buffers.take(n, cross=rng.random() < 0.3), n, part, sof=j == 0, eof=j == g - 1))
+                _guarded(s, descs[-1].addr, part)
+        c = SgChain("S2MM", _desc_base("S2MM", addr_width, high=True), descs)
+        s.sg_descriptors(c, range(12))
+        s.sg_start("S2MM", c.addrs[0])
+        s.sg_tail("S2MM", c.addrs[11])
+        s.lines.append("A")
+        s.sg_complete("S2MM", c.addrs[11])
+    if "MM2S" in channels:
+        s.reset()
+        s.comment("MM2S: a packet of three descriptors, the tail at the first, then a halt")
+        descs = [SgBuffer(buffers.take(n), n, random_bytes(n, rng), sof=j == 0, eof=j == 2)
+                 for j, n in enumerate(rng.randint(2, limit) for _ in range(3))]
+        c = SgChain("MM2S", DESC_BASE["MM2S"] + 0x4000, descs)
+        s.sg_descriptors(c, [0])
+        s.memory.append((descs[0].addr, descs[0].data))
+        s.sg_start("MM2S", c.addrs[0])
+        s.sg_tail("MM2S", c.addrs[0])
+        # The packet ends with TLast on the last byte of the first buffer, before Halted (CO-SG-12)
+        s.packet("E", descs[0].data)
+        s.poll_reg(Regs.BASE["MM2S"] + Regs.DMASR, Regs.IDLE, Regs.IDLE)
+        s.halt("MM2S")
+        s.lines.append("A")
+        s.read_reg(Regs.BASE["MM2S"] + Regs.DMASR, Regs.HALTED, Regs.STATE)
+        s.read_reg(Regs.BASE["MM2S"] + Regs.CURDESC, c.addrs[0] & 0xFFFFFFFF)
+    if "S2MM" in channels:
+        s.reset()
+        s.comment("S2MM: write error in the first buffer of a packet of three, the next packet directly after it")
+        n0 = min(s2mm_chunk, limit, 256)
+        lens = [n0, rng.randint(1, limit), rng.randint(1, limit), rng.randint(1, limit)]
+        first = random_bytes(n0 + lens[1] + rng.randint(1, lens[2]), rng)
+        nxt = random_bytes(rng.randint(1, limit), rng)
+        descs = [SgBuffer(ERR_WRITE_BASE + 0x80, n0, first[:n0], sof=True, eof=False)]
+        descs += [SgBuffer(buffers.take(n), n, b"") for n in lens[1:]]
+        c = SgChain("S2MM", DESC_BASE["S2MM"] + 0x4000, descs)
+        s.desc_memory += c.image()
+        s.desc_expected += c.expected([0], {0: ST_DMA_SLV_ERR | ST_DMA_INT_ERR})
+        for b in descs[1:]:
+            s.expected.append((b.addr, bytes(b.length)))
+        p1 = s.packet("S", first)
+        s.packet("S", nxt)
+        s.sg_start("S2MM", c.addrs[0])
+        s.sg_tail("S2MM", c.addrs[3])
+        s.sg_failed("S2MM", Regs.DMA_SLV_ERR | Regs.DMA_INT_ERR, c.addrs[0])
+        # Halted comes before the end of the discarded rest; the soft reset waits for the TLast of the packet, as the
+        # stream peer of the bench does not follow S2mm_RstOut, and the next packet waits at the stream port
+        s.await_sent(p1)
+        s.reset()
+        s.comment("S2MM: the next packet in a new chain")
+        n = min(limit, len(nxt) + 16)
+        b = SgBuffer(buffers.take(n), n, nxt, sof=True, eof=True)
+        c = SgChain("S2MM", DESC_BASE["S2MM"] + 0x6000, [b, SgBuffer(buffers.take(64), 64, b"")])
+        s.sg_descriptors(c, [0])
+        _guarded(s, b.addr, nxt)
+        s.sg_start("S2MM", c.addrs[0])
+        s.sg_tail("S2MM", c.addrs[0])
+        s.lines.append("A")
+        s.sg_complete("S2MM", c.addrs[0])
+    return s
+
+
+def sg_empty(addr_width=32, length_width=14, seed=19):
+    """An S2MM packet without bytes (interpretation SGI-13): the stream peer of the core bench sends one beat with
+    TKeep all '0' and TLast; the status of the descriptor has 0 bytes, RXSOF, RXEOF and Cmplt. The channel is halted
+    first instead of a soft reset, which would make the stream peer abandon its packet."""
+    rng = random.Random(seed)
+    buffers = Buffers(addr_width, rng)
+    s = Scenario("sg_empty", addr_width=addr_width, channels=("S2MM",), guard=16)
+    s.halt("S2MM")
+    b = SgBuffer(buffers.take(64), 64, b"", sof=True, eof=True)
+    c = SgChain("S2MM", DESC_BASE["S2MM"] + 0x2000, [b, SgBuffer(buffers.take(64), 64, b"")])
+    s.sg_descriptors(c, [0])
+    s.expected.append((b.addr - 16, bytes(96)))
+    s.sg_start("S2MM", c.addrs[0])
+    s.sg_tail("S2MM", c.addrs[0])
+    s.sg_complete("S2MM", c.addrs[0])
+    return s
+
+
+def keyhole(addr_width=32, length_width=14, channels=("MM2S", "S2MM"), mem_bytes=None, sg=False, seed=20):
+    """Keyhole transfers at the FIFO windows of the core bench (DMACR.Keyhole, Tables 6 and 16): every beat reaches
+    the next word of the backing range, so consecutive transfers continue there. DR mode: S2MM transfers with
+    S2MM_DMACR.Keyhole, one at an unaligned window address; an MM2S transfer with MM2S_DMACR.Keyhole set is an
+    incrementing transfer (interpretation I1). SG mode: per channel a chain of descriptors at the window with
+    DMACR.Keyhole. mem_bytes: bytes of a memory word per channel."""
+    rng = random.Random(seed)
+    buffers = Buffers(addr_width, rng)
+    s = Scenario("keyhole_sg" if sg else "keyhole_dr", addr_width=addr_width, channels=channels, guard=0)
+    limit = min(_length_limit(length_width), 16384)
+    s.reset()
+    for ch in channels:
+        w = mem_bytes[ch]
+        lens = [min(n, limit) for n in (1, 16 * w, 17 * w, 1000)]
+        if not sg and ch == "MM2S":
+            s.comment("MM2S: Keyhole in DR mode has no function (I1)")
+            s.start("MM2S", keyhole=True)
+            n = lens[3]
+            s.transfer(DrTransfer("MM2S", buffers.take(n), random_bytes(n, rng)))
+            continue
+        off = 0
+        descs = []
+        for i, n in enumerate(lens):
+            data = random_bytes(n, rng)
+            addr = KEYHOLE_WIN[ch] + (w - 1 if i == 1 else 0)  # an unaligned address in the window word
+            if ch == "MM2S":
+                s.memory.append((KEYHOLE_BACK[ch] + off, data))
+            else:
+                s.expected.append((KEYHOLE_BACK[ch] + off, data))
+            descs.append((addr, n, data))
+            off += -(-n // w) * w
+        if not sg:
+            s.comment("S2MM: keyhole transfers in DR mode")
+            s.start("S2MM", keyhole=True)
+            for addr, n, data in descs:
+                t_ = DrTransfer("S2MM", addr, data)
+                s._program(t_, written=b"")
+                s._complete(t_)
+                s.lines.append("A")
+        else:
+            s.comment(f"{ch}: keyhole descriptors")
+            chain = SgChain(ch, DESC_BASE[ch] + 0x2000,
+                            [SgBuffer(addr, n, data, sof=True, eof=True) for addr, n, data in descs])
+            s.sg_descriptors(chain, range(len(descs)))
+            for addr, n, data in descs:
+                s.packet("E" if ch == "MM2S" else "S", data)
+            s.sg_start(ch, chain.addrs[0], keyhole=True)
+            s.sg_tail(ch, chain.addrs[-1])
+            s.lines.append("A")
+            s.sg_complete(ch, chain.addrs[-1])
+    return s
+
+
+def sg_boundary_rate(addr_width=32, length_width=14, buf_len=1024, packets=2, packet_len=16384, seed=21):
+    """S2MM packets of packet_len bytes over buffers of buf_len bytes (at most the longest length) for the measurement
+    of the pause at each buffer boundary inside a packet (odma_core TC-CO-20); the bench logs the time. The buffers of
+    each buffer length lie in their own region (offset buf_len * 4 KB), so that the scenarios of one test do not
+    overlap."""
+    rng = random.Random(seed)
+    buffers = Buffers(addr_width, rng, offset=buf_len * 0x1000)
+    s = Scenario(f"sg_boundary_rate_{buf_len}", addr_width=addr_width, channels=("S2MM",), guard=16)
+    n = min(buf_len, _length_limit(length_width))
+    s.reset()
+    descs = []
+    for _ in range(packets):
+        data = random_bytes(packet_len, rng)
+        s.packet("S", data)
+        parts = [data[i:i + n] for i in range(0, packet_len, n)]
+        for j, part in enumerate(parts):
+            descs.append(SgBuffer(buffers.take(n), n, part, sof=j == 0, eof=j == len(parts) - 1))
+            _guarded(s, descs[-1].addr, part)
+    c = SgChain("S2MM", DESC_BASE["S2MM"] + 0x10000, descs)
+    s.sg_descriptors(c, range(len(descs)))
+    s.sg_start("S2MM", c.addrs[0], threshold=packets)
+    s.sg_tail("S2MM", c.addrs[-1])
+    s.lines.append("A")
+    s.sg_complete("S2MM", c.addrs[-1])
+    return s
+
+
 SCENARIOS = {"dr_reference": dr_reference, "dr_random": dr_random, "dr_concurrent": dr_concurrent,
              "dr_errors": dr_errors, "sg_reference": sg_reference, "sg_tail_moves": sg_tail_moves,
              "sg_cyclic": sg_cyclic, "sg_errors": sg_errors, "sg_delay": sg_delay,
-             "sg_delay_overlap": sg_delay_overlap, "sg_reset_load": sg_reset_load}
+             "sg_delay_overlap": sg_delay_overlap, "sg_reset_load": sg_reset_load,
+             "sg_multi_buffer": sg_multi_buffer, "sg_empty": sg_empty, "keyhole": keyhole,
+             "sg_boundary_rate": sg_boundary_rate}
 
 
 def main():

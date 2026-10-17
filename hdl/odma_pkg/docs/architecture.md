@@ -113,8 +113,8 @@ descriptions of chapter 3, without vendor driver code and independently of the R
 The sequence of a DR transfer follows \[PG021\] chapter 4: `DMACR.RS` = 1 and the interrupt enables, the poll of
 `DMASR.Halted` = 0, the address (and its MSB register for addresses above 32 bits), the length as the last write,
 then the completion (interrupt, `DMASR.IOC_Irq` and `Idle`), the write-one-to-clear of `IOC_Irq`, for S2MM the
-read of the received length; a transfer can set `DMACR.Keyhole`. A reset step writes `DMACR.Reset` = 1 of the first included channel and polls until it
-reads 0. Further steps:
+read of the received length; a transfer can set `DMACR.Keyhole`. A reset step writes `DMACR.Reset` = 1 of the
+first included channel and polls until it reads 0. Further steps:
 
 | Step | Sequence |
 | --- | --- |

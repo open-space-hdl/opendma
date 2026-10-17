@@ -22,14 +22,14 @@ the published interface are listed in section 6 of the architecture and in the m
 | `MAP.ENDIAN` | Figure 2, little-endian registers | RG-1 | a | RG-IF-04 | TC-RG-01 | Verified |
 | `MAP.WSTRB` | Register Space, note on the write strobes | RG-1 | a | RG-IF-03 | TC-RG-02 | Verified |
 | `MAP.ACCESS` | Register Access Type Description (RO, R/W, R/WC) | RG-1 | a | RG-CR-04, RG-IR-03, RG-MAP-02 | TC-RG-02, TC-RG-04, TC-RG-09 | Verified |
-| `MM2S_DMACR.RS` | Tables 6, 16, bit 0 | RG-1 | a | CO-SQ-04, MM-HA-01, MM-SG-04, RG-CR-01, RG-CR-02, SG-HA-01 | TC-CO-02, TC-MM-11, TC-RG-03, TC-RG-07, TC-RG-08, TC-SG-11 | Partly verified |
-| `S2MM_DMACR.RS` | Tables 6, 16, bit 0 | RG-1 | a | CO-SQ-04, MM-SG-04, RG-CR-01, RG-CR-02, S2-HA-01, S2-HA-03, SG-HA-01 | TC-CO-02, TC-RG-03, TC-RG-07, TC-RG-08, TC-S2-11, TC-SG-11 | Partly verified |
+| `MM2S_DMACR.RS` | Tables 6, 16, bit 0 | RG-1 | a | CO-SG-12, CO-SQ-04, MM-HA-01, MM-SG-04, RG-CR-01, RG-CR-02, SG-HA-01 | TC-CO-02, TC-CO-18, TC-MM-11, TC-MM-18, TC-RG-03, TC-RG-07, TC-RG-08, TC-SG-11 | Verified |
+| `S2MM_DMACR.RS` | Tables 6, 16, bit 0 | RG-1 | a | CO-SG-12, CO-SQ-04, MM-SG-04, RG-CR-01, RG-CR-02, S2-HA-01, S2-HA-03, SG-HA-01 | TC-CO-02, TC-CO-18, TC-MM-18, TC-RG-03, TC-RG-07, TC-RG-08, TC-S2-11, TC-S2-19, TC-SG-11 | Verified |
 | `MM2S_DMACR.Reserved` | Tables 6, 16, bits 1, 11 to 5, 15 | RG-1 | a | RG-CR-03 | TC-RG-01 | Verified |
 | `S2MM_DMACR.Reserved` | Tables 6, 16, bits 1, 11 to 5, 15 | RG-1 | a | RG-CR-03 | TC-RG-01 | Verified |
-| `MM2S_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | CO-ER-02, CO-RS-01, CO-SG-08, MM-HA-02, RG-CR-06, RG-RS-02, RG-RS-04, SG-HA-02 | TC-CO-04, TC-CO-05, TC-CO-06, TC-CO-17, TC-MM-12, TC-RG-10, TC-SG-12 | Verified |
-| `S2MM_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | CO-ER-02, CO-RS-01, CO-SG-08, RG-CR-06, RG-RS-02, RG-RS-04, S2-HA-02, SG-HA-02 | TC-CO-04, TC-CO-05, TC-CO-06, TC-CO-17, TC-RG-10, TC-S2-12, TC-SG-12 | Verified |
-| `MM2S_DMACR.Keyhole` | Tables 6, 16, bit 3 | MM-1 (MM2S), S2-2 (S2MM) | b | CO-SG-11, MM-SG-03, RG-SG-09, S2-SG-04, SG-TR-03 | TC-RG-23, TC-SG-14 | Partly verified |
-| `S2MM_DMACR.Keyhole` | Tables 6, 16, bit 3 | MM-1 (MM2S), S2-2 (S2MM) | b | CO-SG-11, MM-SG-03, RG-SG-09, RG-SG-11, S2-SG-04, SG-TR-03 | TC-RG-23, TC-SG-14 | Partly verified |
+| `MM2S_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | CO-ER-02, CO-RS-01, CO-SG-08, MM-HA-02, RG-CR-06, RG-RS-02, RG-RS-04, SG-HA-02 | TC-CO-04, TC-CO-05, TC-CO-06, TC-CO-17, TC-MM-12, TC-MM-18, TC-RG-10, TC-SG-12 | Verified |
+| `S2MM_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | CO-ER-02, CO-RS-01, CO-SG-08, RG-CR-06, RG-RS-02, RG-RS-04, S2-HA-02, SG-HA-02 | TC-CO-04, TC-CO-05, TC-CO-06, TC-CO-17, TC-RG-10, TC-S2-12, TC-S2-19, TC-SG-12 | Verified |
+| `MM2S_DMACR.Keyhole` | Tables 6, 16, bit 3 | MM-1 (MM2S), S2-2 (S2MM) | b | CO-SG-11, MM-SG-03, RG-SG-09, S2-SG-04, SG-TR-03 | TC-CO-19, TC-MM-19, TC-RG-23, TC-S2-20, TC-SG-14 | Verified |
+| `S2MM_DMACR.Keyhole` | Tables 6, 16, bit 3 | MM-1 (MM2S), S2-2 (S2MM) | b | CO-SG-11, MM-SG-03, RG-SG-09, RG-SG-11, S2-SG-04, SG-TR-03 | TC-CO-19, TC-MM-19, TC-RG-23, TC-RG-24, TC-S2-20, TC-SG-14 | Verified |
 | `MM2S_DMACR.CyclicBD` | Tables 6, 16, bit 4 | SG-1 | b | RG-SG-09, SG-CY-01 | TC-RG-23, TC-SG-07, TC-SG-13 | Verified |
 | `S2MM_DMACR.CyclicBD` | Tables 6, 16, bit 4 | SG-1 | b | RG-SG-09, SG-CY-01 | TC-RG-23, TC-SG-07, TC-SG-13 | Verified |
 | `MM2S_DMACR.IOC_IrqEn` | Tables 6, 16, bit 12 (I2) | RG-2 | a | RG-CR-05, RG-IR-04 | TC-RG-02, TC-RG-04, TC-RG-05, TC-RG-08 | Verified |
@@ -50,18 +50,18 @@ the published interface are listed in section 6 of the architecture and in the m
 | `S2MM_DMASR.Reserved` | Tables 7, 17, bits 2, 7, 11, 15 | RG-1 | a | RG-SR-04 | TC-RG-01 | Verified |
 | `MM2S_DMASR.SGIncld` | Tables 7, 17, bit 3 | RG-1 | a | RG-SG-04, RG-SR-03 | TC-RG-01, TC-RG-16, TC-RG-19 | Verified |
 | `S2MM_DMASR.SGIncld` | Tables 7, 17, bit 3 | RG-1 | a | RG-SG-04, RG-SR-03 | TC-RG-01, TC-RG-16, TC-RG-19 | Verified |
-| `MM2S_DMASR.DMAIntErr` | Table 7, bit 4 | SG-1 | b | CO-SG-06, RG-SG-05, SG-FE-06 | TC-CO-14, TC-RG-20, TC-SG-08 | Verified |
+| `MM2S_DMASR.DMAIntErr` | Table 7, bit 4 | SG-1 | b | CO-SG-06, RG-SG-05, SG-FE-06 | TC-CO-14, TC-CO-18, TC-RG-20, TC-SG-08 | Verified |
 | `S2MM_DMASR.DMAIntErr` | Table 17, bit 4 | S2-1 | a | CO-ER-01, RG-SR-06, S2-RS-02 | TC-CO-04, TC-RG-08, TC-S2-08 | Verified |
-| `MM2S_DMASR.DMASlvErr` | Tables 7, 17, bit 5 | MM-1 (MM2S), S2-2 (S2MM) | a | CO-ER-01, MM-ER-01, MM-ER-02, MM-ER-03, RG-SR-05, SG-ER-01 | TC-CO-04, TC-MM-09, TC-RG-08, TC-SG-08 | Partly verified |
-| `S2MM_DMASR.DMASlvErr` | Tables 7, 17, bit 5 | MM-1 (MM2S), S2-2 (S2MM) | a | CO-ER-01, RG-SR-05, S2-RS-03, S2-RS-05, SG-ER-01 | TC-CO-04, TC-RG-08, TC-S2-09, TC-SG-08 | Partly verified |
-| `MM2S_DMASR.DMADecErr` | Tables 7, 17, bit 6 | MM-1 (MM2S), S2-2 (S2MM) | a | CO-ER-01, MM-ER-03, MM-RD-04, RG-SR-05, SG-ER-01 | TC-CO-04, TC-MM-07, TC-MM-10, TC-RG-08, TC-SG-08 | Partly verified |
-| `S2MM_DMASR.DMADecErr` | Tables 7, 17, bit 6 | MM-1 (MM2S), S2-2 (S2MM) | a | CO-ER-01, RG-SR-05, S2-RS-05, S2-WR-04, SG-ER-01 | TC-CO-04, TC-RG-08, TC-S2-10, TC-SG-08 | Partly verified |
-| `MM2S_DMASR.SGIntErr` | Tables 7, 17, bit 8 | SG-1 | b | CO-SG-06, RG-SG-05, SG-FE-05 | TC-CO-14, TC-RG-20, TC-SG-07 | Verified |
-| `S2MM_DMASR.SGIntErr` | Tables 7, 17, bit 8 | SG-1 | b | CO-SG-06, RG-SG-05, SG-FE-05 | TC-CO-14, TC-RG-20, TC-SG-07 | Verified |
-| `MM2S_DMASR.SGSlvErr` | Tables 7, 17, bit 9 | SG-3 | b | CO-SG-06, RG-SG-05, SG-ER-02, SG-ER-04 | TC-CO-14, TC-RG-20, TC-SG-09 | Partly verified |
-| `S2MM_DMASR.SGSlvErr` | Tables 7, 17, bit 9 | SG-3 | b | CO-SG-06, RG-SG-05, SG-ER-02, SG-ER-04 | TC-CO-14, TC-RG-20, TC-SG-09 | Partly verified |
-| `MM2S_DMASR.SGDecErr` | Tables 7, 17, bit 10 | SG-3 | b | RG-SG-05, SG-ER-02, SG-ER-04 | TC-RG-20, TC-SG-09 | Partly verified |
-| `S2MM_DMASR.SGDecErr` | Tables 7, 17, bit 10 | SG-3 | b | RG-SG-05, SG-ER-02, SG-ER-04 | TC-RG-20, TC-SG-09 | Partly verified |
+| `MM2S_DMASR.DMASlvErr` | Tables 7, 17, bit 5 | MM-1 (MM2S), S2-2 (S2MM) | a | CO-ER-01, MM-ER-01, MM-ER-02, MM-ER-03, PKG-13, RG-SR-05, SG-ER-01 | TC-CO-04, TC-MM-09, TC-MM-15, TC-PKG-15, TC-RG-08, TC-SG-08 | Verified |
+| `S2MM_DMASR.DMASlvErr` | Tables 7, 17, bit 5 | MM-1 (MM2S), S2-2 (S2MM) | a | CO-ER-01, PKG-13, RG-SR-05, S2-RS-03, S2-RS-05, SG-ER-01 | TC-CO-04, TC-PKG-15, TC-RG-08, TC-S2-09, TC-S2-15, TC-S2-19, TC-SG-08 | Verified |
+| `MM2S_DMASR.DMADecErr` | Tables 7, 17, bit 6 | MM-1 (MM2S), S2-2 (S2MM) | a | CO-ER-01, MM-ER-03, MM-RD-04, PKG-13, RG-SR-05, SG-ER-01 | TC-CO-04, TC-MM-07, TC-MM-10, TC-MM-15, TC-PKG-15, TC-RG-08, TC-SG-08 | Verified |
+| `S2MM_DMASR.DMADecErr` | Tables 7, 17, bit 6 | MM-1 (MM2S), S2-2 (S2MM) | a | CO-ER-01, PKG-13, RG-SR-05, S2-RS-05, S2-WR-04, SG-ER-01 | TC-CO-04, TC-PKG-15, TC-RG-08, TC-S2-10, TC-S2-15, TC-SG-08 | Verified |
+| `MM2S_DMASR.SGIntErr` | Tables 7, 17, bit 8 | SG-1 | b | CO-SG-06, RG-SG-05, SG-FE-05 | TC-CO-14, TC-CO-18, TC-RG-20, TC-SG-07 | Verified |
+| `S2MM_DMASR.SGIntErr` | Tables 7, 17, bit 8 | SG-1 | b | CO-SG-06, RG-SG-05, SG-FE-05 | TC-CO-14, TC-CO-18, TC-RG-20, TC-SG-07 | Verified |
+| `MM2S_DMASR.SGSlvErr` | Tables 7, 17, bit 9 | SG-3 | b | CO-SG-06, RG-SG-05, SG-ER-02, SG-ER-04 | TC-CO-14, TC-CO-18, TC-RG-20, TC-SG-09, TC-SG-18 | Verified |
+| `S2MM_DMASR.SGSlvErr` | Tables 7, 17, bit 9 | SG-3 | b | CO-SG-06, RG-SG-05, SG-ER-02, SG-ER-04 | TC-CO-14, TC-CO-18, TC-RG-20, TC-SG-09, TC-SG-18 | Verified |
+| `MM2S_DMASR.SGDecErr` | Tables 7, 17, bit 10 | SG-3 | b | CO-SG-06, RG-SG-05, SG-ER-02, SG-ER-04 | TC-CO-14, TC-CO-18, TC-RG-20, TC-SG-09, TC-SG-18 | Verified |
+| `S2MM_DMASR.SGDecErr` | Tables 7, 17, bit 10 | SG-3 | b | CO-SG-06, RG-SG-05, SG-ER-02, SG-ER-04 | TC-CO-14, TC-CO-18, TC-RG-20, TC-SG-09, TC-SG-18 | Verified |
 | `MM2S_DMASR.IOC_Irq` | Tables 7, 17, bit 12 | RG-2 | a | RG-IR-01, RG-SG-06, SG-UP-04, SG-UP-05 | TC-RG-04, TC-RG-05, TC-RG-07, TC-RG-21, TC-SG-06, TC-SG-16 | Verified |
 | `S2MM_DMASR.IOC_Irq` | Tables 7, 17, bit 12 | RG-2 | a | RG-IR-01, RG-SG-06, SG-UP-04, SG-UP-05 | TC-RG-04, TC-RG-05, TC-RG-07, TC-RG-21, TC-SG-06, TC-SG-16 | Verified |
 | `MM2S_DMASR.Dly_Irq` | Tables 7, 17, bit 13 | RG-2 | b | CO-SG-07, RG-SG-07, RG-SG-08 | TC-CO-16, TC-RG-22 | Verified |
@@ -93,29 +93,29 @@ the published interface are listed in section 6 of the architecture and in the m
 | `DESC.BUFFER_ADDRESS` | Tables 28, 35 | SG-1 | b | SG-FE-01 | TC-SG-01 | Verified |
 | `DESC.BUFFER_ADDRESS_MSB` | Tables 29, 36 | SG-1 | b | SG-IF-03 | TC-SG-01 | Verified |
 | `DESC.MM2S_CONTROL.BufferLength` | Table 30, bits 25 to 0 | SG-1 | b | SG-IF-03, SG-TR-01 | TC-SG-01, TC-SG-16 | Verified |
-| `DESC.MM2S_CONTROL.TXEOF` | Table 30, bit 26 | SG-1 | b | MM-SG-01, SG-TR-01 | TC-SG-01, TC-SG-16 | Partly verified |
+| `DESC.MM2S_CONTROL.TXEOF` | Table 30, bit 26 | SG-1 | b | MM-SG-01, SG-TR-01 | TC-MM-16, TC-SG-01, TC-SG-16 | Verified |
 | `DESC.MM2S_CONTROL.TXSOF` | Table 30, bit 27 | SG-1 | b | SG-TR-01 | TC-SG-01, TC-SG-16 | Verified |
-| `DESC.MM2S_STATUS.TransferredBytes` | Table 31, bits 25 to 0 | SG-2 | b | MM-SG-02, SG-UP-01, SG-UP-02 | TC-SG-02, TC-SG-16 | Partly verified |
+| `DESC.MM2S_STATUS.TransferredBytes` | Table 31, bits 25 to 0 | SG-2 | b | MM-SG-02, SG-UP-01, SG-UP-02 | TC-MM-17, TC-SG-02, TC-SG-16 | Verified |
 | `DESC.MM2S_STATUS.DMAIntErr` | Table 31, bit 28 | SG-2 | b | SG-FE-06 | TC-SG-08 | Verified |
 | `DESC.MM2S_STATUS.DMASlvErr` | Table 31, bit 29 | SG-2 | b | SG-ER-01 | TC-SG-08 | Verified |
 | `DESC.MM2S_STATUS.DMADecErr` | Table 31, bit 30 | SG-2 | b | SG-ER-01 | TC-SG-08 | Verified |
 | `DESC.MM2S_STATUS.Cmplt` | Table 31, bit 31 | SG-2 | b | SG-FE-05, SG-UP-01 | TC-SG-02, TC-SG-07, TC-SG-16 | Verified |
 | `DESC.MM2S_APP` | Table 32 | MM-3 | c | - | - | Planned |
-| `DESC.S2MM_CONTROL.BufferLength` | Table 37, bits 25 to 0 | SG-1 | b | S2-SG-01, SG-IF-03, SG-TR-02 | TC-SG-01, TC-SG-16 | Partly verified |
+| `DESC.S2MM_CONTROL.BufferLength` | Table 37, bits 25 to 0 | SG-1 | b | S2-SG-01, SG-IF-03, SG-TR-02 | TC-S2-17, TC-S2-19, TC-SG-01, TC-SG-16 | Verified |
 | `DESC.S2MM_CONTROL.RXSOF` | Table 37, bit 27 (micro mode) | SG-1 | c | - | - | Planned |
 | `DESC.S2MM_CONTROL.RXEOF` | Table 37, bit 26 (micro mode) | SG-1 | c | - | - | Planned |
 | `DESC.S2MM_STATUS.TransferredBytes` | Table 38, bits 25 to 0 | SG-2 | b | SG-UP-01, SG-UP-03 | TC-SG-02, TC-SG-16 | Verified |
-| `DESC.S2MM_STATUS.RXEOF` | Table 38, bit 26 | SG-2 | b | S2-SG-02, SG-UP-03 | TC-SG-02, TC-SG-16 | Partly verified |
-| `DESC.S2MM_STATUS.RXSOF` | Table 38, bit 27 | SG-2 | b | S2-SG-02, SG-UP-03 | TC-SG-02, TC-SG-16 | Partly verified |
+| `DESC.S2MM_STATUS.RXEOF` | Table 38, bit 26 | SG-2 | b | S2-SG-02, SG-UP-03 | TC-S2-17, TC-S2-19, TC-SG-02, TC-SG-16 | Verified |
+| `DESC.S2MM_STATUS.RXSOF` | Table 38, bit 27 | SG-2 | b | S2-SG-02, SG-UP-03 | TC-S2-17, TC-S2-19, TC-SG-02, TC-SG-16 | Verified |
 | `DESC.S2MM_STATUS.DMAIntErr` | Table 38, bit 28 | SG-2 | b | SG-FE-06 | TC-SG-08 | Verified |
 | `DESC.S2MM_STATUS.DMASlvErr` | Table 38, bit 29 | SG-2 | b | SG-ER-01 | TC-SG-08 | Verified |
 | `DESC.S2MM_STATUS.DMADecErr` | Table 38, bit 30 | SG-2 | b | SG-ER-01 | TC-SG-08 | Verified |
 | `DESC.S2MM_STATUS.Cmplt` | Table 38, bit 31 | SG-2 | b | SG-FE-05, SG-UP-01 | TC-SG-02, TC-SG-07, TC-SG-16 | Verified |
 | `DESC.S2MM_APP` | Table 39, APP0 to APP3 | S2-3 | c | - | - | Planned |
 | `DESC.S2MM_APP4` | Table 40, APP4 and receive length | S2-3 | c | - | - | Planned |
-| `DESCMGMT.TAIL` | Section "Descriptor Management", tail pointer mode | SG-1 | b | CO-SG-04, RG-SG-03, S2-SG-03, SG-FE-02, SG-FE-03, SG-FE-04, SG-TR-04 | TC-CO-12, TC-RG-16, TC-RG-18, TC-SG-03, TC-SG-04, TC-SG-16 | Partly verified |
-| `STRM.MM2S` | Section "MM2S Descriptor Settings and AXI Control Stream", Figure 37 (data stream) | MM-2 | a | CO-IF-02, MM-IF-02, MM-SG-01, MM-ST-01, MM-ST-02 | TC-CO-02, TC-MM-01, TC-MM-02, TC-MM-04, TC-MM-14 | Partly verified |
-| `STRM.S2MM` | Section "S2MM Descriptor Settings and AXI Status Stream", Figure 39 (data stream) | S2-1 | a | CO-IF-02, S2-IF-02, S2-SG-01, S2-ST-01, S2-ST-02, S2-WR-01, S2-WR-02 | TC-CO-02, TC-S2-01, TC-S2-02, TC-S2-03, TC-S2-05, TC-S2-07, TC-S2-08, TC-S2-11, TC-S2-14, TC-S2-16 | Partly verified |
+| `DESCMGMT.TAIL` | Section "Descriptor Management", tail pointer mode | SG-1 | b | CO-SG-04, RG-SG-03, S2-SG-03, SG-FE-02, SG-FE-03, SG-FE-04, SG-TR-04 | TC-CO-12, TC-RG-16, TC-RG-18, TC-S2-18, TC-SG-03, TC-SG-04, TC-SG-16 | Verified |
+| `STRM.MM2S` | Section "MM2S Descriptor Settings and AXI Control Stream", Figure 37 (data stream) | MM-2 | a | CO-IF-02, MM-IF-02, MM-SG-01, MM-ST-01, MM-ST-02 | TC-CO-02, TC-MM-01, TC-MM-02, TC-MM-04, TC-MM-14, TC-MM-16 | Verified |
+| `STRM.S2MM` | Section "S2MM Descriptor Settings and AXI Status Stream", Figure 39 (data stream) | S2-1 | a | CO-IF-02, S2-IF-02, S2-SG-01, S2-ST-01, S2-ST-02, S2-WR-01, S2-WR-02 | TC-CO-02, TC-S2-01, TC-S2-02, TC-S2-03, TC-S2-05, TC-S2-07, TC-S2-08, TC-S2-11, TC-S2-14, TC-S2-16, TC-S2-17, TC-S2-18, TC-S2-19 | Verified |
 | `STRM.CNTRL` | Section "AXI Control Stream", Figure 38 | MM-3 | c | - | - | Planned |
 | `STRM.STS` | Section "AXI Status Stream", Figure 40 | S2-3 | c | - | - | Planned |
 | `STRM.RXLENGTH` | Section "Customizing and Generating the Core", Use RxLength In Status Stream | S2-3 | c | - | - | Planned |
@@ -135,11 +135,11 @@ the published interface are listed in section 6 of the architecture and in the m
 | `FEAT.MULTICHANNEL` | Section "Multichannel DMA Support" | Out of scope | - | - | - | Out of scope |
 | `SEQ.DR.MM2S` | Section "Programming Sequence", Direct Register Mode, MM2S | CO-1 | a | CO-SQ-01, CO-SQ-03 | TC-CO-01, TC-CO-02, TC-CO-03, TC-CO-04 | Verified |
 | `SEQ.DR.S2MM` | Section "Programming Sequence", Direct Register Mode, S2MM | CO-1 | a | CO-SQ-02, CO-SQ-03 | TC-CO-01, TC-CO-02, TC-CO-03, TC-CO-04 | Verified |
-| `SEQ.SG.MM2S` | Section "Programming Sequence", Scatter/Gather Mode, MM2S | CO-1 | b | CO-SG-02, CO-SG-09, SG-IF-02, SG-TR-01 | TC-CO-11, TC-CO-12, TC-SG-01, TC-SG-16 | Partly verified |
-| `SEQ.SG.S2MM` | Section "Programming Sequence", Scatter/Gather Mode, S2MM | CO-1 | b | CO-SG-03, CO-SG-10, SG-IF-02, SG-TR-02 | TC-CO-11, TC-CO-12, TC-SG-01, TC-SG-16 | Partly verified |
+| `SEQ.SG.MM2S` | Section "Programming Sequence", Scatter/Gather Mode, MM2S | CO-1 | b | CO-SG-02, CO-SG-09, SG-IF-02, SG-TR-01 | TC-CO-11, TC-CO-12, TC-CO-18, TC-SG-01, TC-SG-16 | Verified |
+| `SEQ.SG.S2MM` | Section "Programming Sequence", Scatter/Gather Mode, S2MM | CO-1 | b | CO-SG-03, CO-SG-10, SG-IF-02, SG-TR-02 | TC-CO-11, TC-CO-12, TC-CO-18, TC-CO-20, TC-SG-01, TC-SG-16 | Verified |
 | `SEQ.CYCLIC` | Section "Cyclic DMA Mode", Figure 48 | CO-1 | b | CO-SG-05, SG-CY-01 | TC-CO-13, TC-SG-07, TC-SG-13 | Verified |
 
-Items: 121; out of scope: 3; partly verified: 22; planned: 9; verified: 87.
+Items: 121; out of scope: 3; planned: 9; verified: 109.
 
 ## 2. Requirements
 
@@ -148,14 +148,14 @@ of the published interface included).
 
 | Module | Requirements | Verified by a test case | Without a test case | Waiting for Open Logic |
 | --- | --- | --- | --- | --- |
-| `odma_core` | 25 | 22 | - | CO-SG-09, CO-SG-10, CO-SG-11 |
-| `odma_mm2s` | 22 | 17 | - | MM-ER-03, MM-SG-01, MM-SG-02, MM-SG-03, MM-SG-04 |
-| `odma_pkg` | 11 | 11 | - | - |
-| `odma_registers` | 53 | 52 | - | RG-SG-11 |
-| `odma_s2mm` | 25 | 20 | - | S2-RS-05, S2-SG-01, S2-SG-02, S2-SG-03, S2-SG-04 |
-| `odma_sg` | 27 | 26 | - | SG-ER-04 |
+| `odma_core` | 26 | 26 | - | - |
+| `odma_mm2s` | 22 | 22 | - | - |
+| `odma_pkg` | 13 | 13 | - | - |
+| `odma_registers` | 53 | 53 | - | - |
+| `odma_s2mm` | 25 | 25 | - | - |
+| `odma_sg` | 27 | 27 | - | - |
 
-Requirements: 163; without a test case: 0; test cases of the plans not run by a testbench: 0.
+Requirements: 166; without a test case: 0; test cases of the plans not run by a testbench: 0.
 
 ## 3. Interpretations of the published interface
 
@@ -178,6 +178,7 @@ state it (the architecture, section 6, and the module specifications, section 4)
 | I11 | MM2S transfer with a memory error | Streams potentially terminated early | The data of the transfer is sent completely with `TLast`, then the channel halts with the error flag; software discards the packet | architecture, odma_mm2s |
 | I12 | Reset outputs | Active-low `*_reset_out_n` (Table 3) | High-active (Open Logic convention), with the same function | architecture, odma_registers |
 | I13 | S2MM write error in DR mode | Table 17 sets `DMAIntErr` for any error of the memory write in DR mode, next to the flags of the response | Both are set: `DMAIntErr` and `DMASlvErr` or `DMADecErr` | architecture, odma_registers |
+| I14 | EXOKAY response | Tables 7 and 17 name SLVERR and DECERR; EXOKAY is not described | OpenDMA never requests exclusive access, so EXOKAY is a protocol violation of the slave; it counts as SLVERR (`DMASlvErr`, `SGSlvErr`). Observable: an EXOKAY response sets the slave error flag of the access | architecture, odma_mm2s, odma_s2mm, odma_sg |
 | M1 | - | Reads at beat granularity are not described | The other bytes of the first and the last memory word are read and discarded (MM-RD-01, architecture P6) | odma_mm2s |
 | M2 | - | A double error in the read data buffer is not part of PG021 | The beat is sent as read from the buffer and counted (MM-FT-01, extension window); the transfer result is not changed, so the register interface keeps its PG021 behaviour | odma_mm2s |
 | M4 | - | `RS` = 0 in Scatter/Gather Mode: "AXI4-Stream outs are potentially terminated early" | A packet of several descriptors ends with `TLast` on the last beat of the descriptor in progress (MM-SG-04) | odma_mm2s |
@@ -196,6 +197,8 @@ state it (the architecture, section 6, and the module specifications, section 4)
 | S2 | - | Write errors in the middle of a packet are not described | No further write, rest discarded, result once the outstanding writes have answered (S2-RS-03, S2-RS-04) | odma_s2mm |
 | S3 | - | A double error in a buffer is not part of PG021 | The data is written as read from the buffer and counted (S2-FT-01, extension window); the result is not changed | odma_s2mm |
 | S4 | - | A buffer length of 0 is an internal error of a descriptor in Scatter/Gather Mode (Table 38, `DMAIntErr`) | The channel ends a command of length 0 without a write and with the internal error code (S2-WR-06); the register interface of DR mode never issues one | odma_s2mm |
+| SGI-13 | - | Table 38 (`S2MM_STATUS.RXSOF`, `RXEOF`): `RXSOF` marks the buffer that holds the start of a packet; a packet without bytes is not described | A packet without bytes (only a last beat without valid bytes) starts and ends in one buffer: its result carries 0 bytes, the start and the end of packet (S2-SG-02). Observable: a status word with 0 transferred bytes and `RXSOF` and `RXEOF` set | odma_s2mm, odma_sg |
+| SGI-14 | - | Table 38 (`S2MM_STATUS.RXSOF`): the start of packet of a descriptor that receives no byte and no end of packet is not described | A transfer that ends without data and without the end of a packet (a buffer length of 0, a buffer beyond the top of the address space, a transfer that has not started) belongs to no packet: its result carries neither the start nor the end of packet (S2-SG-02). Observable: the status of an S2MM descriptor with a buffer length of 0 or beyond the top of the address space has `RXSOF` = 0 | odma_s2mm, odma_sg |
 | SGI-01 | - | Table 10 states that a write of `TAILDESC` starts the engine, Table 11 the same for `TAILDESC_MSB`; the order of the two writes of a 64-bit pointer is not described | With `AddrWidth_g` = 32 the write of `TAILDESC` starts it. Above 32 address bits the write of `TAILDESC_MSB` starts it, so that the engine starts with the complete pointer (SG-FE-02). The public drivers write the low word first: the Linux driver (`drivers/dma/xilinx/xilinx_dma.c`, state of commit 7ed1e3070c9b) writes the pointer registers with `xilinx_write`, which uses `lo_hi_writeq` for addresses above 32 bits; the bare-metal driver (`XilinxProcessorIPLib/drivers/axidma/src/xaxidma_bdring.c` of the embeddedsw repository, state of commit a4dab0553492) writes `TDESC` and then `TDESC_MSB` in `XAxiDma_StartBdRingHw` and `XAxiDma_BdRingToHw`, and `CDESC` before `CDESC_MSB` in `XAxiDma_UpdateBdRingCDesc` | odma_sg |
 | SGI-02 | - | The status of a descriptor whose transfer failed is not described beyond the error flags | The status gets the error flags, the bytes transferred until the error and `Cmplt` = 0: the transfer described by the descriptor was not completed (SG-UP-01, SG-ER-01). A stale descriptor (SG-FE-05) is not written | odma_sg |
 | SGI-03 | - | A packet needs a descriptor with `TXSOF` and one with `TXEOF` ("for proper operation") | The data stream ends a packet after each descriptor with `TXEOF`; the next descriptor starts a new packet whether `TXSOF` is set or not. `TXSOF` selects the descriptor whose user application fields go to the control stream (phase c) | odma_sg |
@@ -209,4 +212,4 @@ state it (the architecture, section 6, and the module specifications, section 4)
 | SGI-11 | - | Table 38 (`S2MM_STATUS.Cmplt`, `S2MM_STATUS.RXEOF`), Tables 16 and 17 (halt): the status of a buffer whose packet a halt cut off is not described | The status gets the bytes written, `RXSOF` as received, `RXEOF` = 0 and `Cmplt` = 1: the buffer was processed, and the missing `RXEOF` shows that the packet is incomplete. `Cmplt` = 0 is reserved for failed transfers (SGI-02). Observable: after a halt, the last completed S2MM descriptor can have `Cmplt` = 1 without `RXEOF`, and no later descriptor holds the rest of that packet (SG-HA-01, SG-UP-03) | odma_sg |
 | SGI-12 | - | Tables 7 and 17 (`IOC_Irq`, `Err_Irq`, the error flags), Tables 31 and 38 (the status words): the order of the status write and the interrupt and error flags is not described | `IOC_Irq` (through the threshold counter) and the error flags of a transfer are set only after the memory has answered the status write of the descriptor, so the status words are in memory when software sees a flag or the interrupt. A failed status write sets `SGSlvErr` or `SGDecErr` instead and raises no `IOC_Irq` for that packet (SG-UP-04, SG-UP-05, SG-ER-01, SG-ER-02) | odma_sg |
 
-Interpretations: 43.
+Interpretations: 46.

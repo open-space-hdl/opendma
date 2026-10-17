@@ -6,9 +6,7 @@ Run on 2026-10-17 with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7, UVVM 2026.03.20: `p
 
 | Testbench | Tests | Passed |
 | --- | --- | --- |
-| `odma_registers_tb` | 39 (23 test cases; Direct Register Mode: TC-RG-02 in two configurations, TC-RG-12 in two, TC-RG-15 in three; Scatter/Gather Mode: TC-RG-16 in five, TC-RG-17 and TC-RG-18 in three, TC-RG-19 in three, TC-RG-20 in two, TC-RG-23 in two) | 39 |
-
-TC-RG-24 waits for the FIXED bursts of Open Logic (verification plan, section 3.1).
+| `odma_registers_tb` | 40 (24 test cases; Direct Register Mode: TC-RG-02 in two configurations, TC-RG-12 in two, TC-RG-15 in three; Scatter/Gather Mode: TC-RG-16 in five, TC-RG-17 and TC-RG-18 in three, TC-RG-19 in three, TC-RG-20 in two, TC-RG-23 in two) | 40 |
 
 ## 2. Summary
 
@@ -29,7 +27,7 @@ Findings:
 | A reload of the threshold counter in the clock cycle of the `DMACR` write would load the old `IRQThreshold` | The reload is a registered pulse one clock cycle after the write, with the new value (architecture section 5); TC-RG-21 |
 | PG021 leaves open what a `TAILDESC` write does while the channel stops after a halt request | It only stores the pointer, as while halted (RG-SG-03); TC-RG-18 |
 | An error report of the engine in the clock cycle of a start would have left the channel in `Started_s` with `Run` = '0' | The error moves the channel to `Stopping_s` whenever the next state is `Started_s` (architecture section 4.3) |
-| The S2MM keyhole of Direct Register Mode would reach a channel that cannot make FIXED bursts yet | The command keyhole stays '0' until Open Logic provides them (RG-SG-11, waiting) |
+| `S2MM_DMACR.Keyhole` can change while a transfer of Direct Register Mode runs | The S2MM command carries the bit as stored at the write of `S2MM_LENGTH` (RG-SG-11); the MM2S command never carries it (interpretation I1); TC-RG-24 |
 
 ## 3. Generic ranges
 

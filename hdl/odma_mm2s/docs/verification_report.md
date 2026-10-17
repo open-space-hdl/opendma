@@ -2,19 +2,17 @@
 
 ## 1. Test results
 
-Run on 2026-10-16 with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7, UVVM 2026.03.20: `python run.py "*odma_mm2s*"`.
+Run on 2026-10-17 with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7, UVVM 2026.03.20: `python run.py "*odma_mm2s*"`.
 
 | Testbench | Tests | Passed |
 | --- | --- | --- |
-| `odma_mm2s_tb` | 140 (14 test cases in 10 configurations) | 140 |
-
-TC-MM-15 waits for Open Logic (verification plan, section 3.1) and is not run.
+| `odma_mm2s_tb` | 312 (19 test cases: 16 in all 18 configurations, TC-MM-16 to TC-MM-18 in the eight `j_` configurations) | 312 |
 
 ## 2. Summary
 
-All test cases pass; every requirement of the specification is covered, except MM-ER-03, which waits for Open Logic
-(section 3). VSG reports no errors and no warnings. The sources analyse with `ghdl -a --std=08` without `-frelaxed`
-and without warnings, and synthesise with `ghdl --synth` without warnings and without latches in the configurations
+All test cases pass; every requirement of the specification is covered. VSG reports no errors and no warnings.
+The sources analyse with `ghdl -a --std=08` without `-frelaxed` and without warnings, and synthesise with
+`ghdl --synth` without warnings and without latches in the configurations
 of section 4.
 
 Measured throughput of TC-MM-05 (64 bursts or the longest length, memory and stream peer always ready):
@@ -47,13 +45,13 @@ Findings:
 | TC-MM-13 injected the error into the first word of a transfer, which left the read data buffer at once; a fault that did not qualify the ECC event with the handshake passed | TC-MM-13 injects into a transfer that waits at the output of the buffers behind another transfer |
 | The memory was filled with a count pattern that repeats every 256 bytes, so a read from an address wrong by a multiple of 256 bytes (a later burst at the address of the first one, a wrong 4 KB page after a split) delivered the expected bytes | The memory model fills a pattern that depends on every address bit (`odmaMemByte`, requirement PKG-10 of `odma_pkg`); the checker compares with the memory contents at the address of each byte. Three address faults are in the table of section 5 |
 
-## 3. Known deviation
+## 3. Response codes
 
-Open Logic 4.7.0-ft.6 reports a failed read command of `olo_ft_axi_master_full` without its response code (gap G5 of
-the architecture). The channel gives every failed transfer the slave error code (constant `RdErrCode_c` of
-`odma_mm2s_command`), so a DECERR response of the memory sets `MM2S_DMASR.DMASlvErr` instead of `DMADecErr`.
-MM-ER-03 and its test case TC-MM-15 take effect with the Open Logic release that reports the response code. The
-decode error of a buffer beyond the top of the address space (MM-RD-04) is not affected.
+The read master reports the response code of a failed command (`Rd_ErrorResp`, gap G5 of the architecture). The
+channel maps DECERR to the decode error and SLVERR and EXOKAY to the slave error (interpretation I14); the first
+failing response of a transfer decides. TC-MM-15 checks every response type and both orders within one transfer. The
+decode error of a buffer beyond the top of the address space (MM-RD-04) comes from the channel itself, without a
+read.
 
 ## 4. Generic ranges
 
@@ -65,6 +63,7 @@ decode error of a buffer beyond the top of the address space (MM-RD-04) is not a
 | `StreamWidth_g` | 8 to 1024, powers of 2, at most `MemWidth_g` | all | 8, 1024 |
 | `BurstBeats_g` | 2 to 256, powers of 2 | 2, 4, 8, 16, 32, 256 | 2, 256 |
 | `BufferBeats_g` | at least 2 x `BurstBeats_g` x `MemWidth_g` / `StreamWidth_g` | four bursts | two bursts, four bursts |
+| `Join_g` | boolean | false, true (the `j_` configurations) | false, true (in the core, Scatter/Gather Mode) |
 
 ## 5. Checks of the testbench
 
@@ -87,5 +86,13 @@ at least one test case; the RTL of the repository passes all of them:
 | The read address is 256 bytes too high | TC-MM-01 |
 | The address after a 4 KB boundary is 4096 bytes too high (`olo_axi_master_simple`) | TC-MM-03 |
 | A single error in data mode flips two data bits (the word is corrupted instead of corrected) | TC-MM-13 |
+| The result of a transfer with the end of packet does not wait for its `TLast` beat | TC-MM-17 |
+| No closing beat when `Run` falls inside a packet of several commands | TC-MM-18 |
+| `Closed` always '1' (the channel reports stopped with a packet open) | TC-MM-18 |
+| `TLast` on the last beat of every command, also inside a packet | TC-MM-16 |
+| The open packet not tracked | TC-MM-18 |
+| The keyhole bit not passed to the read master | TC-MM-19 |
+| A keyhole buffer checked against the top of the address space | TC-MM-19 |
+| The slave error code for every failed read | TC-MM-15 |
 
 The recovery branches of the state machines (`when others`) cannot be reached through the ports.

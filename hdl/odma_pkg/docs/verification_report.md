@@ -19,23 +19,29 @@ Run on 2026-10-17 with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
 | `test_seq_errors` | TC-PKG-10 | PASS |
 | `test_model_dr` | TC-PKG-11 | PASS |
 | `test_mem_fill` | TC-PKG-12 | PASS |
+| `test_mem_fifo` | TC-PKG-14 | PASS |
+| `test_resp_err` | TC-PKG-15 | PASS |
 
 QuestaSim runs with the next batch of features (module workflow of the repository).
 
 ## 2. Summary
 
-All 13 test cases pass; every requirement of the specification is covered (see the verification plan). VSG reports no
+All 15 test cases pass; every requirement of the specification is covered (see the verification plan). VSG reports no
 errors and no warnings.
 
 - The functions agree with the independent computations of the bench for every tested width and length, and the
-  configuration check names the generic of every inconsistent configuration.
+  configuration check names the generic of every inconsistent configuration. `respErr` maps DECERR to the decode
+  error and SLVERR and EXOKAY to the slave error.
 - The fill pattern of the memory model gives every byte of a 64 KB range its `odmaMemByte` value; windows of
   256 bytes shifted by 1 to 32768 bytes and by 2**16 to 2**48 bytes differ from the original in at least 200 bytes,
   so a read from a wrong address cannot return the expected data.
 - The AXI memory model stores and returns INCR and FIXED bursts byte-exact at aligned and unaligned addresses, below
   and above 4 GB and at the top of the 64-bit space, with and without backpressure and latency; failed write beats
-  leave memory unchanged. Each of its eight protocol checks raises exactly the expected alerts.
-- The sequence player executes every command and reports a failed compare, an expired poll, an expired interrupt
+  leave memory unchanged; an EXOKAY response counts as a failure. A FIFO window maps the k-th read beat and the k-th
+  write beat at its word to the k-th word of the backing range, over bursts and transfers. Each of its eight protocol
+  checks raises exactly the expected alerts.
+- The sequence player executes every command, waits with `T` for single packets while later ones are queued, and
+  reports a failed compare, an expired poll, an expired interrupt
   wait and a mismatching stream packet with the line that caused them.
 - The model of the programming sequences reproduces the hand-written golden files of the reference scenario line by
   line, and its memory image passes the round trip through the loader and the checker.

@@ -130,8 +130,8 @@ package odma_registers_tb_pkg is
         SgKeyhole    : std_logic_vector(0 to 1);
         IrqRiseCycle : Nat_a;                    -- Clock cycle in which the interrupt output rose last
         PktCycle     : Nat_a;                    -- Clock cycle of the last Pkt pulse of the engine model
-        SgCurDiffer  : Nat_a;     -- Clock cycles of a running channel (after its first) with a CURDESC output that
-                                  -- differs from the pointer of the engine
+        SgCurDiffer  : Nat_a;                    -- Clock cycles of a running channel (after its first) with a CURDESC output that
+    -- differs from the pointer of the engine
     end record;
 
 end package;

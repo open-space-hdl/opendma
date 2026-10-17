@@ -185,7 +185,7 @@ architecture sim of odma_registers_th is
                                                     SgKeyhole    => "00",
                                                     IrqRiseCycle => (others => 0),
                                                      PktCycle     => (others => 0),
-                                                    SgCurDiffer  => (others => 0)
+                                                     SgCurDiffer  => (others => 0)
                                                  );
 
 begin

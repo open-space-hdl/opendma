@@ -85,8 +85,9 @@ stream data only while it runs; a packet that arrives before its transfer is pro
 Writing `RS` = 0 halts a channel; `DMASR.Halted` reads 1 once it has stopped. A transfer in progress is completed:
 MM2S sends it to its end; S2MM writes the chunks of the packet that are complete in its buffer, discards the rest of
 the packet up to its `TLast` and does not report the completion (interpretation I8 of `odma_registers`). A packet
-whose `TLast` the stream port accepted before the halt is written completely. A following start resumes the channel
-with the next programmed transfer.
+whose `TLast` the stream port accepted before the halt is written completely. `Halted` does not wait for the `TLast`
+of the discarded rest: the channel keeps dropping its beats while halted, also when the stream peer never ends the
+packet, and a soft reset ends that discard. A following start resumes the channel with the next programmed transfer.
 
 ### 5.4 Errors and soft reset
 

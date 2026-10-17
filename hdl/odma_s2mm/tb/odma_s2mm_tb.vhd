@@ -569,6 +569,53 @@ begin
                 transfer(region(5), minimum(2 * ChunkBytes_c, MaxLen_c), source(5), minimum(2 * ChunkBytes_c, MaxLen_c),
                          "packet after the errors");
 
+                -- A pending flush whose rest never arrives: SLVERR on the first chunk of a packet whose source stops
+                -- before its TLast. Without the split the flush waits for the rest; with the split it ends at once and
+                -- S2-1 waits instead. The fall of Run stops the channel within a bound (the open packet is cut), and the
+                -- core reset, which also resets the stream source, recovers the channel for the next packet
+                Len_v := minimum(4 * ChunkBytes_c, MaxLen_c);
+                Dst_v := region(6);
+                Res_v := Obs.ResCount;
+                prefill(Dst_v, Len_v);
+                Mem_v.setError(0, 0, Dst_v, Dst_v, ErrSlv_c, TbDirWrite);
+                clearStream;
+                send(source(6), Len_v);
+                sendCmd(Dst_v, Len_v);
+                -- The source stops after one and a half chunks and the beats that the split holds, or after half of a
+                -- shorter packet
+                wait until Obs.Beats >= minimum(ChunkBeats_c + ChunkBeats_c / 2 + SplitLag_c, Len_v / StreamBytes_c / 2)
+                    for 1 ms;
+                Gen.Hold <= '1';
+                if Len_v >= 2 * ChunkBytes_c then
+                    -- The first chunk is complete: its error result comes, then the flush of the rest
+                    waitRes(Res_v + 1);
+                    check_value(Obs.Results(Res_v mod MaxResults_c).Err, ErrSlv_c, ERROR, "pending flush: write error");
+                    cycles(200);
+                    if not Split_g then
+                        check_value(Stopped, '0', ERROR, "pending flush: the flush waits for the rest of the packet");
+                    end if;
+                end if;
+                ChRun <= '0';
+                if Stopped = '0' then
+                    wait until Stopped = '1' for 1000 * ClkPeriod_c;
+                end if;
+                check_value(Stopped, '1', ERROR, "pending flush: Stopped within 1000 clock cycles after the fall of Run");
+                -- Without a complete chunk the transfer ends with its result now
+                waitRes(Res_v + 1);
+                -- The core reset after the drain, as the soft reset of the core does it
+                ChDrain  <= '1';
+                wait until rising_edge(Clk) and Stopped = '1' for 1 ms;
+                RstIn    <= '1';
+                cycles(2);
+                RstIn    <= '0';
+                ChDrain  <= '0';
+                Gen.Hold <= '0';
+                Mem_v.clearErrors(0);
+                cycles(10);
+                ChRun    <= '1';
+                transfer(region(7), minimum(2 * ChunkBytes_c, MaxLen_c), source(7), minimum(2 * ChunkBytes_c, MaxLen_c),
+                         "packet after the core reset");
+
             elsif run("test_beyond_top") then
                 log(ID_LOG_HDR, "TC-S2-10 the top of the address space, a buffer length of 0");
                 Len_v := minimum(100, MaxLen_c);

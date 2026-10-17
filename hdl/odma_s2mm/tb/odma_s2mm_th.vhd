@@ -320,6 +320,12 @@ begin
                     S_Valid <= '0';
                 end if;
             end if;
+            -- The stream source is reset with the core, as it follows the reset output of the core: the packet in
+            -- progress ends without its TLast, the queued packets stay
+            if RstIn = '1' then
+                Active_v := false;
+                S_Valid  <= '0';
+            end if;
         end if;
     end process;
 

@@ -25,6 +25,7 @@ Simulator: GHDL; QuestaSim for the coverage batch. Clock 100 MHz.
 | `test_beyond_top` (TC-PKG-03) | `beyondTop` at 32 and 64 address bits: buffers ending at the top fit, one byte more does not; start at 0; length 1 and the largest length; length 0 at address 0, in the middle and at the top is never beyond the top | PKG-03 |
 | `test_config` (TC-PKG-04) | `coreConfigError` accepts the default and the boundary configurations and names the generic of each inconsistent one (memory width 24 and 2048, stream width above the memory width, burst beats 3 and 512, length width 7 and 27, address width 31 and 65, data buffer of one burst) | PKG-04 |
 | `test_err_codes` (TC-PKG-05) | Values of the error codes: SLVERR and DECERR equal the AXI response codes | PKG-05 |
+| `test_resp_err` (TC-PKG-15) | `respErr` of SLVERR, DECERR and EXOKAY: the slave error, the decode error and the slave error | PKG-13 |
 | `test_flip_pattern` (TC-PKG-13) | `flipPattern` for codewords of 8 and 39 bits in the four combinations of single or double error and parity or data mode: exactly the bits 0, 0 and 1, 3, 3 and 5 | PKG-11 |
 | `test_mem_bursts` (TC-PKG-06) | INCR bursts of 1, 2, 16 and 256 beats, unaligned start addresses, partial strobes, FIXED bursts of 1 and 16 beats, addresses below and above 2**32 and at the top of the 64-bit space; written data checked through the backdoor and by read bursts; statistics (bytes written, lowest and highest address, bursts, maximum outstanding); repeated with 50 % backpressure and a latency of 20 cycles | PKG-06 |
 | `test_mem_errors` (TC-PKG-07) | SLVERR, DECERR and EXOKAY ranges for reads and writes: the response of each burst that touches a range, no byte of a failed write beat written, unaffected bursts with OKAY | PKG-06 |
@@ -45,6 +46,7 @@ Simulator: GHDL; QuestaSim for the coverage batch. Clock 100 MHz.
 | PKG-04 | TC-PKG-04 |
 | PKG-05 | TC-PKG-05 |
 | PKG-11 | TC-PKG-13 |
+| PKG-13 | TC-PKG-15 |
 | PKG-06 | TC-PKG-06, TC-PKG-07 |
 | PKG-07 | TC-PKG-08 |
 | PKG-12 | TC-PKG-14 |

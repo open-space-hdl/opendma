@@ -379,6 +379,12 @@ begin
                 check_value(ErrSlv_c, AxiResp_SlvErr_c, ERROR, "ErrSlv_c equals SLVERR");
                 check_value(ErrDec_c, AxiResp_DecErr_c, ERROR, "ErrDec_c equals DECERR");
 
+            elsif run("test_resp_err") then
+                log(ID_LOG_HDR, "TC-PKG-15 error code of a failed AXI response");
+                check_value(respErr("10"), ErrSlv_c, ERROR, "SLVERR gives the slave error");
+                check_value(respErr("11"), ErrDec_c, ERROR, "DECERR gives the decode error");
+                check_value(respErr("01"), ErrSlv_c, ERROR, "EXOKAY gives the slave error, not the internal error");
+
             elsif run("test_flip_pattern") then
                 log(ID_LOG_HDR, "TC-PKG-13 flip pattern of the error injection");
                 check_value(flipPattern(8, '0', '0'), x"01", ERROR, "parity mode, single error");

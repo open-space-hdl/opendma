@@ -122,18 +122,18 @@ architecture sim of odma_registers_tb is
     -- Scatter/Gather Mode: fields and the reset value of DMASR (Halted, SGIncld, IRQThresholdSts 1)
     constant Keyhole_c      : Word_t := x"00000008";
     -- Keyhole of the DR command per channel: MM2S never (interpretation I1), S2MM from DMACR (RG-SG-11)
-    constant DrKeyhole_c : std_logic_vector(0 to 1) := (Mm2s_c => '0', S2mm_c => '1');
-    constant CyclicBd_c     : Word_t := x"00000010";
-    constant DlyIrqEn_c     : Word_t := x"00002000";
-    constant SgIncld_c      : Word_t := x"00000008";
-    constant SgIntErr_c     : Word_t := x"00000100";
-    constant SgSlvErr_c     : Word_t := x"00000200";
-    constant SgDecErr_c     : Word_t := x"00000400";
-    constant DlyIrq_c       : Word_t := x"00002000";
-    constant ThrMask_c      : Word_t := x"00FF0000";
-    constant DlyMask_c      : Word_t := x"FF000000";
-    constant DmasrSgReset_c : Word_t := x"00010009";
-    constant PtrMask_c      : Word_t := x"FFFFFFC0";
+    constant DrKeyhole_c    : std_logic_vector(0 to 1) := (Mm2s_c => '0', S2mm_c => '1');
+    constant CyclicBd_c     : Word_t                   := x"00000010";
+    constant DlyIrqEn_c     : Word_t                   := x"00002000";
+    constant SgIncld_c      : Word_t                   := x"00000008";
+    constant SgIntErr_c     : Word_t                   := x"00000100";
+    constant SgSlvErr_c     : Word_t                   := x"00000200";
+    constant SgDecErr_c     : Word_t                   := x"00000400";
+    constant DlyIrq_c       : Word_t                   := x"00002000";
+    constant ThrMask_c      : Word_t                   := x"00FF0000";
+    constant DlyMask_c      : Word_t                   := x"FF000000";
+    constant DmasrSgReset_c : Word_t                   := x"00010009";
+    constant PtrMask_c      : Word_t                   := x"FFFFFFC0";
 
     -- The tail pointer write that starts the engine (interpretation SGI-01)
     function tailTrigger return Nat_a is

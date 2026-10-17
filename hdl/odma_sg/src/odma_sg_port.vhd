@@ -113,14 +113,6 @@ end entity;
 ---------------------------------------------------------------------------------------------------
 architecture rtl of odma_sg_port is
 
-    -----------------------------------------------------------------------------------------------
-    -- G5 interim: olo_ft_axi_master_simple of Open Logic 4.7.0-ft.6 signals a failed command with
-    -- Rd_Error or Wr_Error only, without the AXI response code. Until the Open Logic release with
-    -- the response code (gap G5, specification section 3.8), every failed descriptor access gets
-    -- the slave error code.
-    -----------------------------------------------------------------------------------------------
-    constant SgErrCode_c : XferErr_t := ErrSlv_c;
-
     -- Beats of a fetch (8 words) and of a status write (1 word)
     constant SizeBits_c   : positive                                  := 5;
     constant FetchBeats_c : std_logic_vector(SizeBits_c - 1 downto 0) := std_logic_vector(to_unsigned(8, SizeBits_c));
@@ -166,25 +158,27 @@ architecture rtl of odma_sg_port is
     signal WrGrantRdy : std_logic;
 
     -- AXI4 master
-    signal CmdRd_Valid : std_logic;
-    signal CmdRd_Ready : std_logic;
-    signal CmdWr_Valid : std_logic;
-    signal CmdWr_Ready : std_logic;
-    signal Wr_Valid    : std_logic;
-    signal Wr_Ready    : std_logic;
-    signal Rd_Data     : std_logic_vector(31 downto 0);
-    signal Rd_Last     : std_logic;
-    signal Rd_Valid    : std_logic;
-    signal Rd_EccSec   : std_logic;
-    signal Rd_EccDed   : std_logic;
-    signal Wr_EccSec   : std_logic;
-    signal Wr_EccDed   : std_logic;
-    signal Wr_Done     : std_logic;
-    signal Wr_Error    : std_logic;
-    signal Rd_Done     : std_logic;
-    signal Rd_Error    : std_logic;
-    signal RdInjFlip   : std_logic_vector(eccCodewordWidth(32 + 1) - 1 downto 0);
-    signal WrInjFlip   : std_logic_vector(eccCodewordWidth(32 + 4) - 1 downto 0);
+    signal CmdRd_Valid  : std_logic;
+    signal CmdRd_Ready  : std_logic;
+    signal CmdWr_Valid  : std_logic;
+    signal CmdWr_Ready  : std_logic;
+    signal Wr_Valid     : std_logic;
+    signal Wr_Ready     : std_logic;
+    signal Rd_Data      : std_logic_vector(31 downto 0);
+    signal Rd_Last      : std_logic;
+    signal Rd_Valid     : std_logic;
+    signal Rd_EccSec    : std_logic;
+    signal Rd_EccDed    : std_logic;
+    signal Wr_EccSec    : std_logic;
+    signal Wr_EccDed    : std_logic;
+    signal Wr_Done      : std_logic;
+    signal Wr_Error     : std_logic;
+    signal Wr_ErrorResp : std_logic_vector(1 downto 0);
+    signal Rd_Done      : std_logic;
+    signal Rd_Error     : std_logic;
+    signal Rd_ErrorResp : std_logic_vector(1 downto 0);
+    signal RdInjFlip    : std_logic_vector(eccCodewordWidth(32 + 1) - 1 downto 0);
+    signal WrInjFlip    : std_logic_vector(eccCodewordWidth(32 + 4) - 1 downto 0);
 
 begin
 
@@ -266,7 +260,7 @@ begin
                 end if;
                 if Rd_Error = '1' then
                     v.RdResp := '1';
-                    v.RdErr  := SgErrCode_c;
+                    v.RdErr  := respErr(Rd_ErrorResp);
                 end if;
                 -- The end pulse follows the last word by at least one clock cycle
                 if r.RdLast = '1' and r.RdResp = '1' then
@@ -316,7 +310,7 @@ begin
             when Response_s =>
                 if Wr_Done = '1' or Wr_Error = '1' then
                     if Wr_Error = '1' then
-                        v.WrErr := SgErrCode_c;
+                        v.WrErr := respErr(Wr_ErrorResp);
                     else
                         v.WrErr := ErrNone_c;
                     end if;
@@ -421,8 +415,10 @@ begin
             Rd_EccDed         => Rd_EccDed,
             Wr_Done           => Wr_Done,
             Wr_Error          => Wr_Error,
+            Wr_ErrorResp      => Wr_ErrorResp,
             Rd_Done           => Rd_Done,
             Rd_Error          => Rd_Error,
+            Rd_ErrorResp      => Rd_ErrorResp,
             Wr_ErrInj_BitFlip => WrInjFlip,
             Wr_ErrInj_Valid   => EccInj_Valid(1),
             Rd_ErrInj_BitFlip => RdInjFlip,

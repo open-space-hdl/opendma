@@ -379,6 +379,17 @@ begin
                 check_value(ErrSlv_c, AxiResp_SlvErr_c, ERROR, "ErrSlv_c equals SLVERR");
                 check_value(ErrDec_c, AxiResp_DecErr_c, ERROR, "ErrDec_c equals DECERR");
 
+            elsif run("test_flip_pattern") then
+                log(ID_LOG_HDR, "TC-PKG-13 flip pattern of the error injection");
+                check_value(flipPattern(8, '0', '0'), x"01", ERROR, "parity mode, single error");
+                check_value(flipPattern(8, '1', '0'), x"03", ERROR, "parity mode, double error");
+                check_value(flipPattern(8, '0', '1'), x"08", ERROR, "data mode, single error");
+                check_value(flipPattern(8, '1', '1'), x"28", ERROR, "data mode, double error");
+                check_value(flipPattern(39, '0', '0'), std_logic_vector(to_unsigned(16#01#, 39)), ERROR, "39 bits, parity, single");
+                check_value(flipPattern(39, '1', '0'), std_logic_vector(to_unsigned(16#03#, 39)), ERROR, "39 bits, parity, double");
+                check_value(flipPattern(39, '0', '1'), std_logic_vector(to_unsigned(16#08#, 39)), ERROR, "39 bits, data, single");
+                check_value(flipPattern(39, '1', '1'), std_logic_vector(to_unsigned(16#28#, 39)), ERROR, "39 bits, data, double");
+
             elsif run("test_mem_bursts") then
                 log(ID_LOG_HDR, "TC-PKG-06 memory model bursts");
 

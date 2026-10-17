@@ -11,4 +11,7 @@ hdl/odma_s2mm/src/odma_s2mm_pkg.vhd
 hdl/odma_s2mm/src/odma_s2mm_write.vhd
 hdl/odma_s2mm/src/odma_s2mm_chunker.vhd
 hdl/odma_s2mm/src/odma_s2mm.vhd
+hdl/odma_sg/src/odma_sg_port.vhd
+hdl/odma_sg/src/odma_sg_channel.vhd
+hdl/odma_sg/src/odma_sg.vhd
 hdl/odma_core/src/odma_core.vhd

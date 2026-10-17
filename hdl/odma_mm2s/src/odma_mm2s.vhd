@@ -105,26 +105,6 @@ architecture rtl of odma_mm2s is
     constant XferWidth_c : positive := LengthWidth_g + 3;
     constant RespWidth_c : positive := 2;
 
-    -- Flip pattern of an injected error in a codeword of olo_ft_pkg_ecc. Parity mode (data '0'):
-    -- the overall parity (bit 0) and, for a double error, the Hamming parity p0 (bit 1), so the
-    -- data never changes. Data mode: data bit 0 (codeword bit 3) and, for a double error, data
-    -- bit 1 (codeword bit 5); a double error then corrupts the word
-    function flipPattern (
-        width  : positive;
-        double : std_logic;
-        data   : std_logic) return std_logic_vector is
-        variable Flip_v : std_logic_vector(width - 1 downto 0) := (others => '0');
-    begin
-        if data = '1' then
-            Flip_v(3) := '1';
-            Flip_v(5) := double;
-        else
-            Flip_v(0) := '1';
-            Flip_v(1) := double;
-        end if;
-        return Flip_v;
-    end function;
-
     -- Command block to the transfer and response buffers
     signal Xfer_InValid  : std_logic;
     signal Xfer_InReady  : std_logic;

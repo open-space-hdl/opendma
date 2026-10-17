@@ -26,7 +26,7 @@ dmacr_fields: &dmacr_fields
   - {name: RS, bits: "0", access: RW, reset: 0, description: "Run (1) or stop (0) the channel; a start is refused while an error flag of the channel is set"}
   - {name: Reserved, bits: "1", access: RO, reset: 1, description: Reads 1}
   - {name: Reset, bits: "2", access: RW, reset: 0, description: "Write 1: soft reset of the whole core (both channels); reads 1 until the reset is complete"}
-  - {name: Keyhole, bits: "3", access: RW, reset: 0, description: "Non-incrementing bursts (keyhole) for the transfers of the channel, taken at the start of a transfer or descriptor fetch: S2MM in both modes, MM2S in Scatter/Gather Mode; the bursts stay incrementing until Open Logic provides FIXED bursts"}
+  - {name: Keyhole, bits: "3", access: RW, reset: 0, description: "Non-incrementing bursts (keyhole) for the transfers of the channel, taken at the start of a transfer or descriptor fetch: S2MM in both modes, MM2S in Scatter/Gather Mode: FIXED bursts of at most 16 beats at the buffer address with the bits below the memory width cleared"}
   - {name: CyclicBD, bits: "4", access: RW, reset: 0, description: "Cyclic descriptor mode (Scatter/Gather Mode): the engine ignores the tail pointer and the completed bit of the descriptors; no function in Direct Register Mode"}
   - {name: IOC_IrqEn, bits: "12", access: RW, reset: 0, description: "IOC_Irq drives the interrupt output of the channel"}
   - {name: Dly_IrqEn, bits: "13", access: RW, reset: 0, description: "Dly_Irq drives the interrupt output of the channel (Scatter/Gather Mode)"}
@@ -39,11 +39,11 @@ dmasr_fields: &dmasr_fields
   - {name: Idle, bits: "1", access: RO, reset: 0, description: "Direct Register Mode: the last transfer is complete and no new one has started; Scatter/Gather Mode: the engine has reached the tail and completed its descriptors; 0 while halted and before the first transfer"}
   - {name: SGIncld, bits: "3", access: RO, reset: IncludeSg_g, description: "Scatter/Gather Mode included"}
   - {name: DMAIntErr, bits: "4", access: RO, reset: 0, description: "Internal error: S2MM packet longer than the buffer (Direct Register Mode), S2MM write error, descriptor with buffer length 0 (Scatter/Gather Mode); MM2S: 0 in Direct Register Mode"}
-  - {name: DMASlvErr, bits: "5", access: RO, reset: 0, description: "Slave error response (SLVERR) of the memory"}
+  - {name: DMASlvErr, bits: "5", access: RO, reset: 0, description: "Slave error response (SLVERR, and EXOKAY) of the memory"}
   - {name: DMADecErr, bits: "6", access: RO, reset: 0, description: "Decode error response (DECERR) of the memory or a buffer beyond the top of the address space"}
   - {name: SGIntErr, bits: "8", access: RO, reset: 0, description: "Stale descriptor: completed bit set outside cyclic mode (Scatter/Gather Mode); 0 in Direct Register Mode"}
-  - {name: SGSlvErr, bits: "9", access: RO, reset: 0, description: "Error response of a descriptor fetch or status write (Scatter/Gather Mode; SLVERR, and DECERR until Open Logic reports the response code); 0 in Direct Register Mode"}
-  - {name: SGDecErr, bits: "10", access: RO, reset: 0, description: "Decode error (DECERR) of a descriptor fetch or status write (Scatter/Gather Mode, once Open Logic reports the response code); 0 in Direct Register Mode"}
+  - {name: SGSlvErr, bits: "9", access: RO, reset: 0, description: "Slave error response (SLVERR, and EXOKAY) of a descriptor fetch or status write (Scatter/Gather Mode); 0 in Direct Register Mode"}
+  - {name: SGDecErr, bits: "10", access: RO, reset: 0, description: "Decode error response (DECERR) of a descriptor fetch or status write (Scatter/Gather Mode); 0 in Direct Register Mode"}
   - {name: IOC_Irq, bits: "12", access: W1C, reset: 0, description: "A transfer completed (Direct Register Mode); the threshold number of packets completed (Scatter/Gather Mode)"}
   - {name: Dly_Irq, bits: "13", access: W1C, reset: 0, description: "The delay timer expired (Scatter/Gather Mode); 0 in Direct Register Mode"}
   - {name: Err_Irq, bits: "14", access: W1C, reset: 0, description: "An error flag of the channel was set"}

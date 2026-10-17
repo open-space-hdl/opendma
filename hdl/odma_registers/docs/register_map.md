@@ -84,7 +84,7 @@ Address 0x000: MM2S channel control (PG021 Table 6).
 | 13 | Dly_IrqEn | RW | 0 | Dly_Irq drives the interrupt output of the channel (Scatter/Gather Mode) |
 | 12 | IOC_IrqEn | RW | 0 | IOC_Irq drives the interrupt output of the channel |
 | 4 | CyclicBD | RW | 0 | Cyclic descriptor mode (Scatter/Gather Mode): the engine ignores the tail pointer and the completed bit of the descriptors; no function in Direct Register Mode |
-| 3 | Keyhole | RW | 0 | Non-incrementing bursts (keyhole) for the transfers of the channel, taken at the start of a transfer or descriptor fetch: S2MM in both modes, MM2S in Scatter/Gather Mode; the bursts stay incrementing until Open Logic provides FIXED bursts |
+| 3 | Keyhole | RW | 0 | Non-incrementing bursts (keyhole) for the transfers of the channel, taken at the start of a transfer or descriptor fetch: S2MM in both modes, MM2S in Scatter/Gather Mode: FIXED bursts of at most 16 beats at the buffer address with the bits below the memory width cleared |
 | 2 | Reset | RW | 0 | Write 1: soft reset of the whole core (both channels); reads 1 until the reset is complete |
 | 1 | Reserved | RO | 1 | Reads 1 |
 | 0 | RS | RW | 0 | Run (1) or stop (0) the channel; a start is refused while an error flag of the channel is set |
@@ -100,11 +100,11 @@ Address 0x004: MM2S channel status (PG021 Table 7).
 | 14 | Err_Irq | W1C | 0 | An error flag of the channel was set |
 | 13 | Dly_Irq | W1C | 0 | The delay timer expired (Scatter/Gather Mode); 0 in Direct Register Mode |
 | 12 | IOC_Irq | W1C | 0 | A transfer completed (Direct Register Mode); the threshold number of packets completed (Scatter/Gather Mode) |
-| 10 | SGDecErr | RO | 0 | Decode error (DECERR) of a descriptor fetch or status write (Scatter/Gather Mode, once Open Logic reports the response code); 0 in Direct Register Mode |
-| 9 | SGSlvErr | RO | 0 | Error response of a descriptor fetch or status write (Scatter/Gather Mode; SLVERR, and DECERR until Open Logic reports the response code); 0 in Direct Register Mode |
+| 10 | SGDecErr | RO | 0 | Decode error response (DECERR) of a descriptor fetch or status write (Scatter/Gather Mode); 0 in Direct Register Mode |
+| 9 | SGSlvErr | RO | 0 | Slave error response (SLVERR, and EXOKAY) of a descriptor fetch or status write (Scatter/Gather Mode); 0 in Direct Register Mode |
 | 8 | SGIntErr | RO | 0 | Stale descriptor: completed bit set outside cyclic mode (Scatter/Gather Mode); 0 in Direct Register Mode |
 | 6 | DMADecErr | RO | 0 | Decode error response (DECERR) of the memory or a buffer beyond the top of the address space |
-| 5 | DMASlvErr | RO | 0 | Slave error response (SLVERR) of the memory |
+| 5 | DMASlvErr | RO | 0 | Slave error response (SLVERR, and EXOKAY) of the memory |
 | 4 | DMAIntErr | RO | 0 | Internal error: S2MM packet longer than the buffer (Direct Register Mode), S2MM write error, descriptor with buffer length 0 (Scatter/Gather Mode); MM2S: 0 in Direct Register Mode |
 | 3 | SGIncld | RO | IncludeSg_g | Scatter/Gather Mode included |
 | 1 | Idle | RO | 0 | Direct Register Mode: the last transfer is complete and no new one has started; Scatter/Gather Mode: the engine has reached the tail and completed its descriptors; 0 while halted and before the first transfer |
@@ -180,7 +180,7 @@ Address 0x030: S2MM channel control (PG021 Table 16).
 | 13 | Dly_IrqEn | RW | 0 | Dly_Irq drives the interrupt output of the channel (Scatter/Gather Mode) |
 | 12 | IOC_IrqEn | RW | 0 | IOC_Irq drives the interrupt output of the channel |
 | 4 | CyclicBD | RW | 0 | Cyclic descriptor mode (Scatter/Gather Mode): the engine ignores the tail pointer and the completed bit of the descriptors; no function in Direct Register Mode |
-| 3 | Keyhole | RW | 0 | Non-incrementing bursts (keyhole) for the transfers of the channel, taken at the start of a transfer or descriptor fetch: S2MM in both modes, MM2S in Scatter/Gather Mode; the bursts stay incrementing until Open Logic provides FIXED bursts |
+| 3 | Keyhole | RW | 0 | Non-incrementing bursts (keyhole) for the transfers of the channel, taken at the start of a transfer or descriptor fetch: S2MM in both modes, MM2S in Scatter/Gather Mode: FIXED bursts of at most 16 beats at the buffer address with the bits below the memory width cleared |
 | 2 | Reset | RW | 0 | Write 1: soft reset of the whole core (both channels); reads 1 until the reset is complete |
 | 1 | Reserved | RO | 1 | Reads 1 |
 | 0 | RS | RW | 0 | Run (1) or stop (0) the channel; a start is refused while an error flag of the channel is set |
@@ -196,11 +196,11 @@ Address 0x034: S2MM channel status (PG021 Table 17).
 | 14 | Err_Irq | W1C | 0 | An error flag of the channel was set |
 | 13 | Dly_Irq | W1C | 0 | The delay timer expired (Scatter/Gather Mode); 0 in Direct Register Mode |
 | 12 | IOC_Irq | W1C | 0 | A transfer completed (Direct Register Mode); the threshold number of packets completed (Scatter/Gather Mode) |
-| 10 | SGDecErr | RO | 0 | Decode error (DECERR) of a descriptor fetch or status write (Scatter/Gather Mode, once Open Logic reports the response code); 0 in Direct Register Mode |
-| 9 | SGSlvErr | RO | 0 | Error response of a descriptor fetch or status write (Scatter/Gather Mode; SLVERR, and DECERR until Open Logic reports the response code); 0 in Direct Register Mode |
+| 10 | SGDecErr | RO | 0 | Decode error response (DECERR) of a descriptor fetch or status write (Scatter/Gather Mode); 0 in Direct Register Mode |
+| 9 | SGSlvErr | RO | 0 | Slave error response (SLVERR, and EXOKAY) of a descriptor fetch or status write (Scatter/Gather Mode); 0 in Direct Register Mode |
 | 8 | SGIntErr | RO | 0 | Stale descriptor: completed bit set outside cyclic mode (Scatter/Gather Mode); 0 in Direct Register Mode |
 | 6 | DMADecErr | RO | 0 | Decode error response (DECERR) of the memory or a buffer beyond the top of the address space |
-| 5 | DMASlvErr | RO | 0 | Slave error response (SLVERR) of the memory |
+| 5 | DMASlvErr | RO | 0 | Slave error response (SLVERR, and EXOKAY) of the memory |
 | 4 | DMAIntErr | RO | 0 | Internal error: S2MM packet longer than the buffer (Direct Register Mode), S2MM write error, descriptor with buffer length 0 (Scatter/Gather Mode); MM2S: 0 in Direct Register Mode |
 | 3 | SGIncld | RO | IncludeSg_g | Scatter/Gather Mode included |
 | 1 | Idle | RO | 0 | Direct Register Mode: the last transfer is complete and no new one has started; Scatter/Gather Mode: the engine has reached the tail and completed its descriptors; 0 while halted and before the first transfer |

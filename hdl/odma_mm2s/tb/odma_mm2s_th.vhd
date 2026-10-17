@@ -40,7 +40,8 @@ entity odma_mm2s_th is
         MemWidth_g    : positive;
         StreamWidth_g : positive;
         BurstBeats_g  : positive;
-        BufferBeats_g : positive
+        BufferBeats_g : positive;
+        Join_g        : boolean
     );
     port (
         Clk          : out   std_logic;
@@ -49,12 +50,15 @@ entity odma_mm2s_th is
         Cmd_Addr     : in    std_logic_vector(63 downto 0);
         Cmd_Length   : in    natural;
         Cmd_Eof      : in    std_logic;
+        Cmd_Keyhole  : in    std_logic;
         Res_Ready    : in    std_logic;
         Run          : in    std_logic;
         Drain        : in    std_logic;
+        RstIn        : in    std_logic;                      -- '1': reset of the DUT (the core reset)
         Stopped      : out   std_logic;
         Ready        : in    ReadyCfg_r;
-        StreamClear  : in    std_logic;                      -- A change restarts the stream counters
+        StreamClear  : in    std_logic;                      -- A change restarts the stream counters and the checker
+        FixedAddr    : in    std_logic_vector(63 downto 0);  -- Expected address of FIXED bursts
         EccInjValid  : in    std_logic_vector(2 downto 0);
         EccInjDouble : in    std_logic;
         EccInjData   : in    std_logic;
@@ -69,8 +73,9 @@ architecture sim of odma_mm2s_th is
 
     constant KeepWidth_c : positive := StreamWidth_g / 8;
 
-    signal Clk_i : std_logic := '0';
-    signal Rst   : std_logic := '1';
+    signal Clk_i  : std_logic := '0';
+    signal Rst    : std_logic := '1';
+    signal DutRst : std_logic;
 
     -- DUT
     signal DutAddr   : std_logic_vector(AddrWidth_g - 1 downto 0);
@@ -125,6 +130,9 @@ architecture sim of odma_mm2s_th is
                              ArCount    => 0,
                              RLastCount => 0,
                              ArBadAttr  => 0,
+                             ArFixed    => 0,
+                             ArFixLong  => 0,
+                             ArFixAddr  => 0,
                              EccSec     => (others => 0),
                               EccDed     => (others => 0)
                           );
@@ -142,6 +150,8 @@ begin
     -----------------------------------------------------------------------------------------------
     -- DUT
     -----------------------------------------------------------------------------------------------
+    DutRst <= Rst or RstIn;
+
     i_dut : entity work.odma_mm2s
         generic map (
             AddrWidth_g   => AddrWidth_g,
@@ -149,18 +159,19 @@ begin
             MemWidth_g    => MemWidth_g,
             StreamWidth_g => StreamWidth_g,
             BurstBeats_g  => BurstBeats_g,
-            BufferBeats_g => BufferBeats_g
+            BufferBeats_g => BufferBeats_g,
+            Join_g        => Join_g
         )
         port map (
             Clk           => Clk_i,
-            Rst           => Rst,
+            Rst           => DutRst,
             Cmd_Valid     => Cmd_Valid,
             Cmd_Ready     => Cmd_Ready,
             Cmd_Addr      => DutAddr,
             Cmd_Length    => DutLength,
             Cmd_Sof       => One,
             Cmd_Eof       => Cmd_Eof,
-            Cmd_Keyhole   => Zero,
+            Cmd_Keyhole   => Cmd_Keyhole,
             Res_Valid     => Res_Valid,
             Res_Ready     => Res_Ready,
             Res_Bytes     => Res_Bytes,
@@ -278,10 +289,14 @@ begin
     -----------------------------------------------------------------------------------------------
     p_monitor : process (Clk_i) is
         variable O_v        : Obs_r;
-        variable ClearOld_v : std_logic             := '0';
-        variable Open_v     : boolean               := false;   -- A packet is in progress
-        variable PktAddr_v  : unsigned(63 downto 0) := (others => '0');
-        variable PktBytes_v : natural               := 0;
+        variable ClearOld_v : std_logic := '0';
+        variable Open_v     : boolean   := false;   -- A packet is in progress
+        -- The buffer of the packet in progress
+        variable SegAddr_v  : unsigned(63 downto 0) := (others => '0');
+        variable SegBytes_v : natural               := 0;
+        variable SegLast_v  : boolean               := true;
+        variable SegOff_v   : natural               := 0;
+        variable Done_v     : boolean;
         variable Count_v    : natural               := 0;
         variable Bytes_v    : natural;
         variable Gap_v      : boolean;
@@ -300,11 +315,12 @@ begin
         if rising_edge(Clk_i) then
             O_v := Obs_i;
 
-            -- Stream counters restart
+            -- Stream counters restart, a packet in progress is abandoned
             if StreamClear /= ClearOld_v then
                 ClearOld_v := StreamClear;
                 O_v.Beats  := 0;
                 O_v.Bytes  := 0;
+                Open_v     := false;
             end if;
 
             -- Results
@@ -325,19 +341,22 @@ begin
                 if S_Last = '1' then
                     O_v.LastBeat := Obs_i.Cycle;
                 end if;
-                -- Start of a packet: the oldest expected packet
+                -- Start of a packet: its first buffer is the oldest expected one
                 if not Open_v then
                     if Pkts_v.count = 0 then
                         streamError("beat without an expected packet");
                     else
                         Open_v     := true;
-                        PktAddr_v  := Pkts_v.headAddr;
-                        PktBytes_v := Pkts_v.headBytes;
+                        SegAddr_v  := Pkts_v.headAddr;
+                        SegBytes_v := Pkts_v.headBytes;
+                        SegLast_v  := Pkts_v.headLast;
+                        SegOff_v   := 0;
                         Count_v    := 0;
                         Pkts_v.pop;
                     end if;
                 end if;
-                -- Bytes of the memory, TKeep contiguous from lane 0 and all ones except on the last beat
+                -- Bytes of the memory, buffer after buffer; TKeep contiguous from lane 0 and all ones except on
+                -- the last beat of the packet
                 Bytes_v := 0;
                 Gap_v   := false;
 
@@ -346,11 +365,24 @@ begin
                         if Gap_v then
                             streamError("TKeep not contiguous");
                         end if;
-                        Exp_v := to_integer(unsigned(Mem_v.read8(0, PktAddr_v + Count_v + Bytes_v)));
+                        if Open_v and SegOff_v = SegBytes_v then
+                            -- The buffer is complete: the next buffer of the packet
+                            if SegLast_v or Pkts_v.count = 0 then
+                                streamError("byte beyond the expected packet");
+                            else
+                                SegAddr_v  := Pkts_v.headAddr;
+                                SegBytes_v := Pkts_v.headBytes;
+                                SegLast_v  := Pkts_v.headLast;
+                                SegOff_v   := 0;
+                                Pkts_v.pop;
+                            end if;
+                        end if;
+                        Exp_v := to_integer(unsigned(Mem_v.read8(0, SegAddr_v + SegOff_v)));
                         if Open_v and to_integer(unsigned(S_Data(8 * i + 7 downto 8 * i))) /= Exp_v then
                             streamError("byte " & to_string(Count_v + Bytes_v) & " of the packet");
                         end if;
-                        Bytes_v := Bytes_v + 1;
+                        SegOff_v := SegOff_v + 1;
+                        Bytes_v  := Bytes_v + 1;
                     else
                         Gap_v := true;
                     end if;
@@ -359,14 +391,15 @@ begin
                 Count_v   := Count_v + Bytes_v;
                 O_v.Bytes := O_v.Bytes + Bytes_v;
                 if Open_v then
-                    -- TLast exactly on the beat with the last byte, a partial TKeep only there
-                    if (S_Last = '1') /= (Count_v = PktBytes_v) then
-                        streamError("TLast after " & to_string(Count_v) & " of " & to_string(PktBytes_v) & " bytes");
+                    -- TLast exactly on the beat with the last byte of the last buffer, a partial TKeep only there
+                    Done_v := SegLast_v and SegOff_v = SegBytes_v;
+                    if (S_Last = '1') /= Done_v then
+                        streamError("TLast after " & to_string(Count_v) & " bytes of the packet");
                     end if;
                     if Gap_v and S_Last = '0' then
                         streamError("partial TKeep before the end of the packet");
                     end if;
-                    if S_Last = '1' or Count_v >= PktBytes_v then
+                    if S_Last = '1' or Done_v then
                         Open_v := false;
                         if S_Last = '1' then
                             O_v.Packets := O_v.Packets + 1;
@@ -384,7 +417,18 @@ begin
             end if;
             if ArValid = '1' and ArReady = '1' then
                 O_v.ArCount := O_v.ArCount + 1;
-                if to_integer(unsigned(ArSize)) /= olo.olo_base_pkg_math.log2(MemWidth_g / 8) or ArBurst /= "01" or ArLock /= '0' or
+                if ArBurst = "00" then
+                    -- FIXED burst of a keyhole command (MM-SG-03)
+                    O_v.ArFixed := O_v.ArFixed + 1;
+                    if unsigned(ArLen) > 15 then
+                        O_v.ArFixLong := O_v.ArFixLong + 1;
+                    end if;
+                    if ArAddr /= FixedAddr(AddrWidth_g - 1 downto 0) then
+                        O_v.ArFixAddr := O_v.ArFixAddr + 1;
+                    end if;
+                end if;
+                if to_integer(unsigned(ArSize)) /= olo.olo_base_pkg_math.log2(MemWidth_g / 8) or
+                   (ArBurst /= "01" and ArBurst /= "00") or ArLock /= '0' or
                    ArCache /= "0011" or ArProt /= "000" then
                     O_v.ArBadAttr := O_v.ArBadAttr + 1;
                 end if;

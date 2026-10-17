@@ -31,35 +31,38 @@ entity odma_mm2s_command is
     );
     port (
         -- Control Signals
-        Clk         : in    std_logic;
-        Rst         : in    std_logic;
+        Clk          : in    std_logic;
+        Rst          : in    std_logic;
         -- Transfer command
-        Cmd_Valid   : in    std_logic;
-        Cmd_Ready   : out   std_logic;
-        Cmd_Addr    : in    std_logic_vector(AddrWidth_g - 1 downto 0);
-        Cmd_Length  : in    std_logic_vector(LengthWidth_g - 1 downto 0);
-        Cmd_Eof     : in    std_logic;
+        Cmd_Valid    : in    std_logic;
+        Cmd_Ready    : out   std_logic;
+        Cmd_Addr     : in    std_logic_vector(AddrWidth_g - 1 downto 0);
+        Cmd_Length   : in    std_logic_vector(LengthWidth_g - 1 downto 0);
+        Cmd_Eof      : in    std_logic;
+        Cmd_Keyhole  : in    std_logic;
         -- Channel control
-        Run         : in    std_logic;
-        Drain       : in    std_logic;
+        Run          : in    std_logic;
+        Drain        : in    std_logic;
         -- Read command and responses of the read master
-        CmdRd_Addr  : out   std_logic_vector(AddrWidth_g - 1 downto 0);
-        CmdRd_Size  : out   std_logic_vector(LengthWidth_g - 1 downto 0);
-        CmdRd_Valid : out   std_logic;
-        CmdRd_Ready : in    std_logic;
-        Rd_Done     : in    std_logic;
-        Rd_Error    : in    std_logic;
+        CmdRd_Addr   : out   std_logic_vector(AddrWidth_g - 1 downto 0);
+        CmdRd_Size   : out   std_logic_vector(LengthWidth_g - 1 downto 0);
+        CmdRd_Fixed  : out   std_logic;
+        CmdRd_Valid  : out   std_logic;
+        CmdRd_Ready  : in    std_logic;
+        Rd_Done      : in    std_logic;
+        Rd_Error     : in    std_logic;
+        Rd_ErrorResp : in    std_logic_vector(1 downto 0);
         -- Transfer buffer (write side)
-        Xfer_Valid  : out   std_logic;
-        Xfer_Ready  : in    std_logic;
-        Xfer_Length : out   std_logic_vector(LengthWidth_g - 1 downto 0);
-        Xfer_Eof    : out   std_logic;
-        Xfer_Code   : out   XferErr_t;
+        Xfer_Valid   : out   std_logic;
+        Xfer_Ready   : in    std_logic;
+        Xfer_Length  : out   std_logic_vector(LengthWidth_g - 1 downto 0);
+        Xfer_Eof     : out   std_logic;
+        Xfer_Code    : out   XferErr_t;
         -- Response buffer (write side)
-        Resp_Valid  : out   std_logic;
-        Resp_Code   : out   XferErr_t;
+        Resp_Valid   : out   std_logic;
+        Resp_Code    : out   XferErr_t;
         -- No command in progress
-        Idle        : out   std_logic
+        Idle         : out   std_logic
     );
 end entity;
 
@@ -68,14 +71,6 @@ end entity;
 ---------------------------------------------------------------------------------------------------
 architecture rtl of odma_mm2s_command is
 
-    -----------------------------------------------------------------------------------------------
-    -- G5 interim: olo_ft_axi_master_full of Open Logic 4.7.0-ft.6 signals a failed read command with
-    -- Rd_Error only, without the AXI response code. Until the Open Logic release with the response
-    -- code (gap G5, specification section 3.7), every failed transfer gets the slave error code.
-    -- With that release this constant is replaced by the response code output of the read master.
-    -----------------------------------------------------------------------------------------------
-    constant RdErrCode_c : XferErr_t := ErrSlv_c;
-
     type CommandFsm_t is (Idle_s, Entry_s, Issue_s);
 
     type TwoProcess_r is record
@@ -83,6 +78,7 @@ architecture rtl of odma_mm2s_command is
         Addr   : std_logic_vector(AddrWidth_g - 1 downto 0);
         Length : std_logic_vector(LengthWidth_g - 1 downto 0);
         Eof    : std_logic;
+        Fixed  : std_logic;
     end record;
 
     signal r, r_next : TwoProcess_r;
@@ -95,9 +91,10 @@ begin
     -- A command is accepted while the channel runs, does not drain and the transfer buffer has a free entry
     CmdReady <= '1' when r.State = Idle_s and Run = '1' and Drain = '0' and Xfer_Ready = '1' else '0';
 
-    -- Code of the transfer entry: no read for a length of 0 or a buffer beyond the top of the address space
+    -- Code of the transfer entry: no read for a length of 0 or a buffer beyond the top of the address space; a
+    -- keyhole read accesses only the memory word at the address, which lies in the address space (MM-SG-03)
     Code <= ErrInt_c when unsigned(r.Length) = 0 else
-            ErrDec_c when beyondTop(unsigned(r.Addr), unsigned(r.Length)) else
+            ErrDec_c when r.Fixed = '0' and beyondTop(unsigned(r.Addr), unsigned(r.Length)) else
             ErrNone_c;
 
     -- *** Combinatorial Process ***
@@ -113,6 +110,7 @@ begin
                     v.Addr   := Cmd_Addr;
                     v.Length := Cmd_Length;
                     v.Eof    := Cmd_Eof;
+                    v.Fixed  := Cmd_Keyhole;
                     v.State  := Entry_s;
                 end if;
 
@@ -143,14 +141,16 @@ begin
     Cmd_Ready   <= CmdReady;
     CmdRd_Addr  <= r.Addr;
     CmdRd_Size  <= r.Length;
+    CmdRd_Fixed <= r.Fixed;
     CmdRd_Valid <= '1' when r.State = Issue_s else '0';
     Xfer_Valid  <= '1' when r.State = Entry_s else '0';
     Xfer_Length <= r.Length;
     Xfer_Eof    <= r.Eof;
     Xfer_Code   <= Code;
     Resp_Valid  <= Rd_Done or Rd_Error;
-    Resp_Code   <= RdErrCode_c when Rd_Error = '1' else ErrNone_c;
-    Idle        <= '1' when r.State = Idle_s else '0';
+    -- SLVERR and EXOKAY give the slave error, DECERR the decode error (MM-ER-03, interpretation I14)
+    Resp_Code <= respErr(Rd_ErrorResp) when Rd_Error = '1' else ErrNone_c;
+    Idle      <= '1' when r.State = Idle_s else '0';
 
     -- *** Sequential Process ***
     p_seq : process (Clk) is

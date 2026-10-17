@@ -42,7 +42,8 @@ entity odma_mm2s_tb is
         MemWidth_g    : positive := 32;
         StreamWidth_g : positive := 32;
         BurstBeats_g  : positive := 16;
-        BufferBeats_g : positive := 64
+        BufferBeats_g : positive := 64;
+        Join_g        : boolean  := false
     );
 end entity;
 
@@ -62,6 +63,14 @@ architecture sim of odma_mm2s_tb is
     -- Clock cycles without a new burst after which the buffers are full (TC-MM-06): more than the time the
     -- stream side needs for a burst
     constant Quiet_c       : positive := 4 * BurstStream_c + 1000;
+
+    -- Longest FIXED burst: 16 beats, at most the bursts of the read master (MM-SG-03)
+    constant FixedBeats_c : positive := minimum(16, minimum(BurstBeats_g, 4096 / MemBytes_c));
+
+    -- Expected results of TC-MM-16, checked while the commands are sent
+    constant MaxCmds_c : positive := 32;
+
+    type CmdNat_a is array (0 to MaxCmds_c - 1) of natural;
 
     -- Error codes of a result
     constant ErrNone_c : std_logic_vector(1 downto 0) := "00";
@@ -97,6 +106,9 @@ architecture sim of odma_mm2s_tb is
     signal Cmd_Addr     : std_logic_vector(63 downto 0) := (others => '0');
     signal Cmd_Length   : natural                       := 0;
     signal Cmd_Eof      : std_logic                     := '1';
+    signal Cmd_Keyhole  : std_logic                     := '0';
+    signal RstIn        : std_logic                     := '0';
+    signal FixedAddr    : std_logic_vector(63 downto 0) := (others => '0');
     signal Res_Ready    : std_logic                     := '1';
     signal ChRun        : std_logic                     := '0';
     signal ChDrain      : std_logic                     := '0';
@@ -119,7 +131,8 @@ begin
             MemWidth_g    => MemWidth_g,
             StreamWidth_g => StreamWidth_g,
             BurstBeats_g  => BurstBeats_g,
-            BufferBeats_g => BufferBeats_g
+            BufferBeats_g => BufferBeats_g,
+            Join_g        => Join_g
         )
         port map (
             Clk          => Clk,
@@ -128,12 +141,15 @@ begin
             Cmd_Addr     => Cmd_Addr,
             Cmd_Length   => Cmd_Length,
             Cmd_Eof      => Cmd_Eof,
+            Cmd_Keyhole  => Cmd_Keyhole,
             Res_Ready    => Res_Ready,
             Run          => ChRun,
             Drain        => ChDrain,
+            RstIn        => RstIn,
             Stopped      => Stopped,
             Ready        => Ready,
             StreamClear  => StreamClear,
+            FixedAddr    => FixedAddr,
             EccInjValid  => EccInjValid,
             EccInjDouble => EccInjDouble,
             EccInjData   => EccInjData,
@@ -153,6 +169,15 @@ begin
         variable Seed1_v    : positive := 3;
         variable Seed2_v    : positive := 77;
         variable Rand_v     : real;
+        variable N_v        : natural;
+        variable Checked_v  : natural;
+        variable Sent_v     : natural;
+        variable Win_v      : Addr_t;
+        variable Back_v     : Addr_t;
+        variable Err_v      : std_logic_vector(1 downto 0);
+        variable Eof_v      : std_logic;
+        variable ExpLen_v   : CmdNat_a;
+        variable ExpEof_v   : std_logic_vector(0 to MaxCmds_c - 1);
 
         procedure cycles (n : natural) is
         begin
@@ -165,26 +190,44 @@ begin
 
         -- One transfer command, after its handshake
         procedure sendCmd (
-            addr : Addr_t;
-            len  : natural;
-            eof  : std_logic := '1') is
+            addr    : Addr_t;
+            len     : natural;
+            eof     : std_logic := '1';
+            keyhole : std_logic := '0') is
         begin
-            Cmd_Addr   <= std_logic_vector(addr);
-            Cmd_Length <= len;
-            Cmd_Eof    <= eof;
-            Cmd_Valid  <= '1';
+            Cmd_Addr    <= std_logic_vector(addr);
+            Cmd_Length  <= len;
+            Cmd_Eof     <= eof;
+            Cmd_Keyhole <= keyhole;
+            Cmd_Valid   <= '1';
             wait until rising_edge(Clk) and Cmd_Ready = '1' for 1 ms;
             check_value(Cmd_Ready, '1', ERROR, "command accepted");
-            Cmd_Valid  <= '0';
+            Cmd_Valid   <= '0';
+            Cmd_Keyhole <= '0';
         end procedure;
 
-        -- The stream checker expects the bytes of the memory from addr as one packet
+        -- The stream checker expects the bytes of the memory from addr as one buffer of a packet; last: the
+        -- packet ends with this buffer
         procedure expect (
             addr : Addr_t;
-            len  : positive) is
+            len  : positive;
+            last : boolean := true) is
         begin
-            Pkts_v.push(addr, len);
-            Expected_v := Expected_v + 1;
+            Pkts_v.push(addr, len, last);
+            if last then
+                Expected_v := Expected_v + 1;
+            end if;
+        end procedure;
+
+        -- Random natural from lo to hi
+        procedure rnd (
+            lo  : natural;
+            hi  : natural;
+            res : out natural) is
+            variable R_v : real;
+        begin
+            uniform(Seed1_v, Seed2_v, R_v);
+            res := lo + integer(floor(R_v * real(hi - lo + 1))) mod (hi - lo + 1);
         end procedure;
 
         -- All expected packets received
@@ -228,6 +271,18 @@ begin
             streamDone;
             waitRes(Res_c + 1);
             checkRes(Res_c, len, '1', ErrNone_c, msg);
+        end procedure;
+
+        -- Checks the results that have arrived against the expected lengths and ends of packet
+        procedure checkResults is
+        begin
+
+            while Checked_v < Obs.ResCount - Res_v loop
+                checkRes(Res_v + Checked_v, ExpLen_v(Checked_v mod MaxCmds_c), ExpEof_v(Checked_v mod MaxCmds_c),
+                         ErrNone_c, "command " & to_string(Checked_v));
+                Checked_v := Checked_v + 1;
+            end loop;
+
         end procedure;
 
         -- Restarts the stream counters of the harness
@@ -563,6 +618,225 @@ begin
                             check_value(Obs.EccDed(i) - Ded_v(i), Cnt2_v, ERROR, "Ecc_Ded of buffer " & to_string(i));
                         end loop;
 
+                    end loop;
+
+                end loop;
+
+            elsif run("test_error_codes") then
+                log(ID_LOG_HDR, "TC-MM-15 error codes of the read responses");
+                Mem_v.fill(0, region(1), 65536, 31);
+                Len_v := minimum(4 * MemBytes_c, MaxLen_c);
+                Res_v := Obs.ResCount;
+
+                -- SLVERR, DECERR, EXOKAY in the middle; SLVERR first and DECERR last; DECERR first and SLVERR last
+                for i in 0 to 4 loop
+                    Addr_v := region(1) + i * 4096;
+                    Mem_v.clearErrors(0);
+
+                    case i is
+                        when 0 =>
+                            Mem_v.setError(0, 0, Addr_v + Len_v / 2, Addr_v + Len_v / 2, ErrSlv_c, TbDirRead);
+                            Err_v := ErrSlv_c;
+                        when 1 =>
+                            Mem_v.setError(0, 0, Addr_v + Len_v / 2, Addr_v + Len_v / 2, ErrDec_c, TbDirRead);
+                            Err_v := ErrDec_c;
+                        when 2 =>
+                            -- EXOKAY: the slave error, not the internal error code (interpretation I14)
+                            Mem_v.setError(0, 0, Addr_v + Len_v / 2, Addr_v + Len_v / 2, "01", TbDirRead);
+                            Err_v := ErrSlv_c;
+                        when 3 =>
+                            Mem_v.setError(0, 0, Addr_v, Addr_v, ErrSlv_c, TbDirRead);
+                            Mem_v.setError(0, 1, Addr_v + Len_v - 1, Addr_v + Len_v - 1, ErrDec_c, TbDirRead);
+                            Err_v := ErrSlv_c;
+                        when others =>
+                            Mem_v.setError(0, 0, Addr_v, Addr_v, ErrDec_c, TbDirRead);
+                            Mem_v.setError(0, 1, Addr_v + Len_v - 1, Addr_v + Len_v - 1, ErrSlv_c, TbDirRead);
+                            Err_v := ErrDec_c;
+                    end case;
+
+                    expect(Addr_v, Len_v);
+                    sendCmd(Addr_v, Len_v);
+                    streamDone;
+                    waitRes(Res_v + i + 1);
+                    checkRes(Res_v + i, Len_v, '1', Err_v, "error case " & to_string(i));
+                end loop;
+
+                Mem_v.clearErrors(0);
+                transfer(region(1) + 5 * 4096, Len_v, "transfer after the failed ones");
+
+            elsif run("test_join") then
+                log(ID_LOG_HDR, "TC-MM-16 packets of several commands");
+                Mem_v.fill(0, region(1), 65536, 33);
+                Ready.Percent <= 50;
+                Mem_v.setStall(0, 30);
+                Mem_v.setLatency(0, 20);
+                Res_v         := Obs.ResCount;
+                Checked_v     := 0;
+                Sent_v        := 0;
+
+                for p in 0 to 39 loop
+                    rnd(1, 5, N_v);
+
+                    for k in 0 to N_v - 1 loop
+                        -- 1 byte and one stream beat first, then random lengths that end on any lane
+                        if p = 0 and k = 0 then
+                            Len_v := 1;
+                        elsif p = 1 and k = 0 then
+                            Len_v := StreamBytes_c;
+                        else
+                            rnd(1, minimum(minimum(3 * BurstBytes_c, 4096), MaxLen_c), Len_v);
+                        end if;
+                        rnd(0, 65536 - Len_v, Len2_v);
+                        Addr_v                         := region(1) + Len2_v;
+                        Eof_v                          := '1' when k = N_v - 1 else '0';
+                        expect(Addr_v, Len_v, k = N_v - 1);
+                        ExpLen_v(Sent_v mod MaxCmds_c) := Len_v;
+                        ExpEof_v(Sent_v mod MaxCmds_c) := Eof_v;
+                        sendCmd(Addr_v, Len_v, Eof_v);
+                        Sent_v                         := Sent_v + 1;
+                        checkResults;
+                    end loop;
+
+                end loop;
+
+                streamDone;
+                waitRes(Res_v + Sent_v);
+                checkResults;
+                Ready.Percent <= 100;
+                Mem_v.setStall(0, 0);
+                Mem_v.setLatency(0, 0);
+
+            elsif run("test_join_results") then
+                log(ID_LOG_HDR, "TC-MM-17 results of the commands of a packet");
+                Mem_v.fill(0, region(1), 65536, 35);
+                Len_v  := maximum(1, StreamBytes_c / 2);
+                Len2_v := minimum(4 * StreamBytes_c, MaxLen_c);
+                Res_v  := Obs.ResCount;
+                clearStream;
+                -- The stream peer holds TReady low before beat 1 for 200 clock cycles
+                Ready.StallBeat   <= 1;
+                Ready.StallCycles <= 200;
+                expect(region(1), Len_v, false);
+                expect(region(1) + 4096, Len2_v, true);
+                sendCmd(region(1), Len_v, '0');
+                sendCmd(region(1) + 4096, Len2_v, '1');
+                waitRes(Res_v + 1);
+                check_value(Obs.Beats <= 1, ERROR, "first result while the stream peer holds the packet");
+                checkRes(Res_v, Len_v, '0', ErrNone_c, "command without the end of packet");
+                cycles(20);
+                check_value(Obs.ResCount, Res_v + 1, ERROR, "no result of the second command before TLast");
+                streamDone;
+                waitRes(Res_v + 2);
+                checkRes(Res_v + 1, Len2_v, '1', ErrNone_c, "command with the end of packet");
+                check_value(Obs.Results((Res_v + 1) mod MaxResults_c).Cycle > Obs.LastBeat, ERROR,
+                            "result after the beat with TLast");
+                Ready.StallBeat   <= -1;
+
+            elsif run("test_join_halt") then
+                log(ID_LOG_HDR, "TC-MM-18 a packet left open by a halt, an error or a drain");
+                Mem_v.fill(0, region(1), 65536, 39);
+
+                -- Halt after the first command of a packet; the join holds 1, B - 1 or B bytes at the end
+                for c in 0 to 2 loop
+                    next when c = 1 and StreamBytes_c = 1;
+                    Len_v      := 2 * StreamBytes_c + 1 when c = 0 else
+                                  3 * StreamBytes_c - 1 when c = 1 else
+                                  2 * StreamBytes_c;
+                    Len_v      := minimum(Len_v, MaxLen_c);
+                    Res_v      := Obs.ResCount;
+                    Ready.Hold <= '1';
+                    expect(region(1) + c * 4096, Len_v, true);
+                    sendCmd(region(1) + c * 4096, Len_v, '0');
+                    ChRun      <= '0';
+                    cycles(40);
+                    check_value(Stopped, '0', ERROR, "not stopped while the stream peer holds the open packet");
+                    Ready.Hold <= '0';
+                    wait until Stopped = '1' for 1 ms;
+                    cycles(1);
+                    check_value(Obs.Packets, Expected_v, ERROR, "the packet ended with TLast before Stopped");
+                    waitRes(Res_v + 1);
+                    checkRes(Res_v, Len_v, '0', ErrNone_c, "command before the halt");
+                    ChRun      <= '1';
+                    transfer(region(1) + 8 * 4096, minimum(3 * StreamBytes_c, MaxLen_c), "packet after the halt");
+                end loop;
+
+                -- A read error on the first command, then the fall of Run (the engine halts after an error)
+                Len_v := minimum(4 * MemBytes_c, MaxLen_c);
+                Res_v := Obs.ResCount;
+                Mem_v.setError(0, 0, region(1) + 12 * 4096, region(1) + 12 * 4096, ErrSlv_c, TbDirRead);
+                expect(region(1) + 12 * 4096, Len_v, true);
+                sendCmd(region(1) + 12 * 4096, Len_v, '0');
+                ChRun <= '0';
+                streamDone;
+                wait until Stopped = '1' for 1 ms;
+                waitRes(Res_v + 1);
+                checkRes(Res_v, Len_v, '0', ErrSlv_c, "command with the read error");
+                Mem_v.clearErrors(0);
+                ChRun <= '1';
+                transfer(region(1) + 9 * 4096, minimum(3 * StreamBytes_c, MaxLen_c), "packet after the error");
+
+                -- Drain with a packet open: no further beat, Stopped, then the core reset
+                Ready.Hold <= '1';
+                clearStream;
+                sendCmd(region(1) + 13 * 4096, minimum(4 * StreamBytes_c, MaxLen_c), '0');
+                cycles(20);
+                ChDrain    <= '1';
+                cycles(2);
+                Ready.Hold <= '0';
+                wait until Stopped = '1' for 1 ms;
+                check_value(Stopped, '1', ERROR, "Stopped after the drain");
+                cycles(20);
+                check_value(Obs.Beats, 0, ERROR, "no beat of the drained packet");
+                RstIn      <= '1';
+                cycles(2);
+                RstIn      <= '0';
+                ChDrain    <= '0';
+                cycles(2);
+                transfer(region(1) + 10 * 4096, minimum(3 * StreamBytes_c, MaxLen_c), "packet after the reset");
+
+            elsif run("test_keyhole") then
+                log(ID_LOG_HDR, "TC-MM-19 keyhole reads with FIXED bursts");
+                -- The window of the memory model returns the words of its backing range in order (PKG-12)
+                Mem_v.fill(0, region(2), 65536, 41);
+
+                for i in 0 to 5 loop
+                    Len_v := 1 when i = 0 else
+                             MemBytes_c when i = 1 else
+                             16 * MemBytes_c when i = 2 else
+                             17 * MemBytes_c when i = 3 else
+                             7 * BurstBytes_c / 2;
+                    Len_v := minimum(minimum(Len_v, MaxLen_c), 16384);
+
+                    for ofs in 0 to 1 loop
+                        -- The window: the last memory word of a 4 KB page, at an unaligned address for ofs 1; the
+                        -- last case the top of the address space
+                        if i = 5 then
+                            Win_v := topAddr - MemBytes_c + 1;
+                        else
+                            Win_v := region(1) + (2 * i + ofs + 1) * 4096 - MemBytes_c;
+                        end if;
+                        if ofs = 1 then
+                            Win_v := Win_v + MemBytes_c / 2;
+                        end if;
+                        Back_v    := region(2) + (2 * i + ofs) * 4096;
+                        Mem_v.setFifo(0, Win_v, Back_v);
+                        FixedAddr <= std_logic_vector(Win_v - (Win_v mod MemBytes_c));
+                        Cnt_v     := Obs.ArFixed;
+                        Res_v     := Obs.ResCount;
+                        expect(Back_v, Len_v);
+                        sendCmd(Win_v, Len_v, '1', '1');
+                        streamDone;
+                        waitRes(Res_v + 1);
+                        checkRes(Res_v, Len_v, '1', ErrNone_c, "keyhole read of " & to_string(Len_v) & " bytes");
+                        N_v       := (Len_v + MemBytes_c - 1) / MemBytes_c;
+                        check_value(Obs.ArFixed - Cnt_v, (N_v + FixedBeats_c - 1) / FixedBeats_c, ERROR,
+                                    "FIXED bursts of the keyhole read");
+                        check_value(Obs.ArFixLong, 0, ERROR, "no FIXED burst longer than 16 beats");
+                        check_value(Obs.ArFixAddr, 0, ERROR, "every FIXED burst at the window word");
+                        -- An incrementing read after the keyhole read
+                        Cnt_v := Obs.ArFixed;
+                        transfer(region(2) + 32768, minimum(3 * MemBytes_c, MaxLen_c), "incrementing read after it");
+                        check_value(Obs.ArFixed, Cnt_v, ERROR, "no FIXED burst of an incrementing read");
                     end loop;
 
                 end loop;

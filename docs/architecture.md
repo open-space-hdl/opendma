@@ -300,7 +300,7 @@ built from and the items of the published interface it owns (P1).
 | --- | --- | --- | --- | --- |
 | SG-1 | Descriptor fetch | Per channel: tail pointer mode, fetch and prefetch of descriptors, check of the completed bit (stale descriptor) and of the buffer length, cyclic mode, transfer commands from descriptors | `olo_ft_fifo_sync` (descriptor buffer) | `DESC.NXTDESC*`, `DESC.BUFFER_ADDRESS*`, `DESC.*_CONTROL.*`, `*_DMACR.CyclicBD`, `*_DMASR.SGIntErr`, `*_DMASR.DMAIntErr` (SG mode), `DESCMGMT.TAIL`, `*_CURDESC*`, `*_TAILDESC*` (engine side) |
 | SG-2 | Descriptor update | Status word of every processed descriptor (transferred bytes, start and end of packet, errors, completed), current descriptor pointer | none | `DESC.*_STATUS.*` |
-| SG-3 | Descriptor port | Arbitration of the fetches and updates of both channels on one AXI4 master, its errors | `olo_ft_axi_master_full`, `olo_base_arb_rr` | `*_DMASR.SGSlvErr`, `*_DMASR.SGDecErr` |
+| SG-3 | Descriptor port | Arbitration of the fetches and updates of both channels on one AXI4 master, its errors | `olo_ft_axi_master_simple`, `olo_base_arb_rr` | `*_DMASR.SGSlvErr`, `*_DMASR.SGDecErr` |
 
 ### 7.5 Core (module `odma_core`)
 
@@ -313,8 +313,9 @@ built from and the items of the published interface it owns (P1).
 | Interface | Between | Payload | Protocol |
 | --- | --- | --- | --- |
 | Transfer command | RG-1 (DR mode) or SG-1 (SG mode) to MM-1, S2-1 and S2-2 | Buffer address, length, start and end of packet (MM2S), keyhole | Valid / ready |
-| Transfer result | MM-2, S2-2 to RG-1 (DR mode) or SG-2 (SG mode) | Transferred bytes, end of packet (S2MM), error code | Valid / ready |
+| Transfer result | MM-2, S2-2 to RG-1 (DR mode) or SG-2 (SG mode) | Transferred bytes, end of packet, start of packet (S2MM, phase b), error code | Valid / ready |
 | Channel control | RG-1, RG-3 to the channels | Run, halt, drain request; idle and drained state | Levels |
+| Descriptor engine control (phase b) | RG-1 to SG-1, SG-1 and SG-2 to RG-1 | Run, drain, `CURDESC`, tail pointer and its triggering write, `CyclicBD`, `Keyhole`; current descriptor pointer, idle, stopped, packet and error events | Levels and events |
 | Interrupt events | RG-1, SG-2 to RG-2 | Packet complete, error | Events |
 | ECC events | FT buffers to RG-4 | SEC and DED per buffer | Events |
 | Register bus | RG-1 to RG-4 and the user | Registers of section 6 | AXI4-Lite (`olo_axi_lite_slave`) |
@@ -323,7 +324,8 @@ built from and the items of the published interface it owns (P1).
 
 | Open Logic entity | Used in | Purpose |
 | --- | --- | --- |
-| `olo_ft_axi_master_full` | MM-1, S2-2, SG-3 | AXI4 masters with byte-exact unaligned transfers, burst and 4 KB splitting, ECC on the data buffers |
+| `olo_ft_axi_master_full` | MM-1, S2-2 | AXI4 masters with byte-exact unaligned transfers, burst and 4 KB splitting, ECC on the data buffers |
+| `olo_ft_axi_master_simple` | SG-3 | AXI4 master of the descriptor port: bursts of aligned 32-bit words, ECC on the read and write data buffers |
 | `olo_ft_fifo_sync` | MM-1, MM-2, S2-1, SG-1, MM-3, S2-3 | Transfer and response buffers of MM2S, data and chunk buffers of S2MM, descriptor buffer, control and status stream buffers |
 | `olo_base_pl_stage` | MM-2, S2-2 | Register stage of the MM2S stream output, stage of the S2MM write jobs |
 | `olo_base_arb_rr` | SG-3 | Fair choice between the descriptor accesses of both channels |
@@ -333,7 +335,8 @@ built from and the items of the published interface it owns (P1).
 ### Gap analysis of `olo_axi_master_full`
 
 `olo_ft_axi_master_full` wraps `olo_axi_master_full` and has its interface and behaviour; the analysis applies to
-both at tag 4.7.0-ft.6.
+both at tag 4.7.0-ft.6. G11 is the need of the descriptor port, which uses `olo_ft_axi_master_simple`, the same
+wrapper of `olo_axi_master_simple`, instead.
 
 | ID | \[PG021\] needs | `olo_axi_master_full` at 4.7.0-ft.6 | Resolution | Phase |
 | --- | --- | --- | --- | --- |
@@ -347,7 +350,7 @@ both at tag 4.7.0-ft.6.
 | G8 | Halt and soft reset complete or flush pending transfers | No abort of an accepted command | No change of Open Logic: the channels stop issuing commands and drain the accepted ones (D3, D8) | a |
 | G9 | MM2S completion when the data has left the core | `Rd_Done` signals the end of the AXI reads, before the data is consumed | No change of Open Logic: MM-2 reports the result at the handshake of the last beat (D4) | a |
 | G10 | Packets of several buffers with any lengths and addresses (Tables 30 and 37) | Every command delivers its data starting in lane 0; Open Logic has no stream byte realigner | New in open-logic-ft: a stream realigner that shifts a byte stream by a runtime lane offset with carry between beats (data and `TKeep` in and out), for MM-2 (join) and S2-1 (split) | b |
-| G11 | Descriptor fetch and update of 8 to 13 words | 32-bit user and AXI width supported, unaligned not needed | No gap | b |
+| G11 | Descriptor fetch and update of 8 to 13 words | `olo_axi_master_simple` moves whole words of the AXI width in bursts of any beat count | No gap: SG-3 uses `olo_ft_axi_master_simple` with 32 data bits; descriptors are aligned to 64 bytes, so no alignment logic is needed | b |
 | G12 | Stream width at most the memory width, both powers of two; up to 16 outstanding bursts | `AxiDataWidth_g` an integer multiple of `UserDataWidth_g`; at most 8 open transactions | No gap: every width pair of \[PG021\] Table 44 is valid; 8 open transactions per direction | a |
 | G13 | Bursts of up to 256 beats at every data width (`c_mm2s_burst_size`, `c_s2mm_burst_size` up to 256 with up to 1024 bits) | `olo_axi_master_simple` does not elaborate when `AxiMaxBeats_g` exceeds the beats of 4 KB (`4096 / (AxiDataWidth_g / 8)`): a slice of its 4 KB beat count is out of range | No change needed: MM-1 and S2-2 run the masters with at most the beats of 4 KB; no AXI burst crosses 4 KB, so the bursts are the same. The defect is corrected in open-logic-ft | a |
 | G14 | Write commands of every length up to 2**`LengthWidth_g` - 1 bytes | `olo_axi_master_full` computes the number of user data words of a write command (size / B + 1, B = `UserDataWidth_g` / 8) at the width of the size field without its low log2(B) bits, so the number wraps to 0 for sizes from 2**`UserTransactionSizeBits_g` - B + 1 to 2**`UserTransactionSizeBits_g` - 1; the master then accepts the next command and its data but issues no further burst (for example a command of 4000 to 4095 bytes with 128-byte user words and `UserTransactionSizeBits_g` 12) | No change needed: MM-1 and S2-2 run the masters with `UserTransactionSizeBits_g` = `LengthWidth_g` + 1, so no command reaches that word count; the rule `UserTransactionSizeBits_g` < `AxiAddrWidth_g` - 1 still holds. The defect is corrected in open-logic-ft | a |

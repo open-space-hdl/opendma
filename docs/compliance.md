@@ -58,10 +58,10 @@ the published interface are listed in section 6 of the architecture and in the m
 | `S2MM_DMASR.DMADecErr` | Tables 7, 17, bit 6 | MM-1 (MM2S), S2-2 (S2MM) | a | CO-ER-01, RG-SR-05, S2-RS-05, S2-WR-04, SG-ER-01 | TC-CO-04, TC-RG-08, TC-S2-10 | Partly verified |
 | `MM2S_DMASR.SGIntErr` | Tables 7, 17, bit 8 | SG-1 | b | RG-SG-05, SG-FE-05 | - | Planned |
 | `S2MM_DMASR.SGIntErr` | Tables 7, 17, bit 8 | SG-1 | b | RG-SG-05, SG-FE-05 | - | Planned |
-| `MM2S_DMASR.SGSlvErr` | Tables 7, 17, bit 9 | SG-3 | b | RG-SG-05, SG-ER-02 | - | Planned |
-| `S2MM_DMASR.SGSlvErr` | Tables 7, 17, bit 9 | SG-3 | b | RG-SG-05, SG-ER-02 | - | Planned |
-| `MM2S_DMASR.SGDecErr` | Tables 7, 17, bit 10 | SG-3 | b | RG-SG-05, SG-ER-02 | - | Planned |
-| `S2MM_DMASR.SGDecErr` | Tables 7, 17, bit 10 | SG-3 | b | RG-SG-05, SG-ER-02 | - | Planned |
+| `MM2S_DMASR.SGSlvErr` | Tables 7, 17, bit 9 | SG-3 | b | RG-SG-05, SG-ER-02, SG-ER-04 | - | Planned |
+| `S2MM_DMASR.SGSlvErr` | Tables 7, 17, bit 9 | SG-3 | b | RG-SG-05, SG-ER-02, SG-ER-04 | - | Planned |
+| `MM2S_DMASR.SGDecErr` | Tables 7, 17, bit 10 | SG-3 | b | RG-SG-05, SG-ER-02, SG-ER-04 | - | Planned |
+| `S2MM_DMASR.SGDecErr` | Tables 7, 17, bit 10 | SG-3 | b | RG-SG-05, SG-ER-02, SG-ER-04 | - | Planned |
 | `MM2S_DMASR.IOC_Irq` | Tables 7, 17, bit 12 | RG-2 | a | RG-IR-01, RG-SG-06, SG-UP-04, SG-UP-05 | TC-RG-04, TC-RG-05, TC-RG-07 | Partly verified |
 | `S2MM_DMASR.IOC_Irq` | Tables 7, 17, bit 12 | RG-2 | a | RG-IR-01, RG-SG-06, SG-UP-04, SG-UP-05 | TC-RG-04, TC-RG-05, TC-RG-07 | Partly verified |
 | `MM2S_DMASR.Dly_Irq` | Tables 7, 17, bit 13 | RG-2 | b | RG-SG-07, RG-SG-08 | - | Planned |
@@ -153,6 +153,6 @@ of the published interface included).
 | `odma_pkg` | 10 | 10 | - | - |
 | `odma_registers` | 52 | 42 | - | RG-SG-01, RG-SG-02, RG-SG-03, RG-SG-04, RG-SG-05, RG-SG-06, RG-SG-07, RG-SG-08, RG-SG-09, RG-SG-10 |
 | `odma_s2mm` | 25 | 20 | - | S2-RS-05, S2-SG-01, S2-SG-02, S2-SG-03, S2-SG-04 |
-| `odma_sg` | 33 | - | planned (no testbench yet) | - |
+| `odma_sg` | 34 | - | planned (no testbench yet) | SG-ER-04 |
 
-Requirements: 161; without a test case: 0; test cases of the plans not run by a testbench: 0.
+Requirements: 162; without a test case: 0; test cases of the plans not run by a testbench: 0.

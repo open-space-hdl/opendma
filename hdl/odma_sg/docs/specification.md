@@ -72,7 +72,7 @@ requirements of `odma_registers` (its specification, section "Requirements of ph
 | ID | Requirement | PG021 items |
 | --- | --- | --- |
 | SG-ER-01 | A transfer result with the slave error or the decode error shall set the error flag in the status of its descriptor (`DMASlvErr`, `DMADecErr`; S2MM with the internal error as in DR mode), set the same flag in `DMASR`, and halt the channel; `CURDESC` shall point to the descriptor. | `DESC.MM2S_STATUS.DMASlvErr`, `DESC.MM2S_STATUS.DMADecErr`, `DESC.S2MM_STATUS.DMASlvErr`, `DESC.S2MM_STATUS.DMADecErr`, `*_DMASR.DMASlvErr`, `*_DMASR.DMADecErr` |
-| SG-ER-02 | A response other than OKAY to a descriptor fetch or update shall halt the channel of the access with `DMASR.SGSlvErr` (SLVERR) or `DMASR.SGDecErr` (DECERR); a descriptor pointer whose descriptor reaches beyond the top of the address space shall give `DMASR.SGDecErr` without an access. | `*_DMASR.SGSlvErr`, `*_DMASR.SGDecErr` |
+| SG-ER-02 | A response other than OKAY to a descriptor fetch or update shall halt the channel of the access with an engine error flag (`DMASR.SGSlvErr` or `DMASR.SGDecErr`). | `*_DMASR.SGSlvErr`, `*_DMASR.SGDecErr` |
 | SG-ER-03 | An error of one channel shall not stop the other channel; descriptor updates already started shall be completed before the channel reports halted. | `*_DMASR.Halted` |
 
 ### 3.6 Halt, soft reset and cyclic mode
@@ -88,6 +88,12 @@ requirements of `odma_registers` (its specification, section "Requirements of ph
 | ID | Requirement | PG021 items |
 | --- | --- | --- |
 | SG-FT-01 | The descriptor buffers of the channels and the data buffers of the descriptor port shall be SECDED-protected FT buffers with ECC events and error injection at the indices 6 to 9 of the extension window. | none (architecture P5) |
+
+### 3.8 Requirements waiting for Open Logic
+
+| ID | Requirement | PG021 items |
+| --- | --- | --- |
+| SG-ER-04 | The engine error flag of SG-ER-02 shall be `SGSlvErr` for SLVERR and `SGDecErr` for DECERR (gap G5). | `*_DMASR.SGSlvErr`, `*_DMASR.SGDecErr` |
 
 ## 4. Interpretations
 
@@ -108,7 +114,7 @@ requirements of `odma_registers` (its specification, section "Requirements of ph
 | Stale descriptor (`Cmplt` = 1, not cyclic) | Fetched status word | `SGIntErr`, halt, `CURDESC` = the descriptor (SG-FE-05) |
 | Buffer length 0 | Fetched control word | `DMAIntErr` in `DMASR` and in the status, halt (SG-FE-06) |
 | SLVERR or DECERR of a data transfer | Result of the channel | Error flags in the status and in `DMASR`, halt (SG-ER-01) |
-| SLVERR or DECERR of a descriptor access, descriptor beyond the top of the address space | Response of the descriptor port, `beyondTop` | `SGSlvErr` or `SGDecErr`, halt (SG-ER-02) |
+| SLVERR or DECERR of a descriptor access | Response of the descriptor port | `SGSlvErr` or `SGDecErr`, halt (SG-ER-02, SG-ER-04) |
 | S2MM packet larger than the chain up to the tail | No descriptor before the tail | The rest waits at the stream input (SG-TR-04) |
 | Single or double error in an FT buffer | SEC and DED outputs of the buffers | Counted at indices 6 to 9 (SG-FT-01) |
 

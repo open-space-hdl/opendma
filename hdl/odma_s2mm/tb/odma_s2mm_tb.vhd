@@ -1184,20 +1184,21 @@ begin
                 Gen.Percent <= 100;
                 Mem_v.fill(0, region(11) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
                 Mem_v.fill(0, region(12) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
-                Mem_v.setWindow(0, region(11) - Guard_c, region(13));
+                -- The write window over all buffers of the test, also those of the drain below
+                Mem_v.setWindow(0, region(1) - Guard_c, region(13));
                 sendCmd(region(11), Len_v);
                 cycles(10);
                 send(source(11), Len_v + 1);
                 wait until Obs.Packets > Pkts_v for 1 ms;
-                ChRun       <= '0';
+                ChRun <= '0';
                 waitRes(Res_v + 1);
-                Wr_v        := Obs.Results(Res_v mod MaxResults_c).Bytes;
+                Wr_v  := Obs.Results(Res_v mod MaxResults_c).Bytes;
                 check_value((Wr_v = Len_v or Wr_v mod ChunkBytes_c = 0) and Wr_v <= Len_v, ERROR,
                             "buffer before the halt: complete chunks or full, " & to_string(Wr_v) & " bytes");
                 check_value(Obs.Results(Res_v mod MaxResults_c).Eof, '0', ERROR, "buffer before the halt: no end of packet");
                 checkMem(region(11), Len_v, Wr_v, source(11), "buffer before the halt");
                 wait until Stopped = '1' for 1 ms;
-                ChRun       <= '1';
+                ChRun <= '1';
                 send(source(12), Len_v / 2);
                 sendCmd(region(12), Len_v);
                 waitRes(Res_v + 2);

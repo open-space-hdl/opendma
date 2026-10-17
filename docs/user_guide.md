@@ -84,8 +84,9 @@ stream data only while it runs; a packet that arrives before its transfer is pro
 
 Writing `RS` = 0 halts a channel; `DMASR.Halted` reads 1 once it has stopped. A transfer in progress is completed:
 MM2S sends it to its end; S2MM writes the chunks of the packet that are complete in its buffer, discards the rest of
-the packet up to its `TLast` and does not report the completion (interpretation I8 of `odma_registers`). A following
-start resumes the channel with the next programmed transfer.
+the packet up to its `TLast` and does not report the completion (interpretation I8 of `odma_registers`). A packet
+whose `TLast` the stream port accepted before the halt is written completely. A following start resumes the channel
+with the next programmed transfer.
 
 ### 5.4 Errors and soft reset
 
@@ -175,8 +176,11 @@ issued (interpretation SGI-08 of `odma_sg`).
 Recovery is the soft reset of section 5.4; in SG mode it also completes every descriptor access the memory has
 accepted. A halt or an error inside an MM2S packet of several descriptors ends the packet on the stream: `TLast` comes
 with the last byte of the last descriptor the channel had accepted, before `DMASR.Halted` is set (interpretation M4
-of `odma_mm2s`). Inside an S2MM packet the rest of the packet is discarded up to its `TLast`, and the last written
-status has no `RXEOF` (interpretation SGI-11 of `odma_sg`).
+of `odma_mm2s`). An S2MM packet whose `TLast` the stream port accepted before the halt and whose bytes fit into the
+buffer of the current descriptor is written completely, with `RXEOF` in its status. A packet that needs a further
+buffer is cut like a packet still arriving: the bytes of its complete chunks stay in memory, the rest is discarded
+up to its `TLast`, and the last written status has no `RXEOF` (interpretation SGI-11 of `odma_sg`, `odma_s2mm`
+S2-HA-01).
 
 Keyhole (`DMACR.Keyhole` = 1, for FIFO-like peripherals at a fixed address): the transfers use FIXED bursts of at
 most 16 beats at the buffer address with the bits below the memory data width cleared, so every beat accesses the

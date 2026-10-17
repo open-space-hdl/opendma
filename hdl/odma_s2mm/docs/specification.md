@@ -64,7 +64,7 @@ spread over several buffers, and keyhole writes. The status stream S2-3 (phase c
 
 | ID | Requirement | PG021 items |
 | --- | --- | --- |
-| S2-HA-01 | When `Run` falls during a transfer, the channel shall write the chunks of its packet that are complete in the data buffer, discard the rest of the packet up to its `TLast` and return a result with the bytes written and without the end of packet, unless the packet ended among the complete chunks (interpretation I8); a transfer without a received byte ends with a result of 0 bytes. Data received for later transfers shall be discarded, so that the channel resumes with the next packet that starts after the halt. | `S2MM_DMACR.RS` |
+| S2-HA-01 | When `Run` falls during a transfer, the channel shall write the chunks of its packet that are complete in the data buffer, discard the rest of the packet up to its `TLast` and return a result with the bytes written and without the end of packet, unless the packet ended among the complete chunks (interpretation I8); a transfer without a received byte ends with a result of 0 bytes. A packet whose `TLast` the stream port has accepted before `Run` falls and whose bytes all fit into the buffer of the transfer counts as ended among the complete chunks: the channel shall write it completely and return the result with the end of packet. With `Split_g` a packet that needs a further buffer shall be cut like a packet still arriving: its result carries no end of packet, the bytes written in complete chunks stay, and the rest is discarded. Data received for later transfers shall be discarded, so that the channel resumes with the next packet that starts after the halt. | `S2MM_DMACR.RS` |
 | S2-HA-02 | While `Drain` is '1', the channel shall accept no command and no stream beat, complete the writes already given to the write master with their data, issue no further write and return no result; `Stopped` shall rise when no write is outstanding. | `S2MM_DMACR.Reset` |
 | S2-HA-03 | `Stopped` shall be '1' while no transfer is in progress and no write is outstanding, also while the rest of an interrupted packet is still being discarded. | `S2MM_DMACR.RS` |
 
@@ -88,7 +88,7 @@ spread over several buffers, and keyhole writes. The status stream S2-3 (phase c
 | ID | PG021 | OpenDMA |
 | --- | --- | --- |
 | I5 | Buffer beyond the top of the address space not described | No write, decode error (S2-WR-04) |
-| I8 | `RS` = 0: pending transfers flushed or completed, data integrity not guaranteed | Complete chunks written, the rest discarded up to `TLast`, no end of packet (S2-HA-01) |
+| I8 | `RS` = 0: pending transfers flushed or completed, data integrity not guaranteed | Complete chunks written, the rest discarded up to `TLast`, no end of packet; a packet whose `TLast` was accepted and whose bytes fit into the buffer is written completely, one that needs a further buffer is cut (S2-HA-01) |
 | I9 | A few beats accepted before the core is programmed | Beats accepted only while the channel runs (S2-ST-01) |
 | I10 | `TKeep` handling not described | S2-ST-02 |
 | S1 | Table 24: a buffer shorter than the packet gives undefined results; Table 17: `DMAIntErr` | No byte beyond the buffer, the rest discarded, internal error (S2-RS-02) |

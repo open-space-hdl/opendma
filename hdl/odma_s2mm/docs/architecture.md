@@ -179,7 +179,11 @@ after an error or a halt, whose packet rest is discarded. Without `Split_g` ever
   packet open, the transfer ends without the end of packet, with 0 bytes if no byte was received (S2-HA-01). A
   descriptor is stored from the clock cycle after its write on (write level of the chunk buffer), while its output
   follows one clock cycle later: the block uses the write level, so a packet that ended just before the halt is not
-  missed.
+  missed. With `Split_g`, a packet whose end is in the split and whose bytes all fit into the buffer of the
+  transfer is complete (section 4.2): S2-1 delivers its rest, and the transfer ends with the end of packet. A
+  packet whose rest waits in the split for a further buffer is cut like a packet still arriving: S2-1 writes the
+  discard descriptor, the result carries the bytes of the complete chunks without the end of packet, and the rest
+  is discarded up to its `TLast`.
 - In each of these cases the result is returned once no write is outstanding (S2-RS-04). Then the block flushes: it
   takes the remaining descriptors of the packet up to the one with `Pend` and drops their beats. While `Run` = '0'
   in `Idle_s`, it drops every further packet in the chunk buffer, a whole packet (up to `PktEnd`) at a time (data

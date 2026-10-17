@@ -97,8 +97,8 @@ carry and its output register), so the chunk former sees a packet later than the
   beat of the next packet before the end of a packet has left its carry, so at most one packet end is in the split.
   When a new end enters in the clock cycle in which the old one leaves, the new one sets the flag.
 
-A packet counts as open while `InPacket`, `StrmOpen` or `EndPend` is set. That open state gives `PacketOpen` to S2-2
-and keeps the split out of its reset.
+A packet counts as open while `InPacket`, `StrmOpen` or `EndPend` is set. That open state keeps the split out of its
+reset, and outside `Discard_s` it gives `DescPend` (a descriptor of the open packet is still to come) to S2-2.
 
 A packet whose end is in the split is complete when no segment has ended inside the packet since (`EndPend` set,
 `NeedSeg` clear). Its rest then belongs to the active segment, and S2-1 takes it even when `Run` falls, so a packet
@@ -122,8 +122,9 @@ packet, or the reset has cleared it) and takes the segment in the next clock cyc
 | `FlushReq` of S2-2 inside a packet (`Split_g`) | The same as for the fall of `Run`: S2-2 flushes the rest of a packet after a write error, and with the split that rest passes only with the segments of `Discard_s`. The next packet cannot be caught by the same flush: S2-2 accepts no command until the flush is done, and `NeedSeg` offers no discard segment after the end of the discarded packet, so its beats wait at the stream port |
 | `Drain` = '1' | The input is not ready; no further descriptor is written |
 
-The block reports `PacketOpen` (a packet started and its end not yet taken by the chunk former, also while the rest
-is discarded) to S2-2.
+The block reports `DescPend` to S2-2: a packet is open and its rest is not discarded, so a descriptor of it is still
+to come. While the rest of an interrupted packet is discarded, `DescPend` is '0': no descriptor follows, however long
+the stream peer takes to deliver the `TLast` of the rest.
 
 ## 5. Write command (S2-2, `odma_s2mm_write`)
 
@@ -176,8 +177,11 @@ after an error or a halt, whose packet rest is discarded. Without `Split_g` ever
 - Overflow records `ErrInt_c` and the end of packet of the overflowing chunk: when that chunk ends the packet, its
   beats beyond the buffer are dropped and nothing is flushed; otherwise the rest of the packet is flushed (S2-RS-02).
 - `Run` = '0' during a transfer: the descriptors of the packet of the transfer are written up to the descriptor with
-  `Pend` or `Discard`. When no descriptor is in the chunk buffer, none is stored for its output and S2-1 has no
-  packet open, the transfer ends without the end of packet, with 0 bytes if no byte was received (S2-HA-01). A
+  `Pend` or `Discard`. When no descriptor is in the chunk buffer, none is stored for its output and S2-1 writes no
+  further descriptor (`DescPend` '0', also while S2-1 discards the rest of an earlier packet), the transfer ends
+  without the end of packet, with 0 bytes if no byte was received (S2-HA-01). With `Split_g` it withdraws its
+  segment if the split has not taken it (the split takes no segment while it discards), so that the segment cannot
+  be taken by the next packet when the discard ends. A
   descriptor is stored from the clock cycle after its write on (write level of the chunk buffer), while its output
   follows one clock cycle later: the block uses the write level, so a packet that ended just before the halt is not
   missed. With `Split_g`, a packet whose end is in the split and whose bytes all fit into the buffer of the

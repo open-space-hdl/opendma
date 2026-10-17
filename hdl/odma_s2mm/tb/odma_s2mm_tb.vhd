@@ -767,6 +767,67 @@ begin
                 Len_v := minimum(2 * ChunkBytes_c + 9, MaxLen_c);
                 transfer(region(3), Len_v, source(5), Len_v, "packet after the restart");
 
+                -- A halt inside a packet whose source then stalls: S2-1 discards its rest and waits for the TLast. After
+                -- a restart a command is accepted, and Run falls again before the rest arrives: the transfer of that
+                -- command ends with a result of 0 bytes, and Stopped rises within a bound although the discard goes on
+                -- (S2-HA-01, S2-HA-03). After the second restart the rest arrives while no command is pending: with the
+                -- split the segment of the ended transfer is withdrawn, so the next packet goes completely into the
+                -- buffer of the next command, which is longer
+                Len_v  := minimum(4 * ChunkBytes_c, MaxLen_c);
+                Len2_v := minimum(2 * StreamBytes_c, MaxLen_c);
+                Mem_v.fill(0, region(7) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
+                Mem_v.fill(0, region(8) - Guard_c, Len2_v + 2 * Guard_c, DstSeed_c);
+                Mem_v.fill(0, region(9) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
+                Mem_v.setWindow(0, region(7) - Guard_c, region(10));
+                Res_v  := Obs.ResCount;
+                Pkts_v := Obs.Packets;
+                clearStream;
+                sendCmd(region(7), Len_v);
+                send(source(7), Len_v);
+                -- The source stalls after half of the packet and the beats that the split holds
+                wait until Obs.Beats >= (Len_v / StreamBytes_c) / 2 + SplitLag_c for 1 ms;
+                Gen.Hold <= '1';
+                cycles(20);
+                ChRun    <= '0';
+                waitRes(Res_v + 1);
+                Wr_v     := Obs.Results(Res_v mod MaxResults_c).Bytes;
+                check_value(Obs.Results(Res_v mod MaxResults_c).Eof, '0', ERROR,
+                            "stalled packet cut by the halt: no end of packet");
+                check_value(Wr_v mod ChunkBytes_c = 0, ERROR,
+                            "stalled packet cut by the halt: complete chunks, " & to_string(Wr_v) & " bytes");
+                checkMem(region(7), Len_v, Wr_v, source(7), "stalled packet cut by the halt");
+                if Stopped = '0' then
+                    wait until Stopped = '1' for 1000 * ClkPeriod_c;
+                end if;
+                check_value(Stopped, '1', ERROR, "Stopped while the rest of the stalled packet is discarded");
+                -- A command after the restart, and the halt again before the rest arrives
+                ChRun <= '1';
+                sendCmd(region(8), Len2_v);
+                cycles(20);
+                ChRun <= '0';
+                if Stopped = '0' then
+                    wait until Stopped = '1' for 1000 * ClkPeriod_c;
+                end if;
+                check_value(Stopped, '1', ERROR, "Stopped within 1000 clock cycles after the second halt");
+                waitRes(Res_v + 2);
+                checkRes(Res_v + 1, 0, '0', ErrNone_c, "transfer halted while the rest is discarded");
+                -- The rest arrives after the second restart, with no command pending
+                ChRun    <= '1';
+                cycles(10);
+                Gen.Hold <= '0';
+                waitPackets(Pkts_v + 1);
+                cycles(20);
+                -- The next packet, longer than the buffer of the ended transfer
+                Cnt_v := minimum(2 * ChunkBytes_c + 3, Len_v);
+                send(source(9), Cnt_v);
+                sendCmd(region(9), Len_v);
+                waitRes(Res_v + 3);
+                checkRes(Res_v + 2, Cnt_v, '1', ErrNone_c, "packet after the discard");
+                check_value(Obs.Results((Res_v + 2) mod MaxResults_c).Sof, '1', ERROR,
+                            "packet after the discard: start of packet");
+                checkMem(region(8), Len2_v, 0, source(9), "buffer of the transfer halted during the discard untouched");
+                checkMem(region(9), Len_v, Cnt_v, source(9), "packet after the discard, complete and alone");
+
             elsif run("test_drain") then
                 log(ID_LOG_HDR, "TC-S2-12 drain while chunks are written and the stream sends");
                 Gen.Percent <= 50;

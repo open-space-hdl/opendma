@@ -63,7 +63,6 @@ entity odma_s2mm_write is
         Desc_Valid   : in    std_logic;
         Desc_Ready   : out   std_logic;
         Desc_Stored  : in    std_logic;                     -- A descriptor is written to the chunk buffer
-        PacketOpen   : in    std_logic;
         DescPend     : in    std_logic;                     -- S2-1 still writes a descriptor of its open packet
         -- Data buffer (read side)
         Buf_Data     : in    std_logic_vector(StreamWidth_g - 1 downto 0);
@@ -250,9 +249,12 @@ begin
                             v.State := Wait_s;
                         end if;
                     end if;
-                elsif Run = '0' and Desc_Valid = '0' and Desc_Stored = '0' and PacketOpen = '0' then
-                    -- Halted with no data of the packet left: the transfer ends without the end of packet
-                    v.State := Wait_s;
+                elsif Run = '0' and Desc_Valid = '0' and Desc_Stored = '0' and DescPend = '0' then
+                    -- Halted with no data of the packet left and no descriptor of S2-1 to come (S2-1 may still
+                    -- discard the rest of an interrupted packet): the transfer ends without the end of packet, and
+                    -- its segment, if the split has not taken it, is withdrawn, so that it cannot be taken later
+                    v.SegValid := '0';
+                    v.State    := Wait_s;
                 end if;
 
             when Issue_s =>

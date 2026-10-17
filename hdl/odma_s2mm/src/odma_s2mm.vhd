@@ -114,7 +114,6 @@ architecture rtl of odma_s2mm is
     signal Desc_InData  : std_logic_vector(DescWidth_c - 1 downto 0);
     signal Desc_InValid : std_logic;
     signal Desc_InReady : std_logic;
-    signal PacketOpen   : std_logic;
     signal DescPend     : std_logic;
     signal Seg_Valid    : std_logic;
     signal Seg_Size     : std_logic_vector(LengthWidth_g - 1 downto 0);
@@ -193,7 +192,6 @@ begin
             Desc_Data    => Desc_InData,
             Desc_Valid   => Desc_InValid,
             Desc_Ready   => Desc_InReady,
-            PacketOpen   => PacketOpen,
             DescPend     => DescPend
         );
 
@@ -278,7 +276,6 @@ begin
             Desc_Valid   => Desc_OutValid,
             Desc_Ready   => Desc_OutReady,
             Desc_Stored  => Desc_Stored,
-            PacketOpen   => PacketOpen,
             DescPend     => DescPend,
             Buf_Data     => Data_OutData,
             Buf_Valid    => Data_OutValid,

@@ -2,7 +2,7 @@
 
 ## 1. Test results
 
-Run on 2026-10-17 in the GHDL CI of the repository, GitHub Actions run 39072210558 on commit d7f67ed (its
+Run on 2026-10-17 in the GHDL CI of the repository, GitHub Actions run 39076889615 on commit 5e49ffb (its
 `results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
 `python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_s2mm_tb`.
 
@@ -116,5 +116,7 @@ at least one test case; the RTL of the repository passes all of them:
 | A packet complete without the `NeedSeg` term (the rest of a packet that needs a further buffer kept) | TC-S2-19 |
 | The end of a packet in the split not counted as open (`Open_i` without `EndPend`) | TC-S2-19, TC-S2-21 |
 | A halt cuts a complete packet (`Cut` without `Complete`) | TC-S2-19 |
+| `DescPend` also during the discard of a rest, so the halt exit of a transfer waits for its `TLast` | TC-S2-11 |
+| The segment of a transfer ended by the halt not withdrawn | TC-S2-11 (configurations with the split) |
 
 The recovery branches of the state machines (`when others`) cannot be reached through the ports.

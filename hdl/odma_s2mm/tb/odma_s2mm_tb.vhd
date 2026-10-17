@@ -204,6 +204,9 @@ begin
         variable Lp_v     : natural;
         variable Beats0_v : natural;
         variable Pkts0_v  : natural;
+        variable Halt0_v  : natural;
+        variable HaltP0_v : natural;
+        variable Took_v   : natural;
         variable Start_v  : boolean;
         variable End_v    : boolean;
 
@@ -1260,6 +1263,8 @@ begin
                             Res_v    := Obs.ResCount;
                             Beats0_v := Obs.RunBeats;
                             Pkts0_v  := Obs.RunPkts;
+                            Halt0_v  := Obs.HaltBeats;
+                            HaltP0_v := Obs.HaltPkts;
                             Mem_v.fill(0, region(1) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
                             Mem_v.fill(0, region(2) - Guard_c, Len_v + 1 + 2 * Guard_c, DstSeed_c);
                             Mem_v.fill(0, region(3) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
@@ -1278,10 +1283,13 @@ begin
                                 cycles(k);
                             end if;
                             ChRun <= '0';
+                            -- The next packet waits behind it from the halt on: no beat of it may be taken before the restart
+                            send(Back_v, Len2_v);
                             -- What the channel took while it ran
                             cycles(3);
                             Start_v := Obs.RunBeats > Beats0_v;
                             End_v   := Obs.RunPkts > Pkts0_v;
+                            Took_v  := Obs.RunBeats - Beats0_v;
                             -- (1) Stopped within a bound, then the restart at once, as a driver that polls Halted
                             if Stopped = '0' then
                                 wait until Stopped = '1' for 4000 * ClkPeriod_c;
@@ -1331,13 +1339,22 @@ begin
                                 checkMem(region(2), Len_v + 1, 0, Src_v, sweepMsg(st, c, k) & "buffer C untouched");
                             end if;
                             -- (3) The next packet: complete, alone and with the start of packet; no byte of the cut packet
-                            send(Back_v, Len2_v);
                             sendCmd(region(3), Len_v);
                             waitRes(Res_v + 1);
                             checkRes(Res_v, Len2_v, '1', ErrNone_c, sweepMsg(st, c, k) & "next packet");
                             check_value(Obs.Results(Res_v mod MaxResults_c).Sof, '1', ERROR,
                                         sweepMsg(st, c, k) & "next packet: start of packet");
                             checkMem(region(3), Len_v, Len2_v, Back_v, sweepMsg(st, c, k) & "buffer D");
+                            -- (5) Taken while halted: only the rest of a cut packet, at most up to its TLast and all of it when the
+                            -- TLast came; nothing of a packet that had not started or had ended, so no beat of the next packet
+                            Cnt2_v := Obs.HaltBeats - Halt0_v;
+                            if Start_v and not End_v then
+                                check_value(Cnt2_v <= Cnt_v - Took_v and Obs.HaltPkts - HaltP0_v <= 1 and
+                                            (Obs.HaltPkts = HaltP0_v or Cnt2_v = Cnt_v - Took_v), ERROR,
+                                            sweepMsg(st, c, k) & "taken while halted: " & to_string(Cnt2_v) & " beats");
+                            else
+                                check_value(Cnt2_v, 0, ERROR, sweepMsg(st, c, k) & "no beat taken while halted");
+                            end if;
                         end loop;
 
                     end loop;

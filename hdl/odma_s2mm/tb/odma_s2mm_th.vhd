@@ -125,6 +125,8 @@ architecture sim of odma_s2mm_th is
                              LastSent  => 0,
                              RunBeats  => 0,
                              RunPkts   => 0,
+                             HaltBeats => 0,
+                             HaltPkts  => 0,
                              AwCount   => 0,
                              BCount    => 0,
                              AwBadAttr => 0,
@@ -376,6 +378,11 @@ begin
                     O_v.RunBeats := O_v.RunBeats + 1;
                     if S_Last = '1' then
                         O_v.RunPkts := O_v.RunPkts + 1;
+                    end if;
+                else
+                    O_v.HaltBeats := O_v.HaltBeats + 1;
+                    if S_Last = '1' then
+                        O_v.HaltPkts := O_v.HaltPkts + 1;
                     end if;
                 end if;
             end if;

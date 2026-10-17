@@ -31,7 +31,7 @@ Findings:
 
 | Finding | Resolution |
 | --- | --- |
-| The counters of the window stopped the simulation with a range error right after a clock edge: the buffer output and the command handshake follow the edge one delta cycle after the registers, so one delta cycle combined the pop of the last cycle with the new count | The counters saturate at 0 and at the window size (architecture section 4.1); in operation they never reach a limit |
+| The counters of the window stopped the simulation with a range error right after a clock edge: the buffer output and the command handshake follow the edge one delta cycle after the registers, so one delta cycle combined the pop of the last cycle with the new count. At a clock edge the counts never leave 0 to 2 | The counters are modular 2-bit values and the queue of the issued commands is written without an index from a count, so no delta cycle produces an out-of-range value; no saturation logic |
 | A fetch could start in the clock cycle between the arrival of a stale descriptor and its check at the head of the buffer | A fetched stale descriptor stops further fetch requests at once (`StaleHold`, architecture section 4.3); TC-SG-07 checks that nothing behind it is fetched |
 | The cyclic test expected a status write for every command; at the halt that ends the ring, the S2MM model ends its transfer without data | Correct behaviour (interpretation SGI-10): the test expects every completed descriptor written |
 
@@ -70,8 +70,9 @@ passes all of them:
 | The priorities of the arbiters swapped | TC-SG-10 |
 | The status written to the `CONTROL` word | TC-SG-02 |
 
-A twentieth fault, a drain that does not withdraw an access the master has not yet taken, could not be provoked through
-the ports: the window lasts about one clock cycle. The port no longer has that branch; an access granted before a
-drain completes (architecture section 5).
+A twentieth fault, in a branch that withdrew a granted access when a drain came before the master had taken the
+command, survived. It is not equivalent, but its window of about one clock cycle cannot be reached through the ports.
+The branch is removed: an access granted before a drain completes (architecture section 5), so the RTL has no
+surviving fault of this list.
 
 The recovery branches of the state machines (`when others`) cannot be reached through the ports.

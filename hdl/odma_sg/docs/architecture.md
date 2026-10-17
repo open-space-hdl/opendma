@@ -68,7 +68,7 @@ event, `Cmd_Valid` '0', `Res_Ready` '0'), and its buffer counts nothing.
 | `TailPtr` | `AddrWidth_g` - 6 | Tail pointer of the engine, taken from `Tail` at every `TailWr` |
 | `Started` | 1 | A tail pointer write has been taken since the start: fetching is enabled |
 | `AtTail` | 1 | The last fetched descriptor is the tail: no further fetch |
-| `Count` | 2 | Descriptors in the window: a fetch in progress, the entries of the descriptor buffer and the issued commands without result |
+| `BufCnt`, `IssCnt` | 2, 2 | Entries of the descriptor buffer and issued commands without result; with a fetch in progress they form `Count`, the descriptors in the window |
 | `Issued` | 2 entries of `AddrWidth_g` - 6 | Queue of the descriptors whose command was accepted by the channel and whose result is outstanding, oldest first |
 | `Update` | 1 entry | The result being written back: descriptor address, status word, end of packet, transfer error |
 | `ErrStop`, `ErrPtr` | 1, `AddrWidth_g` - 6 | An error occurred: no further fetch or command; the descriptor of the first error |
@@ -77,9 +77,9 @@ event, `Cmd_Valid` '0', `Res_Ready` '0'), and its buffer counts nothing.
 
 Descriptor pointers are held without their bits 5 to 0, which are ignored (SG-FE-01), and without the bits at or above
 `AddrWidth_g` (SG-IF-03). The descriptors of a channel are processed strictly in order: they are fetched, issued,
-completed and updated in the order of the chain. The counters of the window saturate at 0 and at the window size;
-in operation they never reach a limit, but a delta cycle of the simulation can combine a handshake of another
-process from before a clock edge with a count from after it.
+completed and updated in the order of the chain. At every clock edge `Count` is at most 2: the buffer count
+follows the push and pop of the buffer, the issued count the command handshakes and the results, one result per
+accepted command.
 
 ### 4.2 Start and tail pointer
 

@@ -137,8 +137,8 @@ architecture rtl of odma_sg_channel is
         CtrlWord     : std_logic_vector(31 downto 0);
         Cmplt        : std_logic;
         -- Descriptors in the buffer, issued commands without result (oldest at index 0)
-        BufCnt       : natural range 0 to Window_c;
-        IssCnt       : natural range 0 to Window_c;
+        BufCnt       : unsigned(1 downto 0);
+        IssCnt       : unsigned(1 downto 0);
         IssPtr       : Ptr_a;
         -- Status update (section 4.5)
         Update       : UpdateFsm_t;
@@ -235,10 +235,10 @@ begin
     -- *** Combinatorial Process ***
     p_comb : process (all) is
         variable v       : TwoProcess_r;
-        variable Count_v : natural range 0 to 2 * Window_c + 1;
+        variable Count_v : natural range 0 to 7;
         variable Event_v : boolean;
         variable Ns_v    : boolean;
-        variable Iss_v   : natural range 0 to Window_c;
+        variable Iss_v   : unsigned(1 downto 0);
     begin
         v := r;
 
@@ -250,10 +250,11 @@ begin
         Event_v    := false;
         v.RunPrev  := Run;
 
-        -- Descriptors in the window: a fetch in progress, the buffer, the issued commands. The counters below
-        -- saturate: the buffer output and the handshakes of other processes follow a clock edge one delta cycle
-        -- after the registers, so a delta cycle of the simulation can combine an old handshake with a new count
-        Count_v := r.BufCnt + r.IssCnt;
+        -- Descriptors in the window: a fetch in progress, the buffer, the issued commands. At a clock edge BufCnt is
+        -- the number of entries in the descriptor buffer and IssCnt the number of accepted commands without result,
+        -- both 0 to Window_c; the counters are modular, so a delta cycle of the simulation that combines a handshake
+        -- from before a clock edge with a count from after it gives no out-of-range value
+        Count_v := to_integer(r.BufCnt) + to_integer(r.IssCnt);
         if r.Fetch /= Idle_s then
             Count_v := Count_v + 1;
         end if;
@@ -343,9 +344,7 @@ begin
                     else
                         -- The entry enters the buffer (Buf_InValid); the tail check uses a tail pointer written in
                         -- the same clock cycle (SG-FE-03, SG-CY-01)
-                        if r.BufCnt < Window_c then
-                            v.BufCnt := r.BufCnt + 1;
-                        end if;
+                        v.BufCnt  := r.BufCnt + 1;
                         v.LastPtr := r.FetchPtr;
                         -- Nothing is fetched after a stale descriptor; its error follows at the head of the buffer
                         if r.Cmplt = '1' and r.FetchCyc = '0' then
@@ -372,10 +371,8 @@ begin
         Iss_v := r.IssCnt;
         if Res_Valid = '1' and ResReady = '1' then
             v.IssPtr(0) := r.IssPtr(1);
-            if Iss_v > 0 then
-                Iss_v := Iss_v - 1;
-            end if;
-            Ns_v := unsigned(Res_Bytes) = 0 and Res_Eof = '0' and Res_Err = ErrNone_c and Run = '0';
+            Iss_v       := Iss_v - 1;
+            Ns_v        := unsigned(Res_Bytes) = 0 and Res_Eof = '0' and Res_Err = ErrNone_c and Run = '0';
             if Ns_v then
                 -- Not started: no status write, CURDESC held at this descriptor
                 if r.NsValid = '0' then
@@ -399,14 +396,19 @@ begin
         end if;
 
         -- *** Issue (section 4.4): the accepted command joins the queue ***
-        if CmdValid = '1' and Cmd_Ready = '1' and v.BufCnt > 0 and Iss_v < Window_c then
-            v.BufCnt        := v.BufCnt - 1;
-            v.IssPtr(Iss_v) := HeadPtr;
-            Iss_v           := Iss_v + 1;
+        if CmdValid = '1' and Cmd_Ready = '1' then
+            v.BufCnt := v.BufCnt - 1;
+            -- The queue of two entries: the next free one
+            if Iss_v = 0 then
+                v.IssPtr(0) := HeadPtr;
+            else
+                v.IssPtr(1) := HeadPtr;
+            end if;
+            Iss_v := Iss_v + 1;
         end if;
         v.IssCnt := Iss_v;
         -- Emptying the buffer after a halt (section 4.7)
-        if r.Halted = '1' and Buf_OutValid = '1' and v.BufCnt > 0 then
+        if r.Halted = '1' and Buf_OutValid = '1' then
             v.BufCnt := v.BufCnt - 1;
         end if;
 
@@ -554,8 +556,8 @@ begin
                 r.BufWord      <= (others => '0');
                 r.CtrlWord     <= (others => '0');
                 r.Cmplt        <= '0';
-                r.BufCnt       <= 0;
-                r.IssCnt       <= 0;
+                r.BufCnt       <= (others => '0');
+                r.IssCnt       <= (others => '0');
                 r.IssPtr       <= (others => (others => '0'));
                 r.Update       <= Idle_s;
                 r.UpdPtr       <= (others => '0');

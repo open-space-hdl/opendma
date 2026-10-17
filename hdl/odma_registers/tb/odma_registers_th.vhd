@@ -34,12 +34,14 @@ entity odma_registers_th is
         LengthWidth_g : positive;
         IncludeMm2s_g : boolean;
         IncludeS2mm_g : boolean;
-        ExtRegs_g     : boolean
+        ExtRegs_g     : boolean;
+        IncludeSg_g   : boolean := false
     );
     port (
         Clk         : out   std_logic;
         HardRst     : in    std_logic;
         Cfg         : in    ChanCfg_a;
+        Sg          : in    SgDrive_a := (others => SgDriveIdle_c);
         EccSec      : in    std_logic_vector(15 downto 0);      -- SEC and DED pulses of the FT buffers
         EccDed      : in    std_logic_vector(15 downto 0);
         EccSecOnB   : in    std_logic_vector(15 downto 0);      -- Pulses in the clock cycle in which BValid rises
@@ -112,6 +114,25 @@ architecture sim of odma_registers_th is
     signal EccInjValid_i  : std_logic_vector(15 downto 0);
     signal EccInjDouble   : std_logic;
     signal EccInjData     : std_logic;
+    signal StoppedDut     : std_logic_vector(0 to 1);
+
+    -- Scatter/Gather engine ports of the DUT
+    type SgAddr_a is array (0 to 1) of std_logic_vector(AddrWidth_g - 1 downto 0);
+    type SgErr_a is array (0 to 1) of XferErr_t;
+
+    signal SgCurDesc  : SgAddr_a;
+    signal SgTail     : SgAddr_a;
+    signal SgTailWr   : std_logic_vector(0 to 1);
+    signal SgCyclic   : std_logic_vector(0 to 1);
+    signal SgKeyhole  : std_logic_vector(0 to 1);
+    signal SgCurPtr   : SgAddr_a;
+    signal SgIdle     : std_logic_vector(0 to 1);
+    signal SgPkt      : std_logic_vector(0 to 1);
+    signal SgErrValid : std_logic_vector(0 to 1);
+    signal SgErrXfer  : SgErr_a;
+    signal SgErrSg    : SgErr_a;
+    signal SgPktStart : std_logic_vector(0 to 1);
+    signal IrqPrev    : std_logic_vector(0 to 1) := "00";
 
     -- Channel models
     signal M_Busy    : std_logic_vector(0 to 1) := "00";
@@ -155,8 +176,17 @@ architecture sim of odma_registers_th is
                                                     InjDouble    => '0',
                                                     InjData      => '0',
                                                     InjMode      => '0',
-                                                    InjMulti     => 0
-                                                );
+                                                    InjMulti     => 0,
+                                                    SgCurDesc    => (others => (others => '0')),
+                                                     SgStartPtr   => (others => (others => '0')),
+                                                     SgTail       => (others => (others => '0')),
+                                                     SgTailWr     => (others => 0),
+                                                     SgCyclic     => "00",
+                                                    SgKeyhole    => "00",
+                                                    IrqRiseCycle => (others => 0),
+                                                     PktCycle     => (others => 0),
+                                                    SgCurDiffer  => (others => 0)
+                                                 );
 
 begin
 
@@ -172,7 +202,7 @@ begin
     -----------------------------------------------------------------------------------------------
     i_dut : entity work.odma_registers
         generic map (
-            IncludeSg_g       => false,
+            IncludeSg_g       => IncludeSg_g,
             IncludeMm2s_g     => IncludeMm2s_g,
             IncludeS2mm_g     => IncludeS2mm_g,
             StsCntrlStrm_g    => StsCntrlStrm_c,
@@ -225,7 +255,7 @@ begin
             Mm2sRes_Err       => Mm2sRes_Err,
             Mm2s_Run          => Run_i(Mm2s_c),
             Mm2s_Drain        => Drain_i(Mm2s_c),
-            Mm2s_Stopped      => Stopped_i(Mm2s_c),
+            Mm2s_Stopped      => StoppedDut(Mm2s_c),
             S2mmCmd_Valid     => CmdValid(S2mm_c),
             S2mmCmd_Ready     => CmdReady(S2mm_c),
             S2mmCmd_Addr      => S2mmCmd_Addr,
@@ -238,7 +268,31 @@ begin
             S2mmRes_Err       => S2mmRes_Err,
             S2mm_Run          => Run_i(S2mm_c),
             S2mm_Drain        => Drain_i(S2mm_c),
-            S2mm_Stopped      => Stopped_i(S2mm_c),
+            S2mm_Stopped      => StoppedDut(S2mm_c),
+            Mm2sSg_CurDesc    => SgCurDesc(Mm2s_c),
+            Mm2sSg_Tail       => SgTail(Mm2s_c),
+            Mm2sSg_TailWr     => SgTailWr(Mm2s_c),
+            Mm2sSg_Cyclic     => SgCyclic(Mm2s_c),
+            Mm2sSg_Keyhole    => SgKeyhole(Mm2s_c),
+            Mm2sSg_CurPtr     => SgCurPtr(Mm2s_c),
+            Mm2sSg_Idle       => SgIdle(Mm2s_c),
+            Mm2sSg_Pkt        => SgPkt(Mm2s_c),
+            Mm2sSg_ErrValid   => SgErrValid(Mm2s_c),
+            Mm2sSg_ErrXfer    => SgErrXfer(Mm2s_c),
+            Mm2sSg_ErrSg      => SgErrSg(Mm2s_c),
+            Mm2s_PktStart     => SgPktStart(Mm2s_c),
+            S2mmSg_CurDesc    => SgCurDesc(S2mm_c),
+            S2mmSg_Tail       => SgTail(S2mm_c),
+            S2mmSg_TailWr     => SgTailWr(S2mm_c),
+            S2mmSg_Cyclic     => SgCyclic(S2mm_c),
+            S2mmSg_Keyhole    => SgKeyhole(S2mm_c),
+            S2mmSg_CurPtr     => SgCurPtr(S2mm_c),
+            S2mmSg_Idle       => SgIdle(S2mm_c),
+            S2mmSg_Pkt        => SgPkt(S2mm_c),
+            S2mmSg_ErrValid   => SgErrValid(S2mm_c),
+            S2mmSg_ErrXfer    => SgErrXfer(S2mm_c),
+            S2mmSg_ErrSg      => SgErrSg(S2mm_c),
+            S2mm_PktStart     => SgPktStart(S2mm_c),
             Mm2s_Irq          => Irq_i(Mm2s_c),
             S2mm_Irq          => Irq_i(S2mm_c),
             Ecc_Irq           => EccIrq,
@@ -259,6 +313,19 @@ begin
     CoreRst     <= CoreRst_i;
     EccInjValid <= EccInjValid_i;
     Obs         <= Obs_i;
+
+    -- Model of the Scatter/Gather engines: the testbench drives its signals; with Scatter/Gather Mode the DUT sees
+    -- the channel and its engine stopped only when both are (as the core combines them)
+    g_sg : for ch in 0 to 1 generate
+        SgCurPtr(ch)   <= Sg(ch).CurPtr(AddrWidth_g - 1 downto 0);
+        SgIdle(ch)     <= Sg(ch).Idle;
+        SgPkt(ch)      <= Sg(ch).Pkt;
+        SgErrValid(ch) <= Sg(ch).ErrValid;
+        SgErrXfer(ch)  <= Sg(ch).ErrXfer;
+        SgErrSg(ch)    <= Sg(ch).ErrSg;
+        SgPktStart(ch) <= Sg(ch).PktStart;
+        StoppedDut(ch) <= Stopped_i(ch) and Sg(ch).Stopped when IncludeSg_g else Stopped_i(ch);
+    end generate;
 
     -- ECC events, optionally in the clock cycle in which a register write takes effect
     EccSecIn <= EccSec or EccSecOnB when BValid = '1' and BPrev = '0' else EccSec;
@@ -406,6 +473,31 @@ begin
                     M_Busy(ch)       <= '0';
                     O_v.ResCount(ch) := Obs_i.ResCount(ch) + 1;
                     O_v.ResCycle(ch) := Obs_i.Cycle;
+                end if;
+
+                -- Scatter/Gather engine outputs of the DUT
+                O_v.SgCurDesc(ch)                           := (others => '0');
+                O_v.SgCurDesc(ch)(AddrWidth_g - 1 downto 0) := SgCurDesc(ch);
+                if Run_i(ch) = '1' and RunPrev(ch) = '0' then
+                    O_v.SgStartPtr(ch)                           := (others => '0');
+                    O_v.SgStartPtr(ch)(AddrWidth_g - 1 downto 0) := SgCurDesc(ch);
+                end if;
+                if SgTailWr(ch) = '1' then
+                    O_v.SgTailWr(ch)                         := Obs_i.SgTailWr(ch) + 1;
+                    O_v.SgTail(ch)                           := (others => '0');
+                    O_v.SgTail(ch)(AddrWidth_g - 1 downto 0) := SgTail(ch);
+                end if;
+                O_v.SgCyclic(ch)  := SgCyclic(ch);
+                O_v.SgKeyhole(ch) := SgKeyhole(ch);
+                IrqPrev(ch)       <= Irq_i(ch);
+                if Irq_i(ch) = '1' and IrqPrev(ch) = '0' then
+                    O_v.IrqRiseCycle(ch) := Obs_i.Cycle;
+                end if;
+                if Sg(ch).Pkt = '1' then
+                    O_v.PktCycle(ch) := Obs_i.Cycle;
+                end if;
+                if IncludeSg_g and Run_i(ch) = '1' and RunPrev(ch) = '1' and SgCurDesc(ch) /= SgCurPtr(ch) then
+                    O_v.SgCurDiffer(ch) := Obs_i.SgCurDiffer(ch) + 1;
                 end if;
 
                 -- Stop timer

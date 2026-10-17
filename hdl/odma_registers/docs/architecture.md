@@ -2,16 +2,17 @@
 
 ## 1. Block diagram
 
-![Block diagram of odma_registers: the AXI4-Lite slave and the register bank RG-1 with the channel state machines
-and the command and result interfaces of both channels, the two interrupt controllers RG-2, the reset controller
-RG-3 with the reset outputs and the extension window RG-4 with the ECC monitor](img/odma_registers_arch.drawio.svg)
+![Block diagram of odma_registers: the AXI4-Lite slave and the register bank RG-1 with the channel state machines,
+the command and result interfaces of both channels and the control interface of the descriptor engines, the two
+interrupt controllers RG-2, the reset controller RG-3 with the reset outputs and the extension window RG-4 with the
+ECC monitor](img/odma_registers_arch.drawio.svg)
 
 ## 2. Entities
 
 | Entity | Block | Content |
 | --- | --- | --- |
-| `odma_registers` | RG-1 and the module top | `olo_axi_lite_slave`, register decode, the DR state machine and the registers of each channel, the transfer command and result interfaces, instances of the entities below |
-| `odma_interrupt` | RG-2 | One per channel: `IOC_Irq`, `Dly_Irq`, `Err_Irq`, their write-one-to-clear, the interrupt output; in phase b the threshold counter and the delay timer |
+| `odma_registers` | RG-1 and the module top | `olo_axi_lite_slave`, register decode, the state machine and the registers of each channel, the transfer command and result interfaces (Direct Register Mode), the control interface of the descriptor engines (Scatter/Gather Mode), instances of the entities below |
+| `odma_interrupt` | RG-2 | One per channel: `IOC_Irq`, `Dly_Irq`, `Err_Irq`, their write-one-to-clear, the interrupt output; in Scatter/Gather Mode (`Sg_g`) the threshold counter and the delay timer |
 | `odma_soft_reset` | RG-3 | Soft reset sequence, the core reset and the reset outputs |
 | `odma_extension` | RG-4 | Extension window: identification, configuration readback, `olo_ft_ecc_monitor`, ECC flags and `Ecc_Irq`, error injection |
 
@@ -39,6 +40,14 @@ the registers of this module, is reset by the core reset `CoreRst` = `Rst` or th
 | `Mm2sRes_Eof` | 1 | in | End of packet: the transfer completed |
 | `S2mmCmd_Valid`, `S2mmCmd_Ready`, `S2mmCmd_Addr`, `S2mmCmd_Length`, `S2mmCmd_Keyhole` | as MM2S | | Transfer command of the S2MM channel; `S2mmCmd_Length` is the buffer length; the command has no start and end of packet |
 | `S2mmRes_*`, `S2mm_Run`, `S2mm_Drain`, `S2mm_Stopped` | as MM2S | | The same for the S2MM channel; `S2mmRes_Bytes` is the bytes written, `S2mmRes_Eof` the end of the packet in the buffer |
+| `Mm2sSg_CurDesc` | `AddrWidth_g` | out | Scatter/Gather Mode: the value `MM2S_CURDESC` reads, taken by the engine at the rising edge of `Mm2s_Run` |
+| `Mm2sSg_Tail`, `Mm2sSg_TailWr` | `AddrWidth_g`, 1 | out | `MM2S_TAILDESC` and a pulse one clock cycle after the triggering write while the channel runs |
+| `Mm2sSg_Cyclic`, `Mm2sSg_Keyhole` | 1 | out | `MM2S_DMACR.CyclicBD`, `MM2S_DMACR.Keyhole` |
+| `Mm2sSg_CurPtr`, `Mm2sSg_Idle` | `AddrWidth_g`, 1 | in | Current descriptor pointer and idle level of the engine |
+| `Mm2sSg_Pkt` | 1 | in | Pulse: a packet completed (threshold counter) |
+| `Mm2sSg_ErrValid`, `Mm2sSg_ErrXfer`, `Mm2sSg_ErrSg` | 1, 2, 2 | in | Error report of the engine: transfer error and engine error (`XferErr_t`) |
+| `Mm2s_PktStart` | 1 | in | Pulse: the first beat of a packet passed the stream port of the channel (delay timer) |
+| `S2mmSg_*`, `S2mm_PktStart` | as MM2S | | The same for the S2MM channel |
 | `Mm2s_Irq`, `S2mm_Irq`, `Ecc_Irq` | 1 | out | Interrupt outputs |
 | `Mm2s_RstOut`, `S2mm_RstOut` | 1 | out | Reset outputs of the stream peers |
 | `Ecc_Sec`, `Ecc_Ded` | `EccBuffers_c` | in | SEC and DED event pulses of the FT buffers (index per section 8) |
@@ -47,9 +56,12 @@ the registers of this module, is reset by the core reset `CoreRst` = `Rst` or th
 | `EccInj_Data` | 1 | out | '1': flip data bits, '0': flip parity bits of the injected codeword |
 
 The generics are those of section 6 of the specification. `EccBuffers_c` = 16, the fixed size of the buffer index
-space of the extension window. The inputs of the channels and the ECC inputs have defaults (`Cmd_Ready` '0',
-`Res_Valid` '0', `Stopped` '1', `Ecc_Sec` and `Ecc_Ded` 0), so that a channel that is not included needs no
-connection. The control outputs of a channel that is not included stay '0' (`Cmd_Valid`, `Run`, `Drain`, `Irq`).
+space of the extension window. The inputs of the channels, of the engines and the ECC inputs have defaults
+(`Cmd_Ready` '0', `Res_Valid` '0', `Stopped` '1', the engine inputs 0, `Ecc_Sec` and `Ecc_Ded` 0), so that a
+channel that is not included, or the engine interface in Direct Register Mode, needs no connection. The control
+outputs of a channel that is not included stay '0' (`Cmd_Valid`, `Run`, `Drain`, `Irq`). In Scatter/Gather Mode the
+`*_Stopped` input is the AND of `Stopped` of the channel and of its engine (the core combines them), and `*_Run` and
+`*_Drain` go to both.
 
 ## 4. Register bank (RG-1)
 
@@ -102,23 +114,71 @@ in the buffer. A halt during an S2MM transfer makes the channel write the chunks
 rest of the packet up to `TLast` and return a result without the end of packet: no `IOC_Irq`, no length update
 (interpretation I8).
 
-### 4.3 Registers
+### 4.3 Channel state machine (Scatter/Gather Mode)
+
+With `IncludeSg_g` the state machine uses three states: the descriptor engine issues the transfer commands, the
+register interface none.
+
+| State | `DMASR.Halted` | `DMASR.Idle` | Meaning |
+| --- | --- | --- | --- |
+| `Halted_s` | 1 | 0 | After a reset, after a halt or an error |
+| `Started_s` | 0 | `Idle` of the engine | Running |
+| `Stopping_s` | 0 | 0 | Halt requested or error: waiting for `Stopped` of the channel and its engine (RG-SG-10) |
+
+| From | Condition | To | Action |
+| --- | --- | --- | --- |
+| `Halted_s` | `DMACR.RS` written 1, no error flag set | `Started_s` | `Run` = '1'; reload of the threshold counter |
+| `Started_s` | `DMACR.RS` written 0 | `Stopping_s` | `Run` = '0' |
+| any | error report of the engine (`ErrValid`) | `Stopping_s` from `Started_s` | Error flags (RG-SG-05; S2MM `DMAIntErr` also with the slave and the decode error of a transfer), `RS` := 0, `Run` = '0', `Err_Irq` event |
+| `Stopping_s` | `Stopped` = '1' | `Halted_s` | |
+| any | illegal state | `Halted_s` | Recovery (`when others`) |
+
+`CURDESC` is a register with a flag `CurOwn`: while `CurOwn` is '1', `CURDESC` reads the pointer of the engine
+(`CurPtr`), otherwise the written value. `CurOwn` becomes '1' one clock cycle after the channel has left
+`Halted_s`, so it stays '1' after the halt and `CURDESC` keeps the last pointer of the engine (SG-FE-07). A write of
+`CURDESC` or `CURDESC_MSB` in `Halted_s` stores the current value with the written word replaced and clears
+`CurOwn`; writes in the other states are ignored (RG-SG-02). The value `CURDESC` reads goes to the engine, which
+takes it at the rising edge of `Run`; as `CurOwn` changes only one clock cycle after the start, the engine takes the
+value software has written.
+
+`TAILDESC` and `TAILDESC_MSB` are read/write in every state. `TailWr` is a registered pulse: it follows the
+triggering write (`TAILDESC` with 32 address bits, `TAILDESC_MSB` above, interpretation SGI-01) by one clock cycle,
+together with the updated register, and only when that write takes effect in `Started_s` (RG-SG-03). `Keyhole` and
+`CyclicBD` go to the engine as stored in `DMACR` (RG-SG-09). The registers of Direct Register Mode (`*_SA`,
+`*_DA`, `*_LENGTH`) do not exist; their offsets read 0 (RG-SG-01).
+
+### 4.4 Registers
 
 | Register | Implementation |
 | --- | --- |
 | `DMACR` | `RS`, `Keyhole`, `CyclicBD`, `IOC_IrqEn`, `Dly_IrqEn`, `Err_IrqEn`, `IRQThreshold` (write of 0 ignored), `IRQDelay` as flip-flops; bit 1 constant 1; `Reset` reads the busy level of `odma_soft_reset` |
-| `DMASR` | `Halted` and `Idle` decoded from the state; `SGIncld` constant; error flags as flip-flops set by results (an S2MM result with the slave or the decode error also sets `DMAIntErr`; the MM2S channel never returns the internal error code in DR mode, so `MM2S_DMASR.DMAIntErr` reads 0); interrupt flags from `odma_interrupt`; `IRQThresholdSts` = `IRQThreshold`; `Dly_Irq` and the other bits constant 0 |
+| `DMASR` | `Halted` and `Idle` decoded from the state (Scatter/Gather Mode: `Idle` of the engine in `Started_s`); `SGIncld` constant; error flags as flip-flops set by results or by the error reports of the engine (an S2MM error with the slave or the decode error also sets `DMAIntErr`; the MM2S channel never returns the internal error code in DR mode, so `MM2S_DMASR.DMAIntErr` reads 0 there); interrupt flags from `odma_interrupt`; DR mode: `IRQThresholdSts` = `IRQThreshold`, `Dly_Irq`, `IRQDelaySts` and the engine flags 0; Scatter/Gather Mode: `IRQThresholdSts` and `IRQDelaySts` the counter and the timer of `odma_interrupt` |
 | `*_SA`, `*_SA_MSB`, `*_DA`, `*_DA_MSB` | `AddrWidth_g` flip-flops per channel; the bits of the MSB register exist only above 32 address bits |
 | `*_LENGTH` | `LengthWidth_g` flip-flops per channel; written by software as RG-AR-07 allows, by the S2MM result on completion |
+| `*_CURDESC`, `*_CURDESC_MSB` | Scatter/Gather Mode: `AddrWidth_g` - 6 flip-flops and `CurOwn` per channel (section 4.3) |
+| `*_TAILDESC`, `*_TAILDESC_MSB` | Scatter/Gather Mode: `AddrWidth_g` - 6 flip-flops per channel and the `TailWr` pulse |
 
 ## 5. Interrupt controller (RG-2, `odma_interrupt`)
 
-Inputs per channel: the enables `Ena_Ioc` and `Ena_Err` from `DMACR`, the events `Evt_Ioc` and `Evt_Err` (one
-cycle each, combinational from the result handshake), the clears `Clr_Ioc` and `Clr_Err` (a write of `DMASR` with a
-1 in bit 12 or 14). Flags: `Flag_Ioc` is set by `Evt_Ioc`, `Flag_Err` by `Evt_Err`; a clear resets a flag unless an
-event of the same cycle sets it (RG-IR-03). Output: `Irq` = registered OR of (`Flag_Ioc` and `Ena_Ioc`) and
-(`Flag_Err` and `Ena_Err`) (RG-IR-04). `Dly_Irq` reads 0 in DR mode; phase b adds the threshold counter, the delay
-timer and the delay flag with their ports.
+Inputs per channel: the enables `Ena_Ioc`, `Ena_Dly` and `Ena_Err` from `DMACR`, the events `Evt_Ioc` and
+`Evt_Err` (one cycle each, combinational from the result handshake or the error report), the clears `Clr_Ioc`,
+`Clr_Dly` and `Clr_Err` (a write of `DMASR` with a 1 in bit 12, 13 or 14). Flags: `Flag_Ioc` is set by an IOC event,
+`Flag_Dly` by a timeout, `Flag_Err` by `Evt_Err`; a clear resets a flag unless an event of the same cycle sets it
+(RG-IR-03). Output: `Irq` = registered OR of (`Flag_Ioc` and `Ena_Ioc`), (`Flag_Dly` and `Ena_Dly`) and (`Flag_Err`
+and `Ena_Err`) (RG-IR-04, RG-SG-08). In Direct Register Mode `Evt_Ioc` is the IOC event and `Flag_Dly` stays 0.
+
+In Scatter/Gather Mode (`Sg_g`) the IOC event comes from the threshold counter, and the delay timer sets `Flag_Dly`:
+
+| Part | Behaviour |
+| --- | --- |
+| Threshold counter (RG-SG-06) | 8 bits, reset value 1. `Thr_Load` (one clock cycle after the start of the channel and after a write of a non-zero `IRQThreshold`, so that the new value is loaded) loads `IRQThreshold`. A packet event (`Evt_Pkt`) decrements it; at a count of 1 it raises the IOC event instead and reloads `IRQThreshold`, so the counter never reads 0 |
+| Delay timer (RG-SG-07, interpretation R9) | A prescaler of 125 clock cycles and an 8-bit timer. A packet event clears both and starts the timer when it did not raise the IOC event, otherwise stops it. The start of a packet (`Evt_PktStart`) stops and clears it; a packet event in the same clock cycle wins. When the timer reaches `IRQDelay` it raises the timeout (`Flag_Dly`), clears itself and reloads the threshold counter. `IRQDelay` = 0 stops and clears it |
+
+The packet event of MM2S comes from the engine after the status write of the descriptor with `TXEOF`, the start of
+the next MM2S packet from the stream port of the channel. With descriptors fetched and issued ahead, the next packet
+can start before the completion event of the previous one arrives; the timer then runs during that packet, so a
+`Dly_Irq` can come while a packet is in progress. This is the case the timer exists for: software is told that
+completed packets wait.
 
 ## 6. Reset controller (RG-3, `odma_soft_reset`)
 
@@ -173,7 +233,10 @@ of its `ErrInj_BitFlip` input and applies it to the next codeword written. Witho
 | 3 | S2MM write data buffer (`olo_ft_axi_master_full`) | a |
 | 4 | MM2S transfer buffer (`olo_ft_fifo_sync` of MM-1) | a |
 | 5 | MM2S response buffer (`olo_ft_fifo_sync` of MM-1) | a |
-| 6 to 9 | Descriptor buffers and the descriptor port of the Scatter/Gather engine | b |
+| 6 | MM2S descriptor buffer of the Scatter/Gather engine (`olo_ft_fifo_sync`) | b |
+| 7 | S2MM descriptor buffer of the Scatter/Gather engine (`olo_ft_fifo_sync`) | b |
+| 8 | Read data buffer of the descriptor port (`olo_ft_axi_master_simple`) | b |
+| 9 | Write data buffer of the descriptor port (`olo_ft_axi_master_simple`) | b |
 | 10, 11 | Control and status stream buffers | c |
 | 12 to 15 | Reserved | |
 
@@ -187,6 +250,10 @@ Buffers of an excluded channel or a later phase count nothing.
   address handshake. The write takes effect at the end of the clock cycle in which `BValid` rises.
 - A length write raises `Cmd_Valid` in the clock cycle after it takes effect; the state change to `Busy_s` and
   `DMASR.Idle` = 0 are visible to the next read.
+- Scatter/Gather Mode: `Run` rises in the clock cycle after the write of `RS` = 1 takes effect; `TailWr` follows
+  the triggering tail pointer write by one clock cycle. A packet event updates the threshold counter and `IOC_Irq` at
+  the end of its clock cycle; a timeout of the delay timer sets `Dly_Irq` 125 x `IRQDelay` clock cycles after the
+  packet event that started it, and the interrupt output follows one clock cycle later.
 - A result updates the status registers and the interrupt flags at the end of the clock cycle of its handshake; the
   interrupt output follows one clock cycle later. A clear of a flag (write of `DMASR`) and a result in the same
   clock cycle leave the flag set, so a result whose handshake is in or after the clock cycle in which `BValid` of the

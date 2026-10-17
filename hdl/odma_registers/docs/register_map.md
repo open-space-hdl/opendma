@@ -23,14 +23,22 @@ names of the product guide; the window from 0x100 holds the extension registers 
 | --- | --- | --- |
 | 0x000 | [MM2S_DMACR](#mm2s_dmacr) | MM2S channel control (PG021 Table 6) |
 | 0x004 | [MM2S_DMASR](#mm2s_dmasr) | MM2S channel status (PG021 Table 7) |
-| 0x018 | [MM2S_SA](#mm2s_sa) | MM2S buffer address, bits 31 to 0 (PG021 Table 12) |
-| 0x01C | [MM2S_SA_MSB](#mm2s_sa_msb) | MM2S buffer address, bits 63 to 32 (PG021 Table 13) |
-| 0x028 | [MM2S_LENGTH](#mm2s_length) | MM2S transfer length (PG021 Table 14) |
+| 0x008 | [MM2S_CURDESC](#mm2s_curdesc) | MM2S current descriptor pointer, bits 31 to 0 (PG021 Table 8); Scatter/Gather Mode only |
+| 0x00C | [MM2S_CURDESC_MSB](#mm2s_curdesc_msb) | MM2S current descriptor pointer, bits 63 to 32 (PG021 Table 9); Scatter/Gather Mode only |
+| 0x010 | [MM2S_TAILDESC](#mm2s_taildesc) | MM2S tail descriptor pointer, bits 31 to 0 (PG021 Table 10); Scatter/Gather Mode only |
+| 0x014 | [MM2S_TAILDESC_MSB](#mm2s_taildesc_msb) | MM2S tail descriptor pointer, bits 63 to 32 (PG021 Table 11); Scatter/Gather Mode only |
+| 0x018 | [MM2S_SA](#mm2s_sa) | MM2S buffer address, bits 31 to 0 (PG021 Table 12); Direct Register Mode only |
+| 0x01C | [MM2S_SA_MSB](#mm2s_sa_msb) | MM2S buffer address, bits 63 to 32 (PG021 Table 13); Direct Register Mode only |
+| 0x028 | [MM2S_LENGTH](#mm2s_length) | MM2S transfer length (PG021 Table 14); Direct Register Mode only |
 | 0x030 | [S2MM_DMACR](#s2mm_dmacr) | S2MM channel control (PG021 Table 16) |
 | 0x034 | [S2MM_DMASR](#s2mm_dmasr) | S2MM channel status (PG021 Table 17) |
-| 0x048 | [S2MM_DA](#s2mm_da) | S2MM buffer address, bits 31 to 0 (PG021 Table 22) |
-| 0x04C | [S2MM_DA_MSB](#s2mm_da_msb) | S2MM buffer address, bits 63 to 32 (PG021 Table 23) |
-| 0x058 | [S2MM_LENGTH](#s2mm_length) | S2MM buffer length (PG021 Table 24) |
+| 0x038 | [S2MM_CURDESC](#s2mm_curdesc) | S2MM current descriptor pointer, bits 31 to 0 (PG021 Table 18); Scatter/Gather Mode only |
+| 0x03C | [S2MM_CURDESC_MSB](#s2mm_curdesc_msb) | S2MM current descriptor pointer, bits 63 to 32 (PG021 Table 19); Scatter/Gather Mode only |
+| 0x040 | [S2MM_TAILDESC](#s2mm_taildesc) | S2MM tail descriptor pointer, bits 31 to 0 (PG021 Table 20); Scatter/Gather Mode only |
+| 0x044 | [S2MM_TAILDESC_MSB](#s2mm_taildesc_msb) | S2MM tail descriptor pointer, bits 63 to 32 (PG021 Table 21); Scatter/Gather Mode only |
+| 0x048 | [S2MM_DA](#s2mm_da) | S2MM buffer address, bits 31 to 0 (PG021 Table 22); Direct Register Mode only |
+| 0x04C | [S2MM_DA_MSB](#s2mm_da_msb) | S2MM buffer address, bits 63 to 32 (PG021 Table 23); Direct Register Mode only |
+| 0x058 | [S2MM_LENGTH](#s2mm_length) | S2MM buffer length (PG021 Table 24); Direct Register Mode only |
 | 0x100 | [EXT_ID](#ext_id) | Identification of OpenDMA |
 | 0x104 | [EXT_VERSION](#ext_version) | Version of the core |
 | 0x108 | [EXT_CONFIG](#ext_config) | Configuration of the core |
@@ -57,6 +65,10 @@ Index of a buffer in `ECC_COUNT`, `ECC_INJECT.Buffer` and the ECC ports; indices
 | 3 | S2MM write data buffer (olo_ft_axi_master_full) |
 | 4 | MM2S transfer buffer (olo_ft_fifo_sync) |
 | 5 | MM2S response buffer (olo_ft_fifo_sync) |
+| 6 | MM2S descriptor buffer of the Scatter/Gather engine (olo_ft_fifo_sync) |
+| 7 | S2MM descriptor buffer of the Scatter/Gather engine (olo_ft_fifo_sync) |
+| 8 | Read data buffer of the descriptor port (olo_ft_axi_master_simple) |
+| 9 | Write data buffer of the descriptor port (olo_ft_axi_master_simple) |
 
 ## Fields
 
@@ -67,12 +79,12 @@ Address 0x000: MM2S channel control (PG021 Table 6).
 | Bits | Field | Access | Reset | Description |
 | --- | --- | --- | --- | --- |
 | 31:24 | IRQDelay | RW | 0 | Interrupt delay timeout in units of 125 clock cycles (Scatter/Gather Mode); 0 disables the timer |
-| 23:16 | IRQThreshold | RW | 1 | Interrupt coalescing threshold (Scatter/Gather Mode); a write of 0 leaves the field unchanged |
+| 23:16 | IRQThreshold | RW | 1 | Interrupt coalescing threshold: completed packets per IOC_Irq (Scatter/Gather Mode); a write of 0 leaves the field unchanged, any other write reloads the counter |
 | 14 | Err_IrqEn | RW | 0 | Err_Irq drives the interrupt output of the channel |
 | 13 | Dly_IrqEn | RW | 0 | Dly_Irq drives the interrupt output of the channel (Scatter/Gather Mode) |
 | 12 | IOC_IrqEn | RW | 0 | IOC_Irq drives the interrupt output of the channel |
-| 4 | CyclicBD | RW | 0 | Cyclic descriptor mode; stored and read back, no function in Direct Register Mode |
-| 3 | Keyhole | RW | 0 | Non-incrementing bursts (keyhole); stored and read back, the bursts stay incrementing in this configuration |
+| 4 | CyclicBD | RW | 0 | Cyclic descriptor mode (Scatter/Gather Mode): the engine ignores the tail pointer and the completed bit of the descriptors; no function in Direct Register Mode |
+| 3 | Keyhole | RW | 0 | Non-incrementing bursts (keyhole) for the transfers of the channel, taken at the start of a transfer or descriptor fetch: S2MM in both modes, MM2S in Scatter/Gather Mode; the bursts stay incrementing until Open Logic provides FIXED bursts |
 | 2 | Reset | RW | 0 | Write 1: soft reset of the whole core (both channels); reads 1 until the reset is complete |
 | 1 | Reserved | RO | 1 | Reads 1 |
 | 0 | RS | RW | 0 | Run (1) or stop (0) the channel; a start is refused while an error flag of the channel is set |
@@ -83,24 +95,58 @@ Address 0x004: MM2S channel status (PG021 Table 7).
 
 | Bits | Field | Access | Reset | Description |
 | --- | --- | --- | --- | --- |
-| 31:24 | IRQDelaySts | RO | 0 | Delay timer (Scatter/Gather Mode); 0 in Direct Register Mode |
-| 23:16 | IRQThresholdSts | RO | 1 | Remaining coalescing count (Scatter/Gather Mode); the value of DMACR.IRQThreshold in Direct Register Mode |
+| 31:24 | IRQDelaySts | RO | 0 | Delay timer in units of 125 clock cycles (Scatter/Gather Mode); 0 in Direct Register Mode |
+| 23:16 | IRQThresholdSts | RO | 1 | Packets until the next IOC_Irq (Scatter/Gather Mode); the value of DMACR.IRQThreshold in Direct Register Mode |
 | 14 | Err_Irq | W1C | 0 | An error flag of the channel was set |
 | 13 | Dly_Irq | W1C | 0 | The delay timer expired (Scatter/Gather Mode); 0 in Direct Register Mode |
-| 12 | IOC_Irq | W1C | 0 | A transfer completed |
-| 10 | SGDecErr | RO | 0 | Decode error of a descriptor access (Scatter/Gather Mode); 0 in Direct Register Mode |
-| 9 | SGSlvErr | RO | 0 | Slave error of a descriptor access (Scatter/Gather Mode); 0 in Direct Register Mode |
-| 8 | SGIntErr | RO | 0 | Stale descriptor (Scatter/Gather Mode); 0 in Direct Register Mode |
+| 12 | IOC_Irq | W1C | 0 | A transfer completed (Direct Register Mode); the threshold number of packets completed (Scatter/Gather Mode) |
+| 10 | SGDecErr | RO | 0 | Decode error (DECERR) of a descriptor fetch or status write (Scatter/Gather Mode, once Open Logic reports the response code); 0 in Direct Register Mode |
+| 9 | SGSlvErr | RO | 0 | Error response of a descriptor fetch or status write (Scatter/Gather Mode; SLVERR, and DECERR until Open Logic reports the response code); 0 in Direct Register Mode |
+| 8 | SGIntErr | RO | 0 | Stale descriptor: completed bit set outside cyclic mode (Scatter/Gather Mode); 0 in Direct Register Mode |
 | 6 | DMADecErr | RO | 0 | Decode error response (DECERR) of the memory or a buffer beyond the top of the address space |
 | 5 | DMASlvErr | RO | 0 | Slave error response (SLVERR) of the memory |
-| 4 | DMAIntErr | RO | 0 | Internal error: S2MM packet longer than the buffer or S2MM write error; MM2S: 0 in Direct Register Mode |
+| 4 | DMAIntErr | RO | 0 | Internal error: S2MM packet longer than the buffer (Direct Register Mode), S2MM write error, descriptor with buffer length 0 (Scatter/Gather Mode); MM2S: 0 in Direct Register Mode |
 | 3 | SGIncld | RO | IncludeSg_g | Scatter/Gather Mode included |
-| 1 | Idle | RO | 0 | The last transfer is complete and no new one has started; 0 while halted and before the first transfer |
+| 1 | Idle | RO | 0 | Direct Register Mode: the last transfer is complete and no new one has started; Scatter/Gather Mode: the engine has reached the tail and completed its descriptors; 0 while halted and before the first transfer |
 | 0 | Halted | RO | 1 | The channel is stopped (after a reset, a halt or an error) |
+
+### MM2S_CURDESC
+
+Address 0x008: MM2S current descriptor pointer, bits 31 to 0 (PG021 Table 8); Scatter/Gather Mode only.
+
+| Bits | Field | Access | Reset | Description |
+| --- | --- | --- | --- | --- |
+| 31:6 | Pointer | RW | 0 | Descriptor address bits 31 to 6: written while the channel is halted, read-only while it runs; reads the descriptor the engine works on; bits at or above AddrWidth_g read 0 |
+| 5:0 | Reserved | RO | 0 | Reads 0 |
+
+### MM2S_CURDESC_MSB
+
+Address 0x00C: MM2S current descriptor pointer, bits 63 to 32 (PG021 Table 9); Scatter/Gather Mode only.
+
+| Bits | Field | Access | Reset | Description |
+| --- | --- | --- | --- | --- |
+| 31:0 | Pointer | RW | 0 | Descriptor address bits 63 to 32, as CURDESC; bits at or above AddrWidth_g - 32 read 0 |
+
+### MM2S_TAILDESC
+
+Address 0x010: MM2S tail descriptor pointer, bits 31 to 0 (PG021 Table 10); Scatter/Gather Mode only.
+
+| Bits | Field | Access | Reset | Description |
+| --- | --- | --- | --- | --- |
+| 31:6 | Pointer | RW | 0 | Tail descriptor address bits 31 to 6; with 32 address bits a write while the channel runs moves the tail and starts the engine; bits at or above AddrWidth_g read 0 |
+| 5:0 | Reserved | RO | 0 | Reads 0 |
+
+### MM2S_TAILDESC_MSB
+
+Address 0x014: MM2S tail descriptor pointer, bits 63 to 32 (PG021 Table 11); Scatter/Gather Mode only.
+
+| Bits | Field | Access | Reset | Description |
+| --- | --- | --- | --- | --- |
+| 31:0 | Pointer | RW | 0 | Tail descriptor address bits 63 to 32; above 32 address bits a write while the channel runs moves the tail and starts the engine; bits at or above AddrWidth_g - 32 read 0 |
 
 ### MM2S_SA
 
-Address 0x018: MM2S buffer address, bits 31 to 0 (PG021 Table 12).
+Address 0x018: MM2S buffer address, bits 31 to 0 (PG021 Table 12); Direct Register Mode only.
 
 | Bits | Field | Access | Reset | Description |
 | --- | --- | --- | --- | --- |
@@ -108,7 +154,7 @@ Address 0x018: MM2S buffer address, bits 31 to 0 (PG021 Table 12).
 
 ### MM2S_SA_MSB
 
-Address 0x01C: MM2S buffer address, bits 63 to 32 (PG021 Table 13).
+Address 0x01C: MM2S buffer address, bits 63 to 32 (PG021 Table 13); Direct Register Mode only.
 
 | Bits | Field | Access | Reset | Description |
 | --- | --- | --- | --- | --- |
@@ -116,7 +162,7 @@ Address 0x01C: MM2S buffer address, bits 63 to 32 (PG021 Table 13).
 
 ### MM2S_LENGTH
 
-Address 0x028: MM2S transfer length (PG021 Table 14).
+Address 0x028: MM2S transfer length (PG021 Table 14); Direct Register Mode only.
 
 | Bits | Field | Access | Reset | Description |
 | --- | --- | --- | --- | --- |
@@ -129,12 +175,12 @@ Address 0x030: S2MM channel control (PG021 Table 16).
 | Bits | Field | Access | Reset | Description |
 | --- | --- | --- | --- | --- |
 | 31:24 | IRQDelay | RW | 0 | Interrupt delay timeout in units of 125 clock cycles (Scatter/Gather Mode); 0 disables the timer |
-| 23:16 | IRQThreshold | RW | 1 | Interrupt coalescing threshold (Scatter/Gather Mode); a write of 0 leaves the field unchanged |
+| 23:16 | IRQThreshold | RW | 1 | Interrupt coalescing threshold: completed packets per IOC_Irq (Scatter/Gather Mode); a write of 0 leaves the field unchanged, any other write reloads the counter |
 | 14 | Err_IrqEn | RW | 0 | Err_Irq drives the interrupt output of the channel |
 | 13 | Dly_IrqEn | RW | 0 | Dly_Irq drives the interrupt output of the channel (Scatter/Gather Mode) |
 | 12 | IOC_IrqEn | RW | 0 | IOC_Irq drives the interrupt output of the channel |
-| 4 | CyclicBD | RW | 0 | Cyclic descriptor mode; stored and read back, no function in Direct Register Mode |
-| 3 | Keyhole | RW | 0 | Non-incrementing bursts (keyhole); stored and read back, the bursts stay incrementing in this configuration |
+| 4 | CyclicBD | RW | 0 | Cyclic descriptor mode (Scatter/Gather Mode): the engine ignores the tail pointer and the completed bit of the descriptors; no function in Direct Register Mode |
+| 3 | Keyhole | RW | 0 | Non-incrementing bursts (keyhole) for the transfers of the channel, taken at the start of a transfer or descriptor fetch: S2MM in both modes, MM2S in Scatter/Gather Mode; the bursts stay incrementing until Open Logic provides FIXED bursts |
 | 2 | Reset | RW | 0 | Write 1: soft reset of the whole core (both channels); reads 1 until the reset is complete |
 | 1 | Reserved | RO | 1 | Reads 1 |
 | 0 | RS | RW | 0 | Run (1) or stop (0) the channel; a start is refused while an error flag of the channel is set |
@@ -145,24 +191,58 @@ Address 0x034: S2MM channel status (PG021 Table 17).
 
 | Bits | Field | Access | Reset | Description |
 | --- | --- | --- | --- | --- |
-| 31:24 | IRQDelaySts | RO | 0 | Delay timer (Scatter/Gather Mode); 0 in Direct Register Mode |
-| 23:16 | IRQThresholdSts | RO | 1 | Remaining coalescing count (Scatter/Gather Mode); the value of DMACR.IRQThreshold in Direct Register Mode |
+| 31:24 | IRQDelaySts | RO | 0 | Delay timer in units of 125 clock cycles (Scatter/Gather Mode); 0 in Direct Register Mode |
+| 23:16 | IRQThresholdSts | RO | 1 | Packets until the next IOC_Irq (Scatter/Gather Mode); the value of DMACR.IRQThreshold in Direct Register Mode |
 | 14 | Err_Irq | W1C | 0 | An error flag of the channel was set |
 | 13 | Dly_Irq | W1C | 0 | The delay timer expired (Scatter/Gather Mode); 0 in Direct Register Mode |
-| 12 | IOC_Irq | W1C | 0 | A transfer completed |
-| 10 | SGDecErr | RO | 0 | Decode error of a descriptor access (Scatter/Gather Mode); 0 in Direct Register Mode |
-| 9 | SGSlvErr | RO | 0 | Slave error of a descriptor access (Scatter/Gather Mode); 0 in Direct Register Mode |
-| 8 | SGIntErr | RO | 0 | Stale descriptor (Scatter/Gather Mode); 0 in Direct Register Mode |
+| 12 | IOC_Irq | W1C | 0 | A transfer completed (Direct Register Mode); the threshold number of packets completed (Scatter/Gather Mode) |
+| 10 | SGDecErr | RO | 0 | Decode error (DECERR) of a descriptor fetch or status write (Scatter/Gather Mode, once Open Logic reports the response code); 0 in Direct Register Mode |
+| 9 | SGSlvErr | RO | 0 | Error response of a descriptor fetch or status write (Scatter/Gather Mode; SLVERR, and DECERR until Open Logic reports the response code); 0 in Direct Register Mode |
+| 8 | SGIntErr | RO | 0 | Stale descriptor: completed bit set outside cyclic mode (Scatter/Gather Mode); 0 in Direct Register Mode |
 | 6 | DMADecErr | RO | 0 | Decode error response (DECERR) of the memory or a buffer beyond the top of the address space |
 | 5 | DMASlvErr | RO | 0 | Slave error response (SLVERR) of the memory |
-| 4 | DMAIntErr | RO | 0 | Internal error: S2MM packet longer than the buffer or S2MM write error; MM2S: 0 in Direct Register Mode |
+| 4 | DMAIntErr | RO | 0 | Internal error: S2MM packet longer than the buffer (Direct Register Mode), S2MM write error, descriptor with buffer length 0 (Scatter/Gather Mode); MM2S: 0 in Direct Register Mode |
 | 3 | SGIncld | RO | IncludeSg_g | Scatter/Gather Mode included |
-| 1 | Idle | RO | 0 | The last transfer is complete and no new one has started; 0 while halted and before the first transfer |
+| 1 | Idle | RO | 0 | Direct Register Mode: the last transfer is complete and no new one has started; Scatter/Gather Mode: the engine has reached the tail and completed its descriptors; 0 while halted and before the first transfer |
 | 0 | Halted | RO | 1 | The channel is stopped (after a reset, a halt or an error) |
+
+### S2MM_CURDESC
+
+Address 0x038: S2MM current descriptor pointer, bits 31 to 0 (PG021 Table 18); Scatter/Gather Mode only.
+
+| Bits | Field | Access | Reset | Description |
+| --- | --- | --- | --- | --- |
+| 31:6 | Pointer | RW | 0 | Descriptor address bits 31 to 6: written while the channel is halted, read-only while it runs; reads the descriptor the engine works on; bits at or above AddrWidth_g read 0 |
+| 5:0 | Reserved | RO | 0 | Reads 0 |
+
+### S2MM_CURDESC_MSB
+
+Address 0x03C: S2MM current descriptor pointer, bits 63 to 32 (PG021 Table 19); Scatter/Gather Mode only.
+
+| Bits | Field | Access | Reset | Description |
+| --- | --- | --- | --- | --- |
+| 31:0 | Pointer | RW | 0 | Descriptor address bits 63 to 32, as CURDESC; bits at or above AddrWidth_g - 32 read 0 |
+
+### S2MM_TAILDESC
+
+Address 0x040: S2MM tail descriptor pointer, bits 31 to 0 (PG021 Table 20); Scatter/Gather Mode only.
+
+| Bits | Field | Access | Reset | Description |
+| --- | --- | --- | --- | --- |
+| 31:6 | Pointer | RW | 0 | Tail descriptor address bits 31 to 6; with 32 address bits a write while the channel runs moves the tail and starts the engine; bits at or above AddrWidth_g read 0 |
+| 5:0 | Reserved | RO | 0 | Reads 0 |
+
+### S2MM_TAILDESC_MSB
+
+Address 0x044: S2MM tail descriptor pointer, bits 63 to 32 (PG021 Table 21); Scatter/Gather Mode only.
+
+| Bits | Field | Access | Reset | Description |
+| --- | --- | --- | --- | --- |
+| 31:0 | Pointer | RW | 0 | Tail descriptor address bits 63 to 32; above 32 address bits a write while the channel runs moves the tail and starts the engine; bits at or above AddrWidth_g - 32 read 0 |
 
 ### S2MM_DA
 
-Address 0x048: S2MM buffer address, bits 31 to 0 (PG021 Table 22).
+Address 0x048: S2MM buffer address, bits 31 to 0 (PG021 Table 22); Direct Register Mode only.
 
 | Bits | Field | Access | Reset | Description |
 | --- | --- | --- | --- | --- |
@@ -170,7 +250,7 @@ Address 0x048: S2MM buffer address, bits 31 to 0 (PG021 Table 22).
 
 ### S2MM_DA_MSB
 
-Address 0x04C: S2MM buffer address, bits 63 to 32 (PG021 Table 23).
+Address 0x04C: S2MM buffer address, bits 63 to 32 (PG021 Table 23); Direct Register Mode only.
 
 | Bits | Field | Access | Reset | Description |
 | --- | --- | --- | --- | --- |
@@ -178,7 +258,7 @@ Address 0x04C: S2MM buffer address, bits 63 to 32 (PG021 Table 23).
 
 ### S2MM_LENGTH
 
-Address 0x058: S2MM buffer length (PG021 Table 24).
+Address 0x058: S2MM buffer length (PG021 Table 24); Direct Register Mode only.
 
 | Bits | Field | Access | Reset | Description |
 | --- | --- | --- | --- | --- |

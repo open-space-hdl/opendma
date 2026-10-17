@@ -17,7 +17,7 @@ the published interface are listed in section 6 of the architecture and in the m
 
 | Item | PG021 reference | Owner | Phase | Requirements | Test cases | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| `MAP.SG` | Table 4, SG mode address map | RG-1 | b | CO-SG-01, RG-SG-01, SG-IF-01 | - | Planned |
+| `MAP.SG` | Table 4, SG mode address map | RG-1 | b | CO-SG-01, RG-SG-01, SG-IF-01 | TC-RG-16 | Partly verified |
 | `MAP.DR` | Table 5, DR mode address map | RG-1 | a | RG-IF-01, RG-IF-02, RG-MAP-01, RG-MAP-03, RG-MAP-04, RG-SR-07 | TC-RG-01, TC-RG-02, TC-RG-12, TC-RG-14 | Verified |
 | `MAP.ENDIAN` | Figure 2, little-endian registers | RG-1 | a | RG-IF-04 | TC-RG-01 | Verified |
 | `MAP.WSTRB` | Register Space, note on the write strobes | RG-1 | a | RG-IF-03 | TC-RG-02 | Verified |
@@ -28,58 +28,58 @@ the published interface are listed in section 6 of the architecture and in the m
 | `S2MM_DMACR.Reserved` | Tables 6, 16, bits 1, 11 to 5, 15 | RG-1 | a | RG-CR-03 | TC-RG-01 | Verified |
 | `MM2S_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | CO-ER-02, CO-RS-01, MM-HA-02, RG-CR-06, RG-RS-02, RG-RS-04, SG-HA-02 | TC-CO-04, TC-CO-05, TC-CO-06, TC-MM-12, TC-RG-10 | Partly verified |
 | `S2MM_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | CO-ER-02, CO-RS-01, RG-CR-06, RG-RS-02, RG-RS-04, S2-HA-02, SG-HA-02 | TC-CO-04, TC-CO-05, TC-CO-06, TC-RG-10, TC-S2-12 | Partly verified |
-| `MM2S_DMACR.Keyhole` | Tables 6, 16, bit 3 | MM-1 (MM2S), S2-2 (S2MM) | b | MM-SG-03, RG-SG-09, S2-SG-04, SG-TR-03 | - | Planned |
-| `S2MM_DMACR.Keyhole` | Tables 6, 16, bit 3 | MM-1 (MM2S), S2-2 (S2MM) | b | MM-SG-03, RG-SG-09, S2-SG-04, SG-TR-03 | - | Planned |
-| `MM2S_DMACR.CyclicBD` | Tables 6, 16, bit 4 | SG-1 | b | RG-SG-09, SG-CY-01 | - | Planned |
-| `S2MM_DMACR.CyclicBD` | Tables 6, 16, bit 4 | SG-1 | b | RG-SG-09, SG-CY-01 | - | Planned |
+| `MM2S_DMACR.Keyhole` | Tables 6, 16, bit 3 | MM-1 (MM2S), S2-2 (S2MM) | b | MM-SG-03, RG-SG-09, S2-SG-04, SG-TR-03 | TC-RG-23 | Partly verified |
+| `S2MM_DMACR.Keyhole` | Tables 6, 16, bit 3 | MM-1 (MM2S), S2-2 (S2MM) | b | MM-SG-03, RG-SG-09, RG-SG-11, S2-SG-04, SG-TR-03 | TC-RG-23 | Partly verified |
+| `MM2S_DMACR.CyclicBD` | Tables 6, 16, bit 4 | SG-1 | b | RG-SG-09, SG-CY-01 | TC-RG-23 | Partly verified |
+| `S2MM_DMACR.CyclicBD` | Tables 6, 16, bit 4 | SG-1 | b | RG-SG-09, SG-CY-01 | TC-RG-23 | Partly verified |
 | `MM2S_DMACR.IOC_IrqEn` | Tables 6, 16, bit 12 (I2) | RG-2 | a | RG-CR-05, RG-IR-04 | TC-RG-02, TC-RG-04, TC-RG-05, TC-RG-08 | Verified |
 | `S2MM_DMACR.IOC_IrqEn` | Tables 6, 16, bit 12 (I2) | RG-2 | a | RG-CR-05, RG-IR-04 | TC-RG-02, TC-RG-04, TC-RG-05, TC-RG-08 | Verified |
-| `MM2S_DMACR.Dly_IrqEn` | Tables 6, 16, bit 13 | RG-2 | b | RG-SG-08 | - | Planned |
-| `S2MM_DMACR.Dly_IrqEn` | Tables 6, 16, bit 13 | RG-2 | b | RG-SG-08 | - | Planned |
+| `MM2S_DMACR.Dly_IrqEn` | Tables 6, 16, bit 13 | RG-2 | b | RG-SG-08 | TC-RG-22 | Verified |
+| `S2MM_DMACR.Dly_IrqEn` | Tables 6, 16, bit 13 | RG-2 | b | RG-SG-08 | TC-RG-22 | Verified |
 | `MM2S_DMACR.Err_IrqEn` | Tables 6, 16, bit 14 | RG-2 | a | RG-CR-05, RG-IR-04 | TC-RG-02, TC-RG-04, TC-RG-05, TC-RG-08 | Verified |
 | `S2MM_DMACR.Err_IrqEn` | Tables 6, 16, bit 14 | RG-2 | a | RG-CR-05, RG-IR-04 | TC-RG-02, TC-RG-04, TC-RG-05, TC-RG-08 | Verified |
-| `MM2S_DMACR.IRQThreshold` | Tables 6, 16, bits 23 to 16 | RG-2 | b | RG-SG-06 | - | Planned |
-| `S2MM_DMACR.IRQThreshold` | Tables 6, 16, bits 23 to 16 | RG-2 | b | RG-SG-06 | - | Planned |
-| `MM2S_DMACR.IRQDelay` | Tables 6, 16, bits 31 to 24 | RG-2 | b | RG-SG-07 | - | Planned |
-| `S2MM_DMACR.IRQDelay` | Tables 6, 16, bits 31 to 24 | RG-2 | b | RG-SG-07 | - | Planned |
-| `MM2S_DMASR.Halted` | Tables 7, 17, bit 0 | RG-1 | a | RG-SG-10, RG-SR-01, SG-ER-03, SG-HA-01 | TC-RG-03, TC-RG-07 | Partly verified |
-| `S2MM_DMASR.Halted` | Tables 7, 17, bit 0 | RG-1 | a | RG-SG-10, RG-SR-01, SG-ER-03, SG-HA-01 | TC-RG-03, TC-RG-07 | Partly verified |
-| `MM2S_DMASR.Idle` | Tables 7, 17, bit 1 | RG-1 | a | RG-SG-04, RG-SR-02, SG-FE-03 | TC-RG-03, TC-RG-04 | Partly verified |
-| `S2MM_DMASR.Idle` | Tables 7, 17, bit 1 | RG-1 | a | RG-SG-04, RG-SR-02, SG-FE-03 | TC-RG-03, TC-RG-04 | Partly verified |
+| `MM2S_DMACR.IRQThreshold` | Tables 6, 16, bits 23 to 16 | RG-2 | b | RG-SG-06 | TC-RG-21 | Verified |
+| `S2MM_DMACR.IRQThreshold` | Tables 6, 16, bits 23 to 16 | RG-2 | b | RG-SG-06 | TC-RG-21 | Verified |
+| `MM2S_DMACR.IRQDelay` | Tables 6, 16, bits 31 to 24 | RG-2 | b | RG-SG-07 | TC-RG-22 | Verified |
+| `S2MM_DMACR.IRQDelay` | Tables 6, 16, bits 31 to 24 | RG-2 | b | RG-SG-07 | TC-RG-22 | Verified |
+| `MM2S_DMASR.Halted` | Tables 7, 17, bit 0 | RG-1 | a | RG-SG-10, RG-SR-01, SG-ER-03, SG-HA-01 | TC-RG-03, TC-RG-07, TC-RG-19 | Partly verified |
+| `S2MM_DMASR.Halted` | Tables 7, 17, bit 0 | RG-1 | a | RG-SG-10, RG-SR-01, SG-ER-03, SG-HA-01 | TC-RG-03, TC-RG-07, TC-RG-19 | Partly verified |
+| `MM2S_DMASR.Idle` | Tables 7, 17, bit 1 | RG-1 | a | RG-SG-04, RG-SR-02, SG-FE-03 | TC-RG-03, TC-RG-04, TC-RG-16, TC-RG-19 | Partly verified |
+| `S2MM_DMASR.Idle` | Tables 7, 17, bit 1 | RG-1 | a | RG-SG-04, RG-SR-02, SG-FE-03 | TC-RG-03, TC-RG-04, TC-RG-16, TC-RG-19 | Partly verified |
 | `MM2S_DMASR.Reserved` | Tables 7, 17, bits 2, 7, 11, 15 | RG-1 | a | RG-SR-04 | TC-RG-01 | Verified |
 | `S2MM_DMASR.Reserved` | Tables 7, 17, bits 2, 7, 11, 15 | RG-1 | a | RG-SR-04 | TC-RG-01 | Verified |
-| `MM2S_DMASR.SGIncld` | Tables 7, 17, bit 3 | RG-1 | a | RG-SG-04, RG-SR-03 | TC-RG-01 | Partly verified |
-| `S2MM_DMASR.SGIncld` | Tables 7, 17, bit 3 | RG-1 | a | RG-SG-04, RG-SR-03 | TC-RG-01 | Partly verified |
-| `MM2S_DMASR.DMAIntErr` | Table 7, bit 4 | SG-1 | b | RG-SG-05, SG-FE-06 | - | Planned |
+| `MM2S_DMASR.SGIncld` | Tables 7, 17, bit 3 | RG-1 | a | RG-SG-04, RG-SR-03 | TC-RG-01, TC-RG-16, TC-RG-19 | Verified |
+| `S2MM_DMASR.SGIncld` | Tables 7, 17, bit 3 | RG-1 | a | RG-SG-04, RG-SR-03 | TC-RG-01, TC-RG-16, TC-RG-19 | Verified |
+| `MM2S_DMASR.DMAIntErr` | Table 7, bit 4 | SG-1 | b | RG-SG-05, SG-FE-06 | TC-RG-20 | Partly verified |
 | `S2MM_DMASR.DMAIntErr` | Table 17, bit 4 | S2-1 | a | CO-ER-01, RG-SR-06, S2-RS-02 | TC-CO-04, TC-RG-08, TC-S2-08 | Verified |
 | `MM2S_DMASR.DMASlvErr` | Tables 7, 17, bit 5 | MM-1 (MM2S), S2-2 (S2MM) | a | CO-ER-01, MM-ER-01, MM-ER-02, MM-ER-03, RG-SR-05, SG-ER-01 | TC-CO-04, TC-MM-09, TC-RG-08 | Partly verified |
 | `S2MM_DMASR.DMASlvErr` | Tables 7, 17, bit 5 | MM-1 (MM2S), S2-2 (S2MM) | a | CO-ER-01, RG-SR-05, S2-RS-03, S2-RS-05, SG-ER-01 | TC-CO-04, TC-RG-08, TC-S2-09 | Partly verified |
 | `MM2S_DMASR.DMADecErr` | Tables 7, 17, bit 6 | MM-1 (MM2S), S2-2 (S2MM) | a | CO-ER-01, MM-ER-03, MM-RD-04, RG-SR-05, SG-ER-01 | TC-CO-04, TC-MM-07, TC-MM-10, TC-RG-08 | Partly verified |
 | `S2MM_DMASR.DMADecErr` | Tables 7, 17, bit 6 | MM-1 (MM2S), S2-2 (S2MM) | a | CO-ER-01, RG-SR-05, S2-RS-05, S2-WR-04, SG-ER-01 | TC-CO-04, TC-RG-08, TC-S2-10 | Partly verified |
-| `MM2S_DMASR.SGIntErr` | Tables 7, 17, bit 8 | SG-1 | b | RG-SG-05, SG-FE-05 | - | Planned |
-| `S2MM_DMASR.SGIntErr` | Tables 7, 17, bit 8 | SG-1 | b | RG-SG-05, SG-FE-05 | - | Planned |
-| `MM2S_DMASR.SGSlvErr` | Tables 7, 17, bit 9 | SG-3 | b | RG-SG-05, SG-ER-02, SG-ER-04 | - | Planned |
-| `S2MM_DMASR.SGSlvErr` | Tables 7, 17, bit 9 | SG-3 | b | RG-SG-05, SG-ER-02, SG-ER-04 | - | Planned |
-| `MM2S_DMASR.SGDecErr` | Tables 7, 17, bit 10 | SG-3 | b | RG-SG-05, SG-ER-02, SG-ER-04 | - | Planned |
-| `S2MM_DMASR.SGDecErr` | Tables 7, 17, bit 10 | SG-3 | b | RG-SG-05, SG-ER-02, SG-ER-04 | - | Planned |
-| `MM2S_DMASR.IOC_Irq` | Tables 7, 17, bit 12 | RG-2 | a | RG-IR-01, RG-SG-06, SG-UP-04, SG-UP-05 | TC-RG-04, TC-RG-05, TC-RG-07 | Partly verified |
-| `S2MM_DMASR.IOC_Irq` | Tables 7, 17, bit 12 | RG-2 | a | RG-IR-01, RG-SG-06, SG-UP-04, SG-UP-05 | TC-RG-04, TC-RG-05, TC-RG-07 | Partly verified |
-| `MM2S_DMASR.Dly_Irq` | Tables 7, 17, bit 13 | RG-2 | b | RG-SG-07, RG-SG-08 | - | Planned |
-| `S2MM_DMASR.Dly_Irq` | Tables 7, 17, bit 13 | RG-2 | b | RG-SG-07, RG-SG-08 | - | Planned |
+| `MM2S_DMASR.SGIntErr` | Tables 7, 17, bit 8 | SG-1 | b | RG-SG-05, SG-FE-05 | TC-RG-20 | Partly verified |
+| `S2MM_DMASR.SGIntErr` | Tables 7, 17, bit 8 | SG-1 | b | RG-SG-05, SG-FE-05 | TC-RG-20 | Partly verified |
+| `MM2S_DMASR.SGSlvErr` | Tables 7, 17, bit 9 | SG-3 | b | RG-SG-05, SG-ER-02, SG-ER-04 | TC-RG-20 | Partly verified |
+| `S2MM_DMASR.SGSlvErr` | Tables 7, 17, bit 9 | SG-3 | b | RG-SG-05, SG-ER-02, SG-ER-04 | TC-RG-20 | Partly verified |
+| `MM2S_DMASR.SGDecErr` | Tables 7, 17, bit 10 | SG-3 | b | RG-SG-05, SG-ER-02, SG-ER-04 | TC-RG-20 | Partly verified |
+| `S2MM_DMASR.SGDecErr` | Tables 7, 17, bit 10 | SG-3 | b | RG-SG-05, SG-ER-02, SG-ER-04 | TC-RG-20 | Partly verified |
+| `MM2S_DMASR.IOC_Irq` | Tables 7, 17, bit 12 | RG-2 | a | RG-IR-01, RG-SG-06, SG-UP-04, SG-UP-05 | TC-RG-04, TC-RG-05, TC-RG-07, TC-RG-21 | Partly verified |
+| `S2MM_DMASR.IOC_Irq` | Tables 7, 17, bit 12 | RG-2 | a | RG-IR-01, RG-SG-06, SG-UP-04, SG-UP-05 | TC-RG-04, TC-RG-05, TC-RG-07, TC-RG-21 | Partly verified |
+| `MM2S_DMASR.Dly_Irq` | Tables 7, 17, bit 13 | RG-2 | b | RG-SG-07, RG-SG-08 | TC-RG-22 | Verified |
+| `S2MM_DMASR.Dly_Irq` | Tables 7, 17, bit 13 | RG-2 | b | RG-SG-07, RG-SG-08 | TC-RG-22 | Verified |
 | `MM2S_DMASR.Err_Irq` | Tables 7, 17, bit 14 | RG-2 | a | CO-ER-01, RG-IR-02 | TC-CO-04, TC-RG-08 | Verified |
 | `S2MM_DMASR.Err_Irq` | Tables 7, 17, bit 14 | RG-2 | a | CO-ER-01, RG-IR-02 | TC-CO-04, TC-RG-08 | Verified |
-| `MM2S_DMASR.IRQThresholdSts` | Tables 7, 17, bits 23 to 16 | RG-2 | b | RG-SG-06 | - | Planned |
-| `S2MM_DMASR.IRQThresholdSts` | Tables 7, 17, bits 23 to 16 | RG-2 | b | RG-SG-06 | - | Planned |
-| `MM2S_DMASR.IRQDelaySts` | Tables 7, 17, bits 31 to 24 | RG-2 | b | RG-SG-07 | - | Planned |
-| `S2MM_DMASR.IRQDelaySts` | Tables 7, 17, bits 31 to 24 | RG-2 | b | RG-SG-07 | - | Planned |
-| `MM2S_CURDESC` | Tables 8, 18 | SG-1 | b | RG-SG-02, SG-FE-07 | - | Planned |
-| `S2MM_CURDESC` | Tables 8, 18 | SG-1 | b | RG-SG-02, SG-FE-07 | - | Planned |
-| `MM2S_CURDESC_MSB` | Tables 9, 19 | SG-1 | b | RG-SG-02, SG-FE-07 | - | Planned |
-| `S2MM_CURDESC_MSB` | Tables 9, 19 | SG-1 | b | RG-SG-02, SG-FE-07 | - | Planned |
-| `MM2S_TAILDESC` | Tables 10, 20 | SG-1 | b | RG-SG-03, SG-FE-02 | - | Planned |
-| `S2MM_TAILDESC` | Tables 10, 20 | SG-1 | b | RG-SG-03, SG-FE-02 | - | Planned |
-| `MM2S_TAILDESC_MSB` | Tables 11, 21 | SG-1 | b | RG-SG-03, SG-FE-02 | - | Planned |
-| `S2MM_TAILDESC_MSB` | Tables 11, 21 | SG-1 | b | RG-SG-03, SG-FE-02 | - | Planned |
+| `MM2S_DMASR.IRQThresholdSts` | Tables 7, 17, bits 23 to 16 | RG-2 | b | RG-SG-06 | TC-RG-21 | Verified |
+| `S2MM_DMASR.IRQThresholdSts` | Tables 7, 17, bits 23 to 16 | RG-2 | b | RG-SG-06 | TC-RG-21 | Verified |
+| `MM2S_DMASR.IRQDelaySts` | Tables 7, 17, bits 31 to 24 | RG-2 | b | RG-SG-07 | TC-RG-22 | Verified |
+| `S2MM_DMASR.IRQDelaySts` | Tables 7, 17, bits 31 to 24 | RG-2 | b | RG-SG-07 | TC-RG-22 | Verified |
+| `MM2S_CURDESC` | Tables 8, 18 | SG-1 | b | RG-SG-02, SG-FE-07 | TC-RG-16, TC-RG-17 | Partly verified |
+| `S2MM_CURDESC` | Tables 8, 18 | SG-1 | b | RG-SG-02, SG-FE-07 | TC-RG-16, TC-RG-17 | Partly verified |
+| `MM2S_CURDESC_MSB` | Tables 9, 19 | SG-1 | b | RG-SG-02, SG-FE-07 | TC-RG-16, TC-RG-17 | Partly verified |
+| `S2MM_CURDESC_MSB` | Tables 9, 19 | SG-1 | b | RG-SG-02, SG-FE-07 | TC-RG-16, TC-RG-17 | Partly verified |
+| `MM2S_TAILDESC` | Tables 10, 20 | SG-1 | b | RG-SG-03, SG-FE-02 | TC-RG-16, TC-RG-18 | Partly verified |
+| `S2MM_TAILDESC` | Tables 10, 20 | SG-1 | b | RG-SG-03, SG-FE-02 | TC-RG-16, TC-RG-18 | Partly verified |
+| `MM2S_TAILDESC_MSB` | Tables 11, 21 | SG-1 | b | RG-SG-03, SG-FE-02 | TC-RG-16, TC-RG-18 | Partly verified |
+| `S2MM_TAILDESC_MSB` | Tables 11, 21 | SG-1 | b | RG-SG-03, SG-FE-02 | TC-RG-16, TC-RG-18 | Partly verified |
 | `MM2S_SA` | Table 12 | RG-1 | a | RG-AR-01, RG-AR-08 | TC-RG-04, TC-RG-15 | Verified |
 | `MM2S_SA_MSB` | Table 13 | RG-1 | a | RG-AR-01 | TC-RG-15 | Verified |
 | `MM2S_LENGTH` | Table 14 | RG-1 | a | RG-AR-03, RG-AR-04, RG-AR-07 | TC-RG-04, TC-RG-06, TC-RG-15 | Verified |
@@ -113,13 +113,13 @@ the published interface are listed in section 6 of the architecture and in the m
 | `DESC.S2MM_STATUS.Cmplt` | Table 38, bit 31 | SG-2 | b | SG-FE-05, SG-UP-01 | - | Planned |
 | `DESC.S2MM_APP` | Table 39, APP0 to APP3 | S2-3 | c | - | - | Planned |
 | `DESC.S2MM_APP4` | Table 40, APP4 and receive length | S2-3 | c | - | - | Planned |
-| `DESCMGMT.TAIL` | Section "Descriptor Management", tail pointer mode | SG-1 | b | CO-SG-04, RG-SG-03, S2-SG-03, SG-FE-02, SG-FE-03, SG-FE-04, SG-TR-04 | - | Planned |
+| `DESCMGMT.TAIL` | Section "Descriptor Management", tail pointer mode | SG-1 | b | CO-SG-04, RG-SG-03, S2-SG-03, SG-FE-02, SG-FE-03, SG-FE-04, SG-TR-04 | TC-RG-16, TC-RG-18 | Partly verified |
 | `STRM.MM2S` | Section "MM2S Descriptor Settings and AXI Control Stream", Figure 37 (data stream) | MM-2 | a | CO-IF-02, MM-IF-02, MM-SG-01, MM-ST-01, MM-ST-02 | TC-CO-02, TC-MM-01, TC-MM-02, TC-MM-04, TC-MM-14 | Partly verified |
 | `STRM.S2MM` | Section "S2MM Descriptor Settings and AXI Status Stream", Figure 39 (data stream) | S2-1 | a | CO-IF-02, S2-IF-02, S2-SG-01, S2-ST-01, S2-ST-02, S2-WR-01, S2-WR-02 | TC-CO-02, TC-S2-01, TC-S2-02, TC-S2-03, TC-S2-05, TC-S2-07, TC-S2-08, TC-S2-11, TC-S2-14, TC-S2-16 | Partly verified |
 | `STRM.CNTRL` | Section "AXI Control Stream", Figure 38 | MM-3 | c | - | - | Planned |
 | `STRM.STS` | Section "AXI Status Stream", Figure 40 | S2-3 | c | - | - | Planned |
 | `STRM.RXLENGTH` | Section "Customizing and Generating the Core", Use RxLength In Status Stream | S2-3 | c | - | - | Planned |
-| `IRQ.OUT` | Table 3, interrupt outputs | RG-2 | a | CO-IF-02, RG-IR-04, RG-SG-08 | TC-CO-02, TC-RG-04, TC-RG-05, TC-RG-08 | Partly verified |
+| `IRQ.OUT` | Table 3, interrupt outputs | RG-2 | a | CO-IF-02, RG-IR-04, RG-SG-08 | TC-CO-02, TC-RG-04, TC-RG-05, TC-RG-08, TC-RG-22 | Verified |
 | `CLK.SYNC` | Section "Clocking", synchronous mode | CO-1 | a | CO-IF-01 | TC-CO-02 | Verified |
 | `CLK.ASYNC` | Section "Clocking", asynchronous mode, Table 43 | Out of scope (D1) | - | - | - | Out of scope |
 | `RST.HARD` | Section "Resets" | RG-3 | a | RG-RS-01 | TC-RG-11 | Verified |
@@ -139,7 +139,7 @@ the published interface are listed in section 6 of the architecture and in the m
 | `SEQ.SG.S2MM` | Section "Programming Sequence", Scatter/Gather Mode, S2MM | CO-1 | b | CO-SG-03, SG-IF-02, SG-TR-02 | - | Planned |
 | `SEQ.CYCLIC` | Section "Cyclic DMA Mode", Figure 48 | CO-1 | b | CO-SG-05, SG-CY-01 | - | Planned |
 
-Items: 121; out of scope: 3; partly verified: 19; planned: 66; verified: 33.
+Items: 121; out of scope: 3; partly verified: 37; planned: 33; verified: 48.
 
 ## 2. Requirements
 
@@ -151,11 +151,11 @@ of the published interface included).
 | `odma_core` | 19 | 14 | - | CO-SG-01, CO-SG-02, CO-SG-03, CO-SG-04, CO-SG-05 |
 | `odma_mm2s` | 22 | 17 | - | MM-ER-03, MM-SG-01, MM-SG-02, MM-SG-03, MM-SG-04 |
 | `odma_pkg` | 10 | 10 | - | - |
-| `odma_registers` | 52 | 42 | - | RG-SG-01, RG-SG-02, RG-SG-03, RG-SG-04, RG-SG-05, RG-SG-06, RG-SG-07, RG-SG-08, RG-SG-09, RG-SG-10 |
+| `odma_registers` | 53 | 52 | - | RG-SG-11 |
 | `odma_s2mm` | 25 | 20 | - | S2-RS-05, S2-SG-01, S2-SG-02, S2-SG-03, S2-SG-04 |
 | `odma_sg` | 27 | - | planned (no testbench yet) | SG-ER-04 |
 
-Requirements: 155; without a test case: 0; test cases of the plans not run by a testbench: 0.
+Requirements: 156; without a test case: 0; test cases of the plans not run by a testbench: 0.
 
 ## 3. Interpretations of the published interface
 

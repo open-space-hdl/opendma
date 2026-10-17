@@ -6,7 +6,7 @@
 ---------------------------------------------------------------------------------------------------
 -- Description
 ---------------------------------------------------------------------------------------------------
--- VUnit testbench of odma_registers: the test cases TC-RG-01 to TC-RG-15 of the verification plan.
+-- VUnit testbench of odma_registers: the test cases TC-RG-01 to TC-RG-23 of the verification plan.
 -- Register offsets and expected values are taken from the specification, not from the register
 -- package of the DUT.
 --
@@ -45,7 +45,8 @@ entity odma_registers_tb is
         LengthWidth_g : positive := 26;
         IncludeMm2s_g : boolean  := true;
         IncludeS2mm_g : boolean  := true;
-        ExtRegs_g     : boolean  := true
+        ExtRegs_g     : boolean  := true;
+        IncludeSg_g   : boolean  := false
     );
 end entity;
 
@@ -110,6 +111,54 @@ architecture sim of odma_registers_tb is
     constant Unmapped_c : Offsets_t := (16#020#, 16#024#, 16#05C#, 16#060#, 16#0FC#, 16#114#, 16#11C#, 16#134#,
                                         16#13C#, 16#180#, 16#1FC#, 16#200#, 16#3FC#);
 
+    -- Scatter/Gather Mode: register offsets of PG021 Table 4, the offsets of Table 5 without a register
+    constant CurLo_c  : Nat_a     := (16#008#, 16#038#);
+    constant CurHi_c  : Nat_a     := (16#00C#, 16#03C#);
+    constant TailLo_c : Nat_a     := (16#010#, 16#040#);
+    constant TailHi_c : Nat_a     := (16#014#, 16#044#);
+    constant DrOnly_c : Offsets_t := (16#018#, 16#01C#, 16#020#, 16#024#, 16#028#, 16#02C#, 16#048#, 16#04C#,
+                                      16#050#, 16#054#, 16#058#, 16#05C#);
+
+    -- Scatter/Gather Mode: fields and the reset value of DMASR (Halted, SGIncld, IRQThresholdSts 1)
+    constant Keyhole_c      : Word_t := x"00000008";
+    constant CyclicBd_c     : Word_t := x"00000010";
+    constant DlyIrqEn_c     : Word_t := x"00002000";
+    constant SgIncld_c      : Word_t := x"00000008";
+    constant SgIntErr_c     : Word_t := x"00000100";
+    constant SgSlvErr_c     : Word_t := x"00000200";
+    constant SgDecErr_c     : Word_t := x"00000400";
+    constant DlyIrq_c       : Word_t := x"00002000";
+    constant ThrMask_c      : Word_t := x"00FF0000";
+    constant DlyMask_c      : Word_t := x"FF000000";
+    constant DmasrSgReset_c : Word_t := x"00010009";
+    constant PtrMask_c      : Word_t := x"FFFFFFC0";
+
+    -- The tail pointer write that starts the engine (interpretation SGI-01)
+    function tailTrigger return Nat_a is
+    begin
+        if AddrWidth_g > 32 then
+            return TailHi_c;
+        end if;
+        return TailLo_c;
+    end function;
+
+    constant TailTrig_c : Nat_a := tailTrigger;
+
+    -- DMACR.IRQThreshold, DMACR.IRQDelay and the status fields at the same positions
+    function threshold (n : natural) return Word_t is
+        variable W_v : Word_t := (others => '0');
+    begin
+        W_v(23 downto 16) := std_logic_vector(to_unsigned(n, 8));
+        return W_v;
+    end function;
+
+    function delay (n : natural) return Word_t is
+        variable W_v : Word_t := (others => '0');
+    begin
+        W_v(31 downto 24) := std_logic_vector(to_unsigned(n, 8));
+        return W_v;
+    end function;
+
     -- n ones from bit 0
     function lowOnes (n : natural) return Word_t is
         variable W_v : Word_t := (others => '0');
@@ -163,6 +212,7 @@ architecture sim of odma_registers_tb is
     signal Clk         : std_logic;
     signal HardRst     : std_logic                     := '0';
     signal Cfg         : ChanCfg_a                     := (others => ChanCfgDefault_c);
+    signal Sg          : SgDrive_a                     := (others => SgDriveIdle_c);
     signal EccSec      : std_logic_vector(15 downto 0) := (others => '0');
     signal EccDed      : std_logic_vector(15 downto 0) := (others => '0');
     signal EccSecOnB   : std_logic_vector(15 downto 0) := (others => '0');
@@ -187,12 +237,14 @@ begin
             LengthWidth_g => LengthWidth_g,
             IncludeMm2s_g => IncludeMm2s_g,
             IncludeS2mm_g => IncludeS2mm_g,
-            ExtRegs_g     => ExtRegs_g
+            ExtRegs_g     => ExtRegs_g,
+            IncludeSg_g   => IncludeSg_g
         )
         port map (
             Clk         => Clk,
             HardRst     => HardRst,
             Cfg         => Cfg,
+            Sg          => Sg,
             EccSec      => EccSec,
             EccDed      => EccDed,
             EccSecOnB   => EccSecOnB,
@@ -342,6 +394,45 @@ begin
             EccSec <= (others => '0');
             EccDed <= (others => '0');
             cycles(2);
+        end procedure;
+
+        -- Pulses of the Scatter/Gather engine model, one clock cycle each
+        procedure sgPkt (ch : natural) is
+        begin
+            wait until rising_edge(Clk);
+            Sg(ch).Pkt <= '1';
+            wait until rising_edge(Clk);
+            Sg(ch).Pkt <= '0';
+        end procedure;
+
+        procedure sgPktStart (ch : natural) is
+        begin
+            wait until rising_edge(Clk);
+            Sg(ch).PktStart <= '1';
+            wait until rising_edge(Clk);
+            Sg(ch).PktStart <= '0';
+        end procedure;
+
+        procedure sgErr (
+            ch   : natural;
+            xfer : std_logic_vector(1 downto 0);
+            eng  : std_logic_vector(1 downto 0)) is
+        begin
+            wait until rising_edge(Clk);
+            Sg(ch).ErrValid <= '1';
+            Sg(ch).ErrXfer  <= xfer;
+            Sg(ch).ErrSg    <= eng;
+            wait until rising_edge(Clk);
+            Sg(ch).ErrValid <= '0';
+            Sg(ch).ErrXfer  <= "00";
+            Sg(ch).ErrSg    <= "00";
+        end procedure;
+
+        -- Halt and wait for DMASR.Halted
+        procedure sgHalt (ch : natural) is
+        begin
+            wr(Dmacr_c(ch), Zero_c);
+            poll(Dmasr_c(ch), Halted_c, Halted_c, "halted");
         end procedure;
 
         -- Every register at its reset value
@@ -1044,6 +1135,394 @@ begin
                     waitRes(ch, 2);
                     check_value(Obs.CmdAddr(ch), cmdAddr(x"5A5A5A5A", x"A5A5A5A5"), ERROR, "command address");
                     check_value(Obs.CmdLength(ch), 129, ERROR, "command length");
+                end loop;
+
+            elsif run("test_sg_map") then
+                log(ID_LOG_HDR, "TC-RG-16 register map of Scatter/Gather Mode");
+
+                for ch in 0 to 1 loop
+                    if Incl_c(ch) then
+                        chk(Dmacr_c(ch), DmacrReset_c, "DMACR after the reset");
+                        chk(Dmasr_c(ch), DmasrSgReset_c, "DMASR after the reset: Halted, SGIncld");
+                        chk(CurLo_c(ch), Zero_c, "CURDESC after the reset");
+                        chk(CurHi_c(ch), Zero_c, "CURDESC_MSB after the reset");
+                        chk(TailLo_c(ch), Zero_c, "TAILDESC after the reset");
+                        chk(TailHi_c(ch), Zero_c, "TAILDESC_MSB after the reset");
+                        -- Bits 5 to 0 and the bits at or above AddrWidth_g read 0
+                        wr(CurLo_c(ch), Ones_c);
+                        chk(CurLo_c(ch), PtrMask_c, "CURDESC bits 5 to 0");
+                        wr(CurHi_c(ch), Ones_c);
+                        chk(CurHi_c(ch), lowOnes(AddrWidth_g - 32), "CURDESC_MSB above AddrWidth_g");
+                        wr(TailLo_c(ch), Ones_c);
+                        chk(TailLo_c(ch), PtrMask_c, "TAILDESC bits 5 to 0");
+                        wr(TailHi_c(ch), Ones_c);
+                        chk(TailHi_c(ch), lowOnes(AddrWidth_g - 32), "TAILDESC_MSB above AddrWidth_g");
+                        check_value(Obs.SgCurDesc(ch), cmdAddr(Ones_c, PtrMask_c), ERROR, "CURDESC output to the engine");
+                        wr(Dmacr_c(ch), Rs_c);
+                    end if;
+                end loop;
+
+                -- The registers of Direct Register Mode do not exist; a length write issues no command
+                for i in DrOnly_c'range loop
+                    wr(DrOnly_c(i), Ones_c);
+                    chk(DrOnly_c(i), Zero_c, "no register of Direct Register Mode");
+                end loop;
+
+                cycles(20);
+                check_value(Obs.CmdCount(Mm2s_c) + Obs.CmdCount(S2mm_c), 0, ERROR, "no transfer command");
+
+                -- FT buffers of the engine at the indices 6 to 9: 6 and 7 only with their channel
+                for n in 6 to 9 loop
+                    pulseEcc(true, n, 1);
+                    pulseEcc(false, n, 2);
+                    Cnt_v := Obs.InjCount;
+                    wr(EccInject_c, std_logic_vector(to_unsigned(n, 32)) or x"00000200");
+                    cycles(3);
+                    if (n = 6 and not Incl_c(Mm2s_c)) or (n = 7 and not Incl_c(S2mm_c)) then
+                        chk(EccCount_c + 4 * n, Zero_c, "no ECC counter without the channel, index " & to_string(n));
+                        check_value(Obs.InjCount, Cnt_v, ERROR, "no injection without the channel, index " & to_string(n));
+                    else
+                        chk(EccCount_c + 4 * n, x"00020001", "ECC counters, index " & to_string(n));
+                        check_value(Obs.InjCount, Cnt_v + 1, ERROR, "injection strobe, index " & to_string(n));
+                        check_value(Obs.InjIdx, n, ERROR, "injection index");
+                    end if;
+                end loop;
+
+                -- The registers of a channel that is not included read 0 and ignore writes
+                for ch in 0 to 1 loop
+                    if not Incl_c(ch) then
+                        wr(Dmacr_c(ch), Ones_c and not Reset_c);
+                        chk(Dmacr_c(ch), Zero_c, "DMACR of the channel that is not included");
+                        chk(Dmasr_c(ch), Zero_c, "DMASR of the channel that is not included");
+                        wr(CurLo_c(ch), Ones_c);
+                        wr(CurHi_c(ch), Ones_c);
+                        wr(TailLo_c(ch), Ones_c);
+                        wr(TailHi_c(ch), Ones_c);
+                        chk(CurLo_c(ch), Zero_c, "CURDESC of the channel that is not included");
+                        chk(CurHi_c(ch), Zero_c, "CURDESC_MSB of the channel that is not included");
+                        chk(TailLo_c(ch), Zero_c, "TAILDESC of the channel that is not included");
+                        chk(TailHi_c(ch), Zero_c, "TAILDESC_MSB of the channel that is not included");
+                        check_value(Obs.SgTailWr(ch), 0, ERROR, "no tail pointer write of the channel that is not included");
+                    end if;
+                end loop;
+
+            elsif run("test_sg_curdesc") then
+                log(ID_LOG_HDR, "TC-RG-17 CURDESC");
+
+                for ch in 0 to 1 loop
+                    if Incl_c(ch) then
+                        -- Written while halted; the engine starts from the written pointer
+                        Sg(ch).CurPtr <= x"0000003C89ABCD40";
+                        wr(CurLo_c(ch), x"12345678");
+                        wr(CurHi_c(ch), x"A5A5A5A5");
+                        chk(CurLo_c(ch), x"12345640", "CURDESC written while halted");
+                        chk(CurHi_c(ch), x"A5A5A5A5" and lowOnes(AddrWidth_g - 32), "CURDESC_MSB written while halted");
+                        wr(Dmacr_c(ch), Rs_c);
+                        cycles(3);
+                        check_value(Obs.SgStartPtr(ch), cmdAddr(x"A5A5A5A5", x"12345640"), ERROR, "pointer at the start");
+                        -- Running: the pointer of the engine, writes ignored
+                        chk(CurLo_c(ch), x"89ABCD40", "CURDESC reads the pointer of the engine");
+                        chk(CurHi_c(ch), x"0000003C" and lowOnes(AddrWidth_g - 32), "CURDESC_MSB reads the pointer of the engine");
+                        wr(CurLo_c(ch), Ones_c);
+                        wr(CurHi_c(ch), Ones_c);
+                        chk(CurLo_c(ch), x"89ABCD40", "CURDESC write ignored while running");
+                        chk(CurHi_c(ch), x"0000003C" and lowOnes(AddrWidth_g - 32), "CURDESC_MSB write ignored while running");
+                        Sg(ch).CurPtr <= x"0000000100000F80";
+                        cycles(2);
+                        chk(CurLo_c(ch), x"00000F80", "CURDESC follows the engine");
+                        chk(CurHi_c(ch), x"00000001" and lowOnes(AddrWidth_g - 32), "CURDESC_MSB follows the engine");
+                        check_value(Obs.SgCurDiffer(ch), 0, ERROR, "CURDESC output equals the engine pointer while running");
+                        -- After the halt the last pointer of the engine
+                        Sg(ch).Stopped <= '0';
+                        wr(Dmacr_c(ch), Zero_c);
+                        cycles(30);
+                        Sg(ch).Stopped <= '1';
+                        poll(Dmasr_c(ch), Halted_c, Halted_c, "halted");
+                        chk(CurLo_c(ch), x"00000F80", "CURDESC after the halt");
+                        -- The first write after a run starts from the pointer of the engine
+                        if AddrWidth_g > 32 then
+                            wr(CurHi_c(ch), x"00000022");
+                            Sg(ch).CurPtr <= x"0000000000000000";
+                            cycles(2);
+                            chk(CurLo_c(ch), x"00000F80", "CURDESC keeps the low word of the engine pointer");
+                            chk(CurHi_c(ch), x"00000022", "CURDESC_MSB written after the halt");
+                            Exp_v         := x"00000022";
+                            Data_v        := x"00000F80";
+                        else
+                            wr(CurLo_c(ch), x"00002000");
+                            Sg(ch).CurPtr <= x"0000000000000000";
+                            cycles(2);
+                            chk(CurLo_c(ch), x"00002000", "CURDESC written after the halt");
+                            Exp_v         := Zero_c;
+                            Data_v        := x"00002000";
+                        end if;
+                        wr(Dmacr_c(ch), Rs_c);
+                        cycles(3);
+                        check_value(Obs.SgStartPtr(ch), cmdAddr(Exp_v, Data_v), ERROR, "pointer at the restart");
+                        chk(CurLo_c(ch), Zero_c, "CURDESC reads the engine again");
+                        sgHalt(ch);
+                    end if;
+                end loop;
+
+            elsif run("test_sg_tail") then
+                log(ID_LOG_HDR, "TC-RG-18 TAILDESC");
+
+                for ch in 0 to 1 loop
+                    if Incl_c(ch) then
+                        -- While halted the pointer is only stored
+                        wr(TailLo_c(ch), x"00001240");
+                        wr(TailHi_c(ch), x"00000003");
+                        chk(TailLo_c(ch), x"00001240", "TAILDESC written while halted");
+                        chk(TailHi_c(ch), x"00000003" and lowOnes(AddrWidth_g - 32), "TAILDESC_MSB written while halted");
+                        check_value(Obs.SgTailWr(ch), 0, ERROR, "no tail pointer write while halted");
+                        -- Running: the triggering write passes the pointer (interpretation SGI-01)
+                        wr(Dmacr_c(ch), Rs_c);
+                        wr(TailLo_c(ch), x"ABCDEF7F");
+                        cycles(2);
+                        if AddrWidth_g > 32 then
+                            check_value(Obs.SgTailWr(ch), 0, ERROR, "TAILDESC alone does not start the engine");
+                            wr(TailHi_c(ch), x"00000044");
+                            cycles(2);
+                            check_value(Obs.SgTailWr(ch), 1, ERROR, "TAILDESC_MSB starts the engine");
+                            check_value(Obs.SgTail(ch), cmdAddr(x"00000044", x"ABCDEF40"), ERROR, "tail pointer of both words");
+                            -- The other word never starts it
+                            wr(TailLo_c(ch), x"00000100");
+                            cycles(2);
+                            check_value(Obs.SgTailWr(ch), 1, ERROR, "no start by TAILDESC");
+                            wr(TailHi_c(ch), x"00000001");
+                            cycles(2);
+                            check_value(Obs.SgTail(ch), cmdAddr(x"00000001", x"00000100"), ERROR, "second tail pointer");
+                        else
+                            check_value(Obs.SgTailWr(ch), 1, ERROR, "TAILDESC starts the engine");
+                            check_value(Obs.SgTail(ch), cmdAddr(Zero_c, x"ABCDEF40"), ERROR, "tail pointer");
+                            wr(TailHi_c(ch), Ones_c);
+                            cycles(2);
+                            check_value(Obs.SgTailWr(ch), 1, ERROR, "no start by TAILDESC_MSB");
+                            chk(TailHi_c(ch), Zero_c, "TAILDESC_MSB with 32 address bits");
+                            wr(TailLo_c(ch), x"00000100");
+                            cycles(2);
+                            check_value(Obs.SgTail(ch), cmdAddr(Zero_c, x"00000100"), ERROR, "second tail pointer");
+                        end if;
+                        check_value(Obs.SgTailWr(ch), 2, ERROR, "two tail pointer writes");
+                        -- Stopping and halted: stored only
+                        Sg(ch).Stopped <= '0';
+                        wr(Dmacr_c(ch), Zero_c);
+                        wr(TailTrig_c(ch), x"00000040");
+                        cycles(2);
+                        Sg(ch).Stopped <= '1';
+                        poll(Dmasr_c(ch), Halted_c, Halted_c, "halted");
+                        wr(TailTrig_c(ch), x"00000080");
+                        cycles(2);
+                        check_value(Obs.SgTailWr(ch), 2, ERROR, "no tail pointer write while stopping or halted");
+                        if AddrWidth_g > 32 then
+                            chk(TailHi_c(ch), x"00000080" and lowOnes(AddrWidth_g - 32), "stored while halted");
+                        else
+                            chk(TailLo_c(ch), x"00000080", "stored while halted");
+                        end if;
+                    end if;
+                end loop;
+
+            elsif run("test_sg_state") then
+                log(ID_LOG_HDR, "TC-RG-19 Halted and Idle in Scatter/Gather Mode");
+
+                for ch in 0 to 1 loop
+                    if Incl_c(ch) then
+                        Sg(ch).Idle <= '1';
+                        cycles(2);
+                        chk(Dmasr_c(ch), DmasrSgReset_c, "halted: Idle 0 whatever the engine reports");
+                        wr(Dmacr_c(ch), Rs_c);
+                        chkMask(Dmasr_c(ch), Idle_c, Halted_c or Idle_c, "running, the engine at the tail");
+                        Sg(ch).Idle <= '0';
+                        cycles(2);
+                        chkMask(Dmasr_c(ch), Zero_c, Halted_c or Idle_c, "running, the engine working");
+                        -- Halted only when the engine and the channel have stopped
+                        Sg(ch).Stopped    <= '0';
+                        wr(Dmacr_c(ch), Zero_c);
+                        cycles(50);
+                        chkMask(Dmasr_c(ch), Zero_c, Halted_c, "not halted while the engine works");
+                        Sg(ch).Stopped    <= '1';
+                        poll(Dmasr_c(ch), Halted_c, Halted_c, "halted once the engine stopped");
+                        Cfg(ch).DrainTime <= 200;
+                        wr(Dmacr_c(ch), Rs_c);
+                        wr(Dmacr_c(ch), Zero_c);
+                        cycles(50);
+                        chkMask(Dmasr_c(ch), Zero_c, Halted_c, "not halted while the channel works");
+                        poll(Dmasr_c(ch), Halted_c, Halted_c, "halted once the channel stopped");
+                        Cfg(ch).DrainTime <= 0;
+                    end if;
+                end loop;
+
+                check_value(Obs.CmdCount(Mm2s_c) + Obs.CmdCount(S2mm_c), 0, ERROR, "no transfer command");
+
+            elsif run("test_sg_errors") then
+                log(ID_LOG_HDR, "TC-RG-20 error flags of the Scatter/Gather engine");
+
+                for ch in 0 to 1 loop
+                    if Incl_c(ch) then
+
+                        for e in 0 to 6 loop
+                            -- The other channel runs and is not affected
+                            if Incl_c(1 - ch) then
+                                wr(Dmacr_c(1 - ch), Rs_c);
+                            end if;
+                            wr(Dmacr_c(ch), Rs_c or ErrIrqEn_c);
+                            Flag_v := Zero_c;
+
+                            case e is
+                                when 0 =>
+                                    sgErr(ch, "00", ErrInt_c);
+                                    Exp_v := SgIntErr_c;
+                                when 1 =>
+                                    sgErr(ch, "00", ErrSlv_c);
+                                    Exp_v := SgSlvErr_c;
+                                when 2 =>
+                                    sgErr(ch, "00", ErrDec_c);
+                                    Exp_v := SgDecErr_c;
+                                when 3 =>
+                                    sgErr(ch, ErrInt_c, "00");
+                                    Exp_v := IntErr_c;
+                                when 4 =>
+                                    sgErr(ch, ErrSlv_c, "00");
+                                    Exp_v  := SlvErr_c;
+                                    Flag_v := IntErr_c;
+                                when 5 =>
+                                    sgErr(ch, ErrDec_c, "00");
+                                    Exp_v  := DecErr_c;
+                                    Flag_v := IntErr_c;
+                                when others =>
+                                    sgErr(ch, ErrSlv_c, ErrSlv_c);
+                                    Exp_v  := SlvErr_c or SgSlvErr_c;
+                                    Flag_v := IntErr_c;
+                            end case;
+
+                            -- S2MM: DMAIntErr also with the slave and the decode error of a transfer
+                            if ch = S2mm_c then
+                                Exp_v := Exp_v or Flag_v;
+                            end if;
+                            poll(Dmasr_c(ch), Halted_c, Halted_c, "halted after the error");
+                            chk(Dmasr_c(ch), Exp_v or Halted_c or SgIncld_c or ErrIrq_c or threshold(1), "error flags, Err_Irq");
+                            chkMask(Dmacr_c(ch), Zero_c, Rs_c, "RS cleared by the error");
+                            check_value(ChIrq(ch), '1', ERROR, "interrupt output");
+                            if Incl_c(1 - ch) then
+                                chkMask(Dmasr_c(1 - ch), Zero_c, Halted_c, "the other channel still runs");
+                            end if;
+                            -- No restart while the flag is set; the flags are read-only
+                            wr(Dmacr_c(ch), Rs_c or ErrIrqEn_c);
+                            cycles(5);
+                            chkMask(Dmasr_c(ch), Halted_c, Halted_c, "no restart with an error flag");
+                            wr(Dmasr_c(ch), Ones_c);
+                            chk(Dmasr_c(ch), Exp_v or Halted_c or SgIncld_c or threshold(1), "flags kept, Err_Irq cleared");
+                            softReset(ch);
+                            chk(Dmasr_c(ch), DmasrSgReset_c, "flags cleared by the soft reset");
+                        end loop;
+
+                    end if;
+                end loop;
+
+            elsif run("test_sg_threshold") then
+                log(ID_LOG_HDR, "TC-RG-21 interrupt threshold");
+
+                for ch in 0 to 1 loop
+                    if Incl_c(ch) then
+                        wr(Dmacr_c(ch), Rs_c or IocIrqEn_c or threshold(3));
+                        chkMask(Dmasr_c(ch), threshold(3), ThrMask_c, "IRQThresholdSts after the start");
+                        sgPkt(ch);
+                        sgPkt(ch);
+                        chkMask(Dmasr_c(ch), threshold(1), ThrMask_c or IocIrq_c, "two packets: one left, no IOC_Irq");
+                        sgPkt(ch);
+                        chkMask(Dmasr_c(ch), threshold(3) or IocIrq_c, ThrMask_c or IocIrq_c, "third packet: IOC_Irq, reloaded");
+                        cycles(2);
+                        check_value(ChIrq(ch), '1', ERROR, "interrupt output");
+                        wr(Dmasr_c(ch), IocIrq_c);
+                        sgPkt(ch);
+                        chkMask(Dmasr_c(ch), threshold(2), ThrMask_c or IocIrq_c, "one packet after the clear");
+                        -- A write of the field reloads the counter, a write of 0 leaves both unchanged
+                        wr(Dmacr_c(ch), Rs_c or IocIrqEn_c or threshold(5));
+                        chkMask(Dmasr_c(ch), threshold(5), ThrMask_c, "reloaded by the write of the field");
+                        sgPkt(ch);
+                        chkMask(Dmasr_c(ch), threshold(4), ThrMask_c, "one packet");
+                        wr(Dmacr_c(ch), Rs_c or IocIrqEn_c);
+                        chkMask(Dmacr_c(ch), threshold(5), ThrMask_c, "IRQThreshold unchanged by a write of 0");
+                        chkMask(Dmasr_c(ch), threshold(4), ThrMask_c, "counter unchanged by a write of 0");
+                        -- The start of the channel reloads the counter
+                        wr(Dmacr_c(ch), IocIrqEn_c);
+                        poll(Dmasr_c(ch), Halted_c, Halted_c, "halted");
+                        wr(Dmacr_c(ch), Rs_c or IocIrqEn_c);
+                        chkMask(Dmasr_c(ch), threshold(5), ThrMask_c or IocIrq_c, "reloaded at the start");
+
+                        for i in 1 to 5 loop
+                            sgPkt(ch);
+                        end loop;
+
+                        chkMask(Dmasr_c(ch), threshold(5) or IocIrq_c, ThrMask_c or IocIrq_c, "IOC_Irq after five packets");
+                        softReset(ch);
+                    end if;
+                end loop;
+
+            elsif run("test_sg_delay") then
+                log(ID_LOG_HDR, "TC-RG-22 delay timer");
+
+                for ch in 0 to 1 loop
+                    if Incl_c(ch) then
+                        wr(Dmacr_c(ch), Rs_c or DlyIrqEn_c or threshold(4) or delay(2));
+                        sgPkt(ch);
+                        cycles(140);
+                        First_v := Obs.PktCycle(ch);
+                        chkMask(Dmasr_c(ch), delay(1) or threshold(3), DlyMask_c or ThrMask_c or DlyIrq_c, "IRQDelaySts after one unit");
+                        if ChIrq(ch) = '0' then
+                            wait until ChIrq(ch) = '1' for 5 us;
+                        end if;
+                        check_value(ChIrq(ch), '1', ERROR, "Dly_Irq drives the interrupt output");
+                        cycles(2);
+                        -- The timeout after 2 x 125 clock cycles: flag after the clock cycle 250, output one later, seen by
+                        -- the harness one later (a unit of 124 or 126 clock cycles falls outside)
+                        check_value_in_range(Obs.IrqRiseCycle(ch) - First_v, 251, 253, ERROR, "timeout after 2 x 125 clock cycles");
+                        chkMask(Dmasr_c(ch), DlyIrq_c or threshold(4), DlyIrq_c or DlyMask_c or ThrMask_c, "Dly_Irq, timer cleared, threshold reloaded");
+                        wr(Dmasr_c(ch), DlyIrq_c);
+                        chkMask(Dmasr_c(ch), Zero_c, DlyIrq_c, "Dly_Irq cleared by writing 1");
+                        cycles(2);
+                        check_value(ChIrq(ch), '0', ERROR, "interrupt output after the clear");
+                        -- The start of a packet stops and clears the timer
+                        sgPkt(ch);
+                        cycles(100);
+                        sgPktStart(ch);
+                        chkMask(Dmasr_c(ch), Zero_c, DlyMask_c, "timer cleared by the start of a packet");
+                        cycles(300);
+                        chkMask(Dmasr_c(ch), Zero_c, DlyIrq_c or DlyMask_c, "no timeout after the start of a packet");
+                        -- A packet that sets IOC_Irq stops the timer
+                        sgPkt(ch);
+                        sgPkt(ch);
+                        sgPkt(ch);
+                        cycles(300);
+                        chkMask(Dmasr_c(ch), IocIrq_c, IocIrq_c or DlyIrq_c or DlyMask_c, "IOC_Irq, no timeout");
+                        -- IRQDelay = 0 disables the timer
+                        wr(Dmasr_c(ch), IocIrq_c);
+                        wr(Dmacr_c(ch), Rs_c or DlyIrqEn_c or threshold(4));
+                        sgPkt(ch);
+                        cycles(300);
+                        chkMask(Dmasr_c(ch), Zero_c, DlyIrq_c or DlyMask_c, "no timer with IRQDelay 0");
+                        softReset(ch);
+                    end if;
+                end loop;
+
+            elsif run("test_sg_modes") then
+                log(ID_LOG_HDR, "TC-RG-23 keyhole and cyclic mode");
+
+                for ch in 0 to 1 loop
+                    if Incl_c(ch) then
+                        check_value(std_logic_vector'(Obs.SgKeyhole(ch) & Obs.SgCyclic(ch)), std_logic_vector'("00"), ERROR,
+                                    "keyhole and cyclic after the reset");
+                        wr(Dmacr_c(ch), Keyhole_c);
+                        cycles(2);
+                        check_value(std_logic_vector'(Obs.SgKeyhole(ch) & Obs.SgCyclic(ch)), std_logic_vector'("10"), ERROR, "keyhole");
+                        wr(Dmacr_c(ch), CyclicBd_c);
+                        cycles(2);
+                        check_value(std_logic_vector'(Obs.SgKeyhole(ch) & Obs.SgCyclic(ch)), std_logic_vector'("01"), ERROR, "cyclic mode");
+                        wr(Dmacr_c(ch), Rs_c or Keyhole_c or CyclicBd_c);
+                        cycles(2);
+                        check_value(std_logic_vector'(Obs.SgKeyhole(ch) & Obs.SgCyclic(ch)), std_logic_vector'("11"), ERROR, "both while running");
+                        sgHalt(ch);
+                    end if;
                 end loop;
 
             end if;

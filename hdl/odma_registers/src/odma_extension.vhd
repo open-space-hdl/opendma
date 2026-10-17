@@ -83,6 +83,10 @@ architecture rtl of odma_extension is
         Mask_v(0)          := choose(IncludeMm2s_g, '1', '0');
         Mask_v(3 downto 1) := (others => choose(IncludeS2mm_g, '1', '0'));
         Mask_v(5 downto 4) := (others => choose(IncludeMm2s_g, '1', '0'));
+        -- Scatter/Gather engine: descriptor buffers of the channels, data buffers of the descriptor port
+        Mask_v(6)          := choose(IncludeSg_g and IncludeMm2s_g, '1', '0');
+        Mask_v(7)          := choose(IncludeSg_g and IncludeS2mm_g, '1', '0');
+        Mask_v(9 downto 8) := (others => choose(IncludeSg_g, '1', '0'));
         return Mask_v;
     end function;
 

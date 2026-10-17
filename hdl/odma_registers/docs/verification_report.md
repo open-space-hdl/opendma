@@ -2,11 +2,13 @@
 
 ## 1. Test results
 
-Run on 2026-10-16 with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7, UVVM 2026.03.20: `python run.py "*odma_registers*"`.
+Run on 2026-10-17 with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7, UVVM 2026.03.20: `python run.py "*odma_registers*"`.
 
 | Testbench | Tests | Passed |
 | --- | --- | --- |
-| `odma_registers_tb` | 19 (15 test cases; TC-RG-02 in two configurations, TC-RG-12 in two, TC-RG-15 in three) | 19 |
+| `odma_registers_tb` | 39 (23 test cases; Direct Register Mode: TC-RG-02 in two configurations, TC-RG-12 in two, TC-RG-15 in three; Scatter/Gather Mode: TC-RG-16 in five, TC-RG-17 and TC-RG-18 in three, TC-RG-19 in three, TC-RG-20 in two, TC-RG-23 in two) | 39 |
+
+TC-RG-24 waits for the FIXED bursts of Open Logic (verification plan, section 3.1).
 
 ## 2. Summary
 
@@ -24,12 +26,16 @@ Findings:
 | PG021 does not describe `RS` = 1 written while the channel stops after a halt request | No effect, the channel halts (interpretation R8, RG-CR-01); TC-RG-03 |
 | The other bits of a `DMACR` write with `Reset` = 1 would have started or reconfigured a channel for the duration of the drain | The write only starts the soft reset (RG-CR-06); TC-RG-10 |
 | The verification plan counted SEC and DED events on buffer index 15, which has no buffer | Indices without a buffer of the configuration count nothing and take no injection (RG-EX-03, RG-EX-05); TC-RG-12 and TC-RG-13 check both |
+| A reload of the threshold counter in the clock cycle of the `DMACR` write would load the old `IRQThreshold` | The reload is a registered pulse one clock cycle after the write, with the new value (architecture section 5); TC-RG-21 |
+| PG021 leaves open what a `TAILDESC` write does while the channel stops after a halt request | It only stores the pointer, as while halted (RG-SG-03); TC-RG-18 |
+| An error report of the engine in the clock cycle of a start would have left the channel in `Started_s` with `Run` = '0' | The error moves the channel to `Stopping_s` whenever the next state is `Started_s` (architecture section 4.3) |
+| The S2MM keyhole of Direct Register Mode would reach a channel that cannot make FIXED bursts yet | The command keyhole stays '0' until Open Logic provides them (RG-SG-11, waiting) |
 
 ## 3. Generic ranges
 
 | Generic | Declared range | Simulated | Synthesised |
 | --- | --- | --- | --- |
-| `IncludeSg_g` | false (true stops the elaboration, phase b) | false | false |
+| `IncludeSg_g` | boolean | false, true | false (core), true (`odma_registers` alone: `AddrWidth_g` 32 and 64, `LengthWidth_g` 8 and 26, without the S2MM channel) |
 | `IncludeMm2s_g`, `IncludeS2mm_g` | boolean | true, false | true, false |
 | `ExtRegs_g` | boolean | true, false | true, false |
 | `AddrWidth_g` | 32 to 64 | 32, 40, 64 | 32, 64 |
@@ -56,5 +62,20 @@ passes all of them:
 | Register writes are taken during a soft reset | TC-RG-10 |
 | `ECC_INJECT.Data` is not taken with the strobe | TC-RG-13 |
 | The injection mode is not reset | TC-RG-13 |
+| A tail pointer write passed to the engine while the channel stops | TC-RG-18 |
+| `TAILDESC` starts the engine above 32 address bits | TC-RG-18 |
+| `CURDESC` never reads the pointer of the engine | TC-RG-17 |
+| No reload of the threshold counter by a write of the field, or at the start | TC-RG-21 |
+| The threshold counter sets `IOC_Irq` one packet late | TC-RG-21 |
+| `Halted` without the engine stopped | TC-RG-19 |
+| `DMASR.Idle` not gated by the run state | TC-RG-19 |
+| An S2MM transfer error with the slave code without `DMAIntErr`; `SGDecErr` set by the slave code; an engine error that does not clear `RS` | TC-RG-20 |
+| `Dly_Irq` not cleared by writing 1 | TC-RG-22 |
+| No reload of the threshold counter at a timeout; the start of a packet does not stop the timer; the timer started by a packet that set `IOC_Irq`; a delay unit of 124 or 126 clock cycles | TC-RG-22 |
+| ECC index 7 counts without the S2MM channel; index 9 does not count | TC-RG-16 |
+
+One fault is equivalent: `CURDESC` written while the channel runs. In every clock cycle of a running channel `CurOwn`
+is forced to '1', so the stored value is never read; only a write while halted, which replaces the stored value,
+makes it visible again. The condition on the state documents the rule of RG-SG-02.
 
 The recovery branches of the state machines (`when others`) cannot be reached through the ports.

@@ -26,29 +26,29 @@ dmacr_fields: &dmacr_fields
   - {name: RS, bits: "0", access: RW, reset: 0, description: "Run (1) or stop (0) the channel; a start is refused while an error flag of the channel is set"}
   - {name: Reserved, bits: "1", access: RO, reset: 1, description: Reads 1}
   - {name: Reset, bits: "2", access: RW, reset: 0, description: "Write 1: soft reset of the whole core (both channels); reads 1 until the reset is complete"}
-  - {name: Keyhole, bits: "3", access: RW, reset: 0, description: "Non-incrementing bursts (keyhole); stored and read back, the bursts stay incrementing in this configuration"}
-  - {name: CyclicBD, bits: "4", access: RW, reset: 0, description: "Cyclic descriptor mode; stored and read back, no function in Direct Register Mode"}
+  - {name: Keyhole, bits: "3", access: RW, reset: 0, description: "Non-incrementing bursts (keyhole) for the transfers of the channel, taken at the start of a transfer or descriptor fetch: S2MM in both modes, MM2S in Scatter/Gather Mode; the bursts stay incrementing until Open Logic provides FIXED bursts"}
+  - {name: CyclicBD, bits: "4", access: RW, reset: 0, description: "Cyclic descriptor mode (Scatter/Gather Mode): the engine ignores the tail pointer and the completed bit of the descriptors; no function in Direct Register Mode"}
   - {name: IOC_IrqEn, bits: "12", access: RW, reset: 0, description: "IOC_Irq drives the interrupt output of the channel"}
   - {name: Dly_IrqEn, bits: "13", access: RW, reset: 0, description: "Dly_Irq drives the interrupt output of the channel (Scatter/Gather Mode)"}
   - {name: Err_IrqEn, bits: "14", access: RW, reset: 0, description: "Err_Irq drives the interrupt output of the channel"}
-  - {name: IRQThreshold, bits: "23:16", access: RW, reset: 1, description: "Interrupt coalescing threshold (Scatter/Gather Mode); a write of 0 leaves the field unchanged"}
+  - {name: IRQThreshold, bits: "23:16", access: RW, reset: 1, description: "Interrupt coalescing threshold: completed packets per IOC_Irq (Scatter/Gather Mode); a write of 0 leaves the field unchanged, any other write reloads the counter"}
   - {name: IRQDelay, bits: "31:24", access: RW, reset: 0, description: "Interrupt delay timeout in units of 125 clock cycles (Scatter/Gather Mode); 0 disables the timer"}
 
 dmasr_fields: &dmasr_fields
   - {name: Halted, bits: "0", access: RO, reset: 1, description: "The channel is stopped (after a reset, a halt or an error)"}
-  - {name: Idle, bits: "1", access: RO, reset: 0, description: "The last transfer is complete and no new one has started; 0 while halted and before the first transfer"}
+  - {name: Idle, bits: "1", access: RO, reset: 0, description: "Direct Register Mode: the last transfer is complete and no new one has started; Scatter/Gather Mode: the engine has reached the tail and completed its descriptors; 0 while halted and before the first transfer"}
   - {name: SGIncld, bits: "3", access: RO, reset: IncludeSg_g, description: "Scatter/Gather Mode included"}
-  - {name: DMAIntErr, bits: "4", access: RO, reset: 0, description: "Internal error: S2MM packet longer than the buffer or S2MM write error; MM2S: 0 in Direct Register Mode"}
+  - {name: DMAIntErr, bits: "4", access: RO, reset: 0, description: "Internal error: S2MM packet longer than the buffer (Direct Register Mode), S2MM write error, descriptor with buffer length 0 (Scatter/Gather Mode); MM2S: 0 in Direct Register Mode"}
   - {name: DMASlvErr, bits: "5", access: RO, reset: 0, description: "Slave error response (SLVERR) of the memory"}
   - {name: DMADecErr, bits: "6", access: RO, reset: 0, description: "Decode error response (DECERR) of the memory or a buffer beyond the top of the address space"}
-  - {name: SGIntErr, bits: "8", access: RO, reset: 0, description: "Stale descriptor (Scatter/Gather Mode); 0 in Direct Register Mode"}
-  - {name: SGSlvErr, bits: "9", access: RO, reset: 0, description: "Slave error of a descriptor access (Scatter/Gather Mode); 0 in Direct Register Mode"}
-  - {name: SGDecErr, bits: "10", access: RO, reset: 0, description: "Decode error of a descriptor access (Scatter/Gather Mode); 0 in Direct Register Mode"}
-  - {name: IOC_Irq, bits: "12", access: W1C, reset: 0, description: "A transfer completed"}
+  - {name: SGIntErr, bits: "8", access: RO, reset: 0, description: "Stale descriptor: completed bit set outside cyclic mode (Scatter/Gather Mode); 0 in Direct Register Mode"}
+  - {name: SGSlvErr, bits: "9", access: RO, reset: 0, description: "Error response of a descriptor fetch or status write (Scatter/Gather Mode; SLVERR, and DECERR until Open Logic reports the response code); 0 in Direct Register Mode"}
+  - {name: SGDecErr, bits: "10", access: RO, reset: 0, description: "Decode error (DECERR) of a descriptor fetch or status write (Scatter/Gather Mode, once Open Logic reports the response code); 0 in Direct Register Mode"}
+  - {name: IOC_Irq, bits: "12", access: W1C, reset: 0, description: "A transfer completed (Direct Register Mode); the threshold number of packets completed (Scatter/Gather Mode)"}
   - {name: Dly_Irq, bits: "13", access: W1C, reset: 0, description: "The delay timer expired (Scatter/Gather Mode); 0 in Direct Register Mode"}
   - {name: Err_Irq, bits: "14", access: W1C, reset: 0, description: "An error flag of the channel was set"}
-  - {name: IRQThresholdSts, bits: "23:16", access: RO, reset: 1, description: "Remaining coalescing count (Scatter/Gather Mode); the value of DMACR.IRQThreshold in Direct Register Mode"}
-  - {name: IRQDelaySts, bits: "31:24", access: RO, reset: 0, description: "Delay timer (Scatter/Gather Mode); 0 in Direct Register Mode"}
+  - {name: IRQThresholdSts, bits: "23:16", access: RO, reset: 1, description: "Packets until the next IOC_Irq (Scatter/Gather Mode); the value of DMACR.IRQThreshold in Direct Register Mode"}
+  - {name: IRQDelaySts, bits: "31:24", access: RO, reset: 0, description: "Delay timer in units of 125 clock cycles (Scatter/Gather Mode); 0 in Direct Register Mode"}
 
 config_fields: &config_fields
   - {name: MemBytes, bits: "3:0", access: RO, reset: "log2(MemWidth_g / 8)", description: Log2 of the memory data width in bytes}
@@ -67,21 +67,47 @@ registers:
     description: "MM2S channel status (PG021 Table 7)"
     fields: *dmasr_fields
 
+  - name: MM2S_CURDESC
+    offset: 0x008
+    description: "MM2S current descriptor pointer, bits 31 to 0 (PG021 Table 8); Scatter/Gather Mode only"
+    fields:
+      - {name: Reserved, bits: "5:0", access: RO, reset: 0, description: Reads 0}
+      - {name: Pointer, bits: "31:6", access: RW, reset: 0, description: "Descriptor address bits 31 to 6: written while the channel is halted, read-only while it runs; reads the descriptor the engine works on; bits at or above AddrWidth_g read 0"}
+
+  - name: MM2S_CURDESC_MSB
+    offset: 0x00C
+    description: "MM2S current descriptor pointer, bits 63 to 32 (PG021 Table 9); Scatter/Gather Mode only"
+    fields:
+      - {name: Pointer, bits: "31:0", access: RW, reset: 0, description: "Descriptor address bits 63 to 32, as CURDESC; bits at or above AddrWidth_g - 32 read 0"}
+
+  - name: MM2S_TAILDESC
+    offset: 0x010
+    description: "MM2S tail descriptor pointer, bits 31 to 0 (PG021 Table 10); Scatter/Gather Mode only"
+    fields:
+      - {name: Reserved, bits: "5:0", access: RO, reset: 0, description: Reads 0}
+      - {name: Pointer, bits: "31:6", access: RW, reset: 0, description: "Tail descriptor address bits 31 to 6; with 32 address bits a write while the channel runs moves the tail and starts the engine; bits at or above AddrWidth_g read 0"}
+
+  - name: MM2S_TAILDESC_MSB
+    offset: 0x014
+    description: "MM2S tail descriptor pointer, bits 63 to 32 (PG021 Table 11); Scatter/Gather Mode only"
+    fields:
+      - {name: Pointer, bits: "31:0", access: RW, reset: 0, description: "Tail descriptor address bits 63 to 32; above 32 address bits a write while the channel runs moves the tail and starts the engine; bits at or above AddrWidth_g - 32 read 0"}
+
   - name: MM2S_SA
     offset: 0x018
-    description: "MM2S buffer address, bits 31 to 0 (PG021 Table 12)"
+    description: "MM2S buffer address, bits 31 to 0 (PG021 Table 12); Direct Register Mode only"
     fields:
       - {name: Address, bits: "31:0", access: RW, reset: 0, description: "Address of the first byte of the buffer, any byte offset; bits at or above AddrWidth_g read 0"}
 
   - name: MM2S_SA_MSB
     offset: 0x01C
-    description: "MM2S buffer address, bits 63 to 32 (PG021 Table 13)"
+    description: "MM2S buffer address, bits 63 to 32 (PG021 Table 13); Direct Register Mode only"
     fields:
       - {name: Address, bits: "31:0", access: RW, reset: 0, description: "Address bits 63 to 32; bits at or above AddrWidth_g - 32 read 0"}
 
   - name: MM2S_LENGTH
     offset: 0x028
-    description: "MM2S transfer length (PG021 Table 14)"
+    description: "MM2S transfer length (PG021 Table 14); Direct Register Mode only"
     fields:
       - {name: Length, bits: "LengthWidth_g-1:0", access: RW, reset: 0, description: "Bytes of the transfer; a non-zero write while the channel runs and no transfer is in progress starts the transfer, other writes have no effect on the operation"}
 
@@ -95,21 +121,47 @@ registers:
     description: "S2MM channel status (PG021 Table 17)"
     fields: *dmasr_fields
 
+  - name: S2MM_CURDESC
+    offset: 0x038
+    description: "S2MM current descriptor pointer, bits 31 to 0 (PG021 Table 18); Scatter/Gather Mode only"
+    fields:
+      - {name: Reserved, bits: "5:0", access: RO, reset: 0, description: Reads 0}
+      - {name: Pointer, bits: "31:6", access: RW, reset: 0, description: "Descriptor address bits 31 to 6: written while the channel is halted, read-only while it runs; reads the descriptor the engine works on; bits at or above AddrWidth_g read 0"}
+
+  - name: S2MM_CURDESC_MSB
+    offset: 0x03C
+    description: "S2MM current descriptor pointer, bits 63 to 32 (PG021 Table 19); Scatter/Gather Mode only"
+    fields:
+      - {name: Pointer, bits: "31:0", access: RW, reset: 0, description: "Descriptor address bits 63 to 32, as CURDESC; bits at or above AddrWidth_g - 32 read 0"}
+
+  - name: S2MM_TAILDESC
+    offset: 0x040
+    description: "S2MM tail descriptor pointer, bits 31 to 0 (PG021 Table 20); Scatter/Gather Mode only"
+    fields:
+      - {name: Reserved, bits: "5:0", access: RO, reset: 0, description: Reads 0}
+      - {name: Pointer, bits: "31:6", access: RW, reset: 0, description: "Tail descriptor address bits 31 to 6; with 32 address bits a write while the channel runs moves the tail and starts the engine; bits at or above AddrWidth_g read 0"}
+
+  - name: S2MM_TAILDESC_MSB
+    offset: 0x044
+    description: "S2MM tail descriptor pointer, bits 63 to 32 (PG021 Table 21); Scatter/Gather Mode only"
+    fields:
+      - {name: Pointer, bits: "31:0", access: RW, reset: 0, description: "Tail descriptor address bits 63 to 32; above 32 address bits a write while the channel runs moves the tail and starts the engine; bits at or above AddrWidth_g - 32 read 0"}
+
   - name: S2MM_DA
     offset: 0x048
-    description: "S2MM buffer address, bits 31 to 0 (PG021 Table 22)"
+    description: "S2MM buffer address, bits 31 to 0 (PG021 Table 22); Direct Register Mode only"
     fields:
       - {name: Address, bits: "31:0", access: RW, reset: 0, description: "Address of the first byte of the buffer, any byte offset; bits at or above AddrWidth_g read 0"}
 
   - name: S2MM_DA_MSB
     offset: 0x04C
-    description: "S2MM buffer address, bits 63 to 32 (PG021 Table 23)"
+    description: "S2MM buffer address, bits 63 to 32 (PG021 Table 23); Direct Register Mode only"
     fields:
       - {name: Address, bits: "31:0", access: RW, reset: 0, description: "Address bits 63 to 32; bits at or above AddrWidth_g - 32 read 0"}
 
   - name: S2MM_LENGTH
     offset: 0x058
-    description: "S2MM buffer length (PG021 Table 24)"
+    description: "S2MM buffer length (PG021 Table 24); Direct Register Mode only"
     fields:
       - {name: Length, bits: "LengthWidth_g-1:0", access: RW, reset: 0, description: "Bytes of the buffer; a non-zero write while the channel runs and no transfer is in progress starts the transfer; reads the bytes received after a completed transfer"}
 
@@ -208,3 +260,7 @@ buffers:
   - {index: 3, description: "S2MM write data buffer (olo_ft_axi_master_full)"}
   - {index: 4, description: "MM2S transfer buffer (olo_ft_fifo_sync)"}
   - {index: 5, description: "MM2S response buffer (olo_ft_fifo_sync)"}
+  - {index: 6, description: "MM2S descriptor buffer of the Scatter/Gather engine (olo_ft_fifo_sync)"}
+  - {index: 7, description: "S2MM descriptor buffer of the Scatter/Gather engine (olo_ft_fifo_sync)"}
+  - {index: 8, description: "Read data buffer of the descriptor port (olo_ft_axi_master_simple)"}
+  - {index: 9, description: "Write data buffer of the descriptor port (olo_ft_axi_master_simple)"}

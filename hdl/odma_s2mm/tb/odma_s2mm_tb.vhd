@@ -1184,8 +1184,8 @@ begin
                 Gen.Percent <= 100;
                 Mem_v.fill(0, region(11) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
                 Mem_v.fill(0, region(12) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
-                -- The write window over all buffers of the test, also those of the drain below
-                Mem_v.setWindow(0, region(1) - Guard_c, region(13));
+                -- The write window over the two buffers of this step only
+                Mem_v.setWindow(0, region(11) - Guard_c, region(13));
                 sendCmd(region(11), Len_v);
                 cycles(10);
                 send(source(11), Len_v + 1);
@@ -1214,14 +1214,16 @@ begin
                 send(source(6), 3 * Len_v);
                 Mem_v.fill(0, region(6) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
                 Mem_v.fill(0, region(7) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
+                -- The write window from the first to the end of the second buffer of this step
+                Mem_v.setWindow(0, region(6), region(7) + Len_v - 1);
                 sendCmd(region(6), Len_v);
                 waitRes(Res_v + 1);
                 sendCmd(region(7), Len_v);
                 cycles(10);
-                ChDrain     <= '1';
+                ChDrain <= '1';
                 wait until Stopped = '1' for 1 ms;
                 check_value(Stopped, '1', ERROR, "Stopped after the drain");
-                Cnt_v       := Obs.AwCount;
+                Cnt_v   := Obs.AwCount;
                 cycles(200);
                 check_value(Obs.AwCount, Cnt_v, ERROR, "no write after the drain");
                 check_value(Obs.ResCount, Res_v + 1, ERROR, "no result of the drained buffer");

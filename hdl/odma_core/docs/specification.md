@@ -10,9 +10,9 @@ generics. It has no function of its own beyond the wiring, the idle values of a 
 include, the index map of the FT buffers and the detection of the packet starts at the stream ports; its
 requirements describe the behaviour of the assembled core as software and the system see it.
 
-This specification covers phase a, Direct Register Mode, and phase b, Scatter/Gather Mode with packets of one descriptor
-each. Packets of several buffers and keyhole transfers wait for Open Logic (gaps G10 and G1, section 3.7). The control
-and status streams and the micro DMA configuration (phase c) follow.
+This specification covers phase a, Direct Register Mode, and phase b, Scatter/Gather Mode with packets of one or
+several descriptors and keyhole transfers. The control and status streams and the micro DMA configuration (phase c)
+follow.
 
 ## 2. Partner behaviour
 
@@ -56,7 +56,7 @@ and status streams and the micro DMA configuration (phase c) follow.
 
 | ID | Requirement | PG021 items |
 | --- | --- | --- |
-| CO-ER-01 | A transfer that ends with an error shall halt its channel with the error flags in its `DMASR` and `Err_Irq` set and raise its interrupt output when `Err_IrqEn` is set: a read or write response SLVERR (`DMASlvErr`; S2MM also `DMAIntErr`), a buffer beyond the top of the address space (`DMADecErr` without a memory access; S2MM also `DMAIntErr`), an S2MM packet longer than its buffer (`DMAIntErr`, no byte beyond the buffer). The MM2S channel shall still send the packet of a transfer with a read error. | `*_DMASR.DMASlvErr`, `*_DMASR.DMADecErr`, `S2MM_DMASR.DMAIntErr`, `*_DMASR.Err_Irq` |
+| CO-ER-01 | A transfer that ends with an error shall halt its channel with the error flags in its `DMASR` and `Err_Irq` set and raise its interrupt output when `Err_IrqEn` is set: a read or write response SLVERR (`DMASlvErr`; S2MM also `DMAIntErr`) or DECERR (`DMADecErr`; S2MM also `DMAIntErr`), a buffer beyond the top of the address space (`DMADecErr` without a memory access; S2MM also `DMAIntErr`), an S2MM packet longer than its buffer (`DMAIntErr`, no byte beyond the buffer). The MM2S channel shall still send the packet of a transfer with a read error. | `*_DMASR.DMASlvErr`, `*_DMASR.DMADecErr`, `S2MM_DMASR.DMAIntErr`, `*_DMASR.Err_Irq` |
 | CO-ER-02 | After an error, the other channel shall continue to execute transfers, and a soft reset shall clear the error flags so that both channels work again. | `*_DMACR.Reset` |
 | CO-RS-01 | A soft reset written while both channels have transfers in progress shall complete every AXI transaction already accepted by the memory, start none after it, take no S2MM stream beat while it lasts, hold both reset outputs high while it lasts, return the registers to their reset values and reset both channels, which also cancels an error injection pending in one of their FT buffers; afterwards the core shall execute transfers normally, and no stream beat of the interrupted transfers shall appear. | `*_DMACR.Reset`, `RST.OUT` |
 
@@ -76,17 +76,18 @@ and status streams and the micro DMA configuration (phase c) follow.
 | CO-SG-03 | The Scatter/Gather programming sequence of the S2MM channel shall write every received packet that fits into the buffer of one descriptor into that buffer, write no byte outside the packet, and write the status of the descriptor with the transferred bytes, `RXSOF`, `RXEOF` and `Cmplt`. | `SEQ.SG.S2MM` |
 | CO-SG-04 | Software that processes the completed descriptors and moves the tail pointer while the channels run shall keep both channels working without loss of data, also with backpressure and latency on all memory ports. | `DESCMGMT.TAIL` |
 | CO-SG-05 | In cyclic mode both channels shall process their descriptor rings, with the status of every descriptor written in every lap, until they are halted or reset. | `SEQ.CYCLIC` |
-| CO-SG-06 | A failed descriptor fetch (`SGSlvErr`), a stale descriptor (`SGIntErr`), a buffer length of 0 (`DMAIntErr` in `DMASR` and in the status) and a failed status write (`SGSlvErr`) shall halt their channel with `Err_Irq`, `CURDESC` at the descriptor of the error and the packets completed before it; a soft reset shall clear the flags so that the channel works again. | `*_DMASR.SGIntErr`, `*_DMASR.SGSlvErr`, `MM2S_DMASR.DMAIntErr` |
+| CO-SG-06 | A descriptor fetch answered with SLVERR (`SGSlvErr`) or DECERR (`SGDecErr`), a stale descriptor (`SGIntErr`), a buffer length of 0 (`DMAIntErr` in `DMASR` and in the status) and a status write answered with SLVERR (`SGSlvErr`) or DECERR (`SGDecErr`) shall halt their channel with `Err_Irq`, `CURDESC` at the descriptor of the error and the packets completed before it; a soft reset shall clear the flags so that the channel works again. | `*_DMASR.SGIntErr`, `*_DMASR.SGSlvErr`, `*_DMASR.SGDecErr`, `MM2S_DMASR.DMAIntErr` |
 | CO-SG-07 | The interrupt delay shall work through the core: a packet completion that does not reach the threshold starts the delay timer, which sets `Dly_Irq` and raises the interrupt output with `Dly_IrqEn` when it expires; the first stream beat of a packet that starts after that completion stops and clears the timer; a packet that starts before it does not (`odma_registers` interpretation R10). | `*_DMACR.IRQDelay`, `*_DMASR.Dly_Irq` |
 | CO-SG-08 | A soft reset in Scatter/Gather Mode shall wait until no descriptor access and no data burst of either channel is outstanding, start none after it, and return the registers to their reset values; afterwards the Scatter/Gather programming sequence shall work. | `*_DMACR.Reset` |
 
-### 3.7 Requirements waiting for Open Logic
+### 3.7 Packets of several buffers and keyhole
 
 | ID | Requirement | PG021 items |
 | --- | --- | --- |
-| CO-SG-09 | The MM2S channel shall send the buffers of the descriptors from one with `TXSOF` to the next with `TXEOF`, each at any address and of any length, as one contiguous packet (gap G10, `odma_mm2s` MM-SG-01). | `SEQ.SG.MM2S` |
-| CO-SG-10 | The S2MM channel shall write a packet over as many buffers of the chain as it needs, with `RXSOF` in the status of the first and `RXEOF` in the status of the last descriptor (gap G10, `odma_s2mm` S2-SG-01). | `SEQ.SG.S2MM` |
-| CO-SG-11 | With `DMACR.Keyhole` the transfers of the channel shall use non-incrementing bursts, in Direct Register Mode and in Scatter/Gather Mode (gap G1). | `*_DMACR.Keyhole` |
+| CO-SG-09 | The MM2S channel shall send the buffers of the descriptors from one with `TXSOF` to the next with `TXEOF`, each at any address and of any length, as one contiguous packet (`odma_mm2s` MM-SG-01), with the status of every descriptor written and one packet event for the packet. | `SEQ.SG.MM2S` |
+| CO-SG-10 | The S2MM channel shall write a packet over as many buffers of the chain as it needs, with `RXSOF` in the status of the first and `RXEOF` in the status of the last descriptor (`odma_s2mm` S2-SG-01), and a packet without bytes into one buffer with both flags (`odma_sg` SGI-13). | `SEQ.SG.S2MM` |
+| CO-SG-11 | With `DMACR.Keyhole` the transfers of the channel shall use FIXED bursts of at most 16 beats at the buffer address with the bits below the memory width cleared: S2MM in Direct Register Mode and in Scatter/Gather Mode, MM2S in Scatter/Gather Mode (interpretation I1). | `*_DMACR.Keyhole` |
+| CO-SG-12 | A halt or an error inside an MM2S packet of several descriptors shall end the packet on the stream with `TLast` on the last beat of the last accepted descriptor before `DMASR.Halted` is set (`odma_mm2s` MM-SG-04). | `*_DMACR.RS` |
 
 ## 4. Interpretations
 

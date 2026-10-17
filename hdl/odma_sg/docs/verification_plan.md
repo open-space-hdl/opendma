@@ -55,7 +55,7 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | `test_packet_events` (TC-SG-06) | Write responses delayed by 50 clock cycles: `Pkt` follows the write response of the status of the descriptor with the end of packet, and the status words of the whole packet are in memory at the event; one `Pkt` per packet for MM2S packets of one to three descriptors and S2MM packets over one to three buffers; no `Pkt` for a result with an error | SG-UP-04, SG-UP-05 |
 | `test_stale` (TC-SG-07) | The third descriptor of a chain has `Cmplt` = 1: the first two are processed and written, the third is not issued and not written, one `ErrValid` with the engine error `SGIntErr` and no transfer error, no further fetch or command, `CurPtr` = the third; with `Cyclic` = 1 the same chain is processed completely | SG-FE-05, SG-CY-01 |
 | `test_transfer_errors` (TC-SG-08) | A descriptor with buffer length 0 and results with the internal, the slave and the decode error, per channel: the status has the error flags (S2MM `DMAIntErr` also with the slave and the decode error), the bytes and `Cmplt` = 0; `ErrValid` with the transfer error after the status write; no command after the error result, while a command already issued completes and is written; `CurPtr` = the descriptor of the error | SG-FE-06, SG-ER-01, SG-ER-03 |
-| `test_descriptor_errors` (TC-SG-09) | SLVERR and DECERR on a fetch and on a status write: `ErrValid` with an engine error (the slave error code until gap G5), nothing issued from a failed fetch, the transfer error of the descriptor reported together with a failed status write, no further fetch or command, `CurPtr` = the descriptor of the access | SG-ER-02 |
+| `test_descriptor_errors` (TC-SG-09) | SLVERR and DECERR on a fetch and on a status write: `ErrValid` with an engine error, nothing issued from a failed fetch, the transfer error of the descriptor reported together with a failed status write, no further fetch or command, `CurPtr` = the descriptor of the access | SG-ER-02 |
 | `test_channels` (TC-SG-10) | Chains in both channels at the same time: while both channels request, the fetches and the status writes alternate between the channels; a stale descriptor in one channel stops that channel only, the other completes its chain | SG-IF-01, SG-ER-03 |
 | `test_halt` (TC-SG-11) | `Run` falls with two MM2S commands issued and one descriptor fetched: no further fetch or command, both commands complete and are written, the fetched descriptor keeps its status, `CurPtr` = that descriptor, `Stopped` after the last write; S2MM halted before any byte (result of 0 bytes): no status write, `CurPtr` = that descriptor; S2MM halted inside a packet: status with the bytes, `RXSOF`, no `RXEOF`, `Cmplt` = 1; a fetch outstanding at the halt completes without a command; a restart from `CurPtr` continues the chain | SG-HA-01 |
 | `test_drain` (TC-SG-12) | `Drain` rises with a fetch and a status write outstanding (memory latency 40 clock cycles): no command, no new access, the outstanding bursts complete, `Stopped` rises, no AXI transaction after it | SG-HA-02 |
@@ -64,18 +64,10 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | `test_ecc` (TC-SG-15) | Single and double errors in each of the four buffers, injected before the start (descriptor buffers: the first entry; read data buffer: the first word of the first fetch; write data buffer: the first status word), parity mode and data mode: one `Ecc_Sec` or `Ecc_Ded` pulse of the buffer; parity mode and single errors leave every command and status correct; a double error in data mode gives the buffer length ^ 3 in the command (descriptor buffer), no change (read data buffer, ignored `NXTDESC` bits) and the transferred bytes ^ 3 in memory (write data buffer) | SG-FT-01 |
 | `test_random` (TC-SG-16) | Per channel 40 descriptors in a ring of 16 with random lengths and packet structure (S2MM: random results, a packet continues only in a full buffer), random memory latency and backpressure, random delays of the channel model; the tail moved while the channel runs (software model: every completed descriptor is checked, prepared again and appended): commands, status words, packet events and `CurPtr` against the reference walk | SG-FE-02, SG-FE-03, SG-FE-04, SG-TR-01, SG-TR-02, SG-UP-01, SG-UP-03, SG-UP-05 |
 | `test_rate` (TC-SG-17) | Chains of 32 descriptors with results returned at once, memory latency 0 and 20: clock cycles per descriptor for one channel and for both channels, logged for the verification report | none (performance figures) |
+| `test_error_codes` (TC-SG-18) | SLVERR, DECERR and EXOKAY on a fetch and on a status write of each channel: the engine error `SGSlvErr` for SLVERR and EXOKAY (interpretation I14), `SGDecErr` for DECERR | SG-ER-04 |
 
 The behaviour of the engine with the real channels (stream join and split, keyhole bursts, halt inside a packet)
-is verified at core level (`odma_core`, requirements CO-SG-01 to CO-SG-05).
-
-### 3.1 Test cases waiting for Open Logic
-
-The test case below takes effect with the release of Open Logic that reports the response code of a failed access
-(specification section 3.8).
-
-| Test ID | Description | Requirements |
-| --- | --- | --- |
-| `test_error_codes` (TC-SG-18) | SLVERR and DECERR on a fetch and on a status write: the engine error `SGSlvErr` for SLVERR and `SGDecErr` for DECERR | SG-ER-04 |
+is verified at core level (`odma_core`, requirements CO-SG-01 to CO-SG-12).
 
 ## 4. Requirement coverage
 
@@ -107,7 +99,7 @@ The test case below takes effect with the release of Open Logic that reports the
 | SG-HA-02 | TC-SG-12 |
 | SG-CY-01 | TC-SG-07, TC-SG-13 |
 | SG-FT-01 | TC-SG-15 |
-| SG-ER-04 | TC-SG-18 (waiting for Open Logic) |
+| SG-ER-04 | TC-SG-18 |
 
 ## 5. Negative tests
 

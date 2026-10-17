@@ -81,13 +81,6 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage at the
 | `test_sg_threshold` (TC-RG-21) | `IRQThreshold` 3: `IRQThresholdSts` counts the packets down, the third sets `IOC_Irq` and reloads; a write of the field reloads the counter, a write of 0 changes neither the field nor the counter; the start of the channel reloads it | RG-SG-06 |
 | `test_sg_delay` (TC-RG-22) | `IRQDelay` 2: after a packet that did not set `IOC_Irq`, `IRQDelaySts` reads 1 after one unit, the interrupt output rises after a timeout of 2 x 125 clock cycles (251 to 253 clock cycles after the packet pulse as the harness sees it, so that a unit of 124 or 126 clock cycles fails), `Dly_Irq` is set, the timer cleared and the threshold counter reloaded; `Dly_Irq` is cleared by writing 1; the start of a packet stops and clears the timer; a packet that sets `IOC_Irq` stops it; `IRQDelay` 0 disables it | RG-SG-07, RG-SG-08 |
 | `test_sg_modes` (TC-RG-23) | `DMACR.Keyhole` and `DMACR.CyclicBD` drive the keyhole and cyclic outputs to the engine of each channel, halted and running | RG-SG-09 |
-
-### 3.1 Test cases waiting for Open Logic
-
-The test case below takes effect with the release of Open Logic that provides FIXED bursts (gap G1).
-
-| Test ID | Description | Requirements |
-| --- | --- | --- |
 | `test_dr_keyhole` (TC-RG-24) | Direct Register Mode: the S2MM command carries `S2MM_DMACR.Keyhole` as stored at the length write; the MM2S command never does (interpretation I1) | RG-SG-11 |
 
 ## 4. Requirement coverage
@@ -133,7 +126,7 @@ The test case below takes effect with the release of Open Logic that provides FI
 | RG-SG-07, RG-SG-08 | TC-RG-22 |
 | RG-SG-09 | TC-RG-23 |
 | RG-SG-10 | TC-RG-19 |
-| RG-SG-11 | TC-RG-24 (waiting for Open Logic) |
+| RG-SG-11 | TC-RG-24 |
 
 ## 5. Negative tests
 

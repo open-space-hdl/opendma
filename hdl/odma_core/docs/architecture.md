@@ -73,10 +73,11 @@ who talks to the channels:
 | Descriptor port | Idle values (section 8) | From `odma_sg` |
 | ECC events 6 to 9 | '0' | From `odma_sg` |
 
-**Start of packet of the S2MM results.** `odma_sg` writes `RXSOF` into a status from the result flag `Res_Sof`
-(`odma_s2mm` S2-SG-02). Until packets continue over several buffers (gap G10), every S2MM buffer that receives a byte
-holds the first byte of its packet, so `odma_core` derives the flag: `S2mmRes_Sof` = '1' when the result has
-transferred bytes (`odma_sg` architecture, section 11). With G10 the flag comes from `odma_s2mm`.
+**Packets of several buffers.** The core sets `Join_g` of `odma_mm2s` and `Split_g` of `odma_s2mm` to
+`IncludeSg_g`: in SG mode the MM2S channel joins the buffers of a packet with `olo_base_stream_join` and the S2MM
+channel splits a packet at the end of every buffer with `olo_base_stream_split`; in DR mode both keep the paths of a
+packet per transfer, without the shifters of these entities. `odma_sg` writes `RXSOF` into a status from the result
+flag `Res_Sof` of `odma_s2mm` (S2-SG-02).
 
 ## 6. FT buffer indices
 

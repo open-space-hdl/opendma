@@ -5,11 +5,11 @@
 `odma_s2mm` is the stream to memory channel of OpenDMA (architecture section 7.3): S2-1 receives the S2MM stream
 into an FT data buffer and cuts each packet into chunks of one memory burst, S2-2 writes the complete chunks into the
 buffer of the transfer command through an AXI4 write master and returns one transfer result per command. The channel
-executes the commands of the register interface (DR mode) and later of the Scatter/Gather engine through the same
-internal interface (command, result, run, drain, stopped; module architecture of `odma_registers`, section 3).
+executes the commands of the register interface (DR mode) and of the Scatter/Gather engine (SG mode) through the
+same internal interface (command, result, run, drain, stopped; module architecture of `odma_registers`, section 3).
 
-This specification covers phase a: one packet per transfer, the packet written into one buffer. Packets spread over
-several buffers (phase b, gap G10), keyhole writes (phase b, gap G1) and the status stream S2-3 (phase c) follow.
+This specification covers phases a and b: one packet per transfer, with `Split_g` (Scatter/Gather Mode) packets
+spread over several buffers, and keyhole writes. The status stream S2-3 (phase c) follows.
 
 ## 2. Partner behaviour
 
@@ -17,8 +17,9 @@ several buffers (phase b, gap G10), keyhole writes (phase b, gap G1) and the sta
 | --- | --- | --- |
 | `S_S2mm_*` | Stream peer (AXI4-Stream master) | Sends packets of any length from one byte, beats with gaps of any length, also stops in the middle of a packet for any time; marks the last beat with `TLast`; valid bytes contiguous from lane 0 in the last beat; may send a last beat without valid bytes; `TKeep` of other beats is not relied upon |
 | `M_AxiS2mm_*` | Memory through an AXI4 interconnect | Accepts write bursts in any order of ready; answers every burst with one response in the order of the bursts (no IDs), OKAY, SLVERR or DECERR |
-| Command, result, run, drain, stopped | `odma_registers` (DR mode) | Issues one command at a time in DR mode, possibly long before the packet arrives; takes every result at once; lowers `Run` to halt and raises `Drain` for a soft reset |
-| Write master | `olo_ft_axi_master_full` at 4.7.0-ft.6 | Takes write data only after the command (alignment); writes the bytes of a command of 1 to 2**`LengthWidth_g` - 1 bytes from any address with strobes; in high-latency mode issues a burst only when its data is buffered; signals `Wr_Done` or `Wr_Error` per command; at least four clock cycles per command; the response code of a failed command needs gap G5 |
+| Command, result, run, drain, stopped | `odma_registers` (DR mode), `odma_sg` (SG mode) | Issue one command at a time, possibly long before the packet arrives (SG mode: the next command waits at the interface until the channel takes it); take every result at once; lower `Run` to halt and raise `Drain` for a soft reset |
+| Write master | `olo_ft_axi_master_full` at 4.7.0-ft.8 | Takes write data only after the command (alignment); writes the bytes of a command of 1 to 2**`LengthWidth_g` - 1 bytes from any address with strobes; in high-latency mode issues a burst only when its data is buffered; signals `Wr_Done`, or `Wr_Error` with the response code of the first failing burst (`Wr_ErrorResp`), per command; with `CmdWr_Fixed` FIXED bursts of at most 16 beats at the AXI word of the address, the bytes packed from lane 0; at least four clock cycles per command |
+| Stream split | `olo_base_stream_split` at 4.7.0-ft.8 (with `Split_g`) | Cuts the packets into segments of a size in bytes taken from its command input; every segment starts in lane 0, ends with `Out_Last` and is full except its last beat; `Out_InLast` on the last beat of the segment in which the packet ends; takes no input beat while no segment is active; a packet without bytes gives one beat with `Out_Be` all '0'; the segment command must not depend combinationally on `In_Ready` or the outputs |
 
 ## 3. Requirements
 
@@ -26,7 +27,7 @@ several buffers (phase b, gap G10), keyhole writes (phase b, gap G1) and the sta
 
 | ID | Requirement | PG021 items |
 | --- | --- | --- |
-| S2-IF-01 | The memory port shall be an AXI4 write master with `AddrWidth_g` address bits and `MemWidth_g` data bits, INCR bursts of full-width beats, `AwCache` 0011, `AwProt` 000 and no ID signals. | none (interface, architecture section 6) |
+| S2-IF-01 | The memory port shall be an AXI4 write master with `AddrWidth_g` address bits and `MemWidth_g` data bits, bursts of full-width beats (INCR, FIXED for keyhole, S2-SG-04), `AwCache` 0011, `AwProt` 000 and no ID signals. | none (interface, architecture section 6) |
 | S2-IF-02 | The stream port shall be an AXI4-Stream slave with `StreamWidth_g` data bits, `TKeep` and `TLast`. | `STRM.S2MM` |
 | S2-IF-03 | The channel shall accept a command only while `Run` is '1', `Drain` is '0' and no transfer is in progress, and shall return exactly one result per accepted command. | none (internal interface) |
 
@@ -34,9 +35,9 @@ several buffers (phase b, gap G10), keyhole writes (phase b, gap G1) and the sta
 
 | ID | Requirement | PG021 items |
 | --- | --- | --- |
-| S2-ST-01 | The channel shall accept stream beats into its data buffer only while `Run` is '1' and the buffer has space; while the channel is halted, `S_S2mm_Ready` shall be '0', except while the rest of an interrupted packet is discarded (S2-HA-01) (interpretation I9). | `STRM.S2MM` |
+| S2-ST-01 | The channel shall accept stream beats into its data buffer only while `Run` is '1' and the buffer has space, with `Split_g` also only while a command is active for them (S2-SG-03); while the channel is halted, `S_S2mm_Ready` shall be '0', except while the rest of an interrupted packet is discarded (S2-HA-01) (interpretation I9). | `STRM.S2MM` |
 | S2-ST-02 | The bytes of a beat without `TLast` shall all be taken; of a beat with `TLast`, the bytes up to the first lane whose `TKeep` bit is not set; a last beat without valid bytes shall end the packet (interpretation I10). | `STRM.S2MM` |
-| S2-ST-03 | A packet shall be cut into chunks of one burst, `ChunkBeats` = B x `MemWidth_g` / `StreamWidth_g` beats with B the smaller of `BurstBeats_g` and the beats of 4 KB (4096 / (`MemWidth_g` / 8)), the last chunk ending with the packet; a chunk shall be written only when all its beats are in the data buffer. | none (architecture D5) |
+| S2-ST-03 | A packet shall be cut into chunks of one burst, `ChunkBeats` = B x `MemWidth_g` / `StreamWidth_g` beats with B the smaller of `BurstBeats_g` and the beats of 4 KB (4096 / (`MemWidth_g` / 8)), the last chunk ending with the packet and, with `Split_g`, a chunk also ending with the buffer; a chunk shall be written only when all its beats are in the data buffer. | none (architecture D5) |
 
 ### 3.3 Writing the buffer (S2-2)
 
@@ -54,9 +55,10 @@ several buffers (phase b, gap G10), keyhole writes (phase b, gap G1) and the sta
 | ID | Requirement | PG021 items |
 | --- | --- | --- |
 | S2-RS-01 | When the packet ends in the buffer, the result shall carry the number of bytes written, the end of packet and no error, once the write responses of all its bursts have arrived. | none (architecture D5) |
-| S2-RS-02 | A packet longer than the buffer: the bytes that fit shall be written, the rest of the packet discarded up to its `TLast`, and the result shall carry the internal error code (architecture D6). | `S2MM_DMASR.DMAIntErr` |
+| S2-RS-02 | Without `Split_g`, a packet longer than the buffer: the bytes that fit shall be written, the rest of the packet discarded up to its `TLast`, and the result shall carry the internal error code (architecture D6). | `S2MM_DMASR.DMAIntErr` |
 | S2-RS-03 | A write response other than OKAY shall give the result an error code, the slave error or the decode error, and no end of packet; after the first error no further write shall be issued for the packet, and the rest of the packet shall be discarded up to its `TLast`. | `S2MM_DMASR.DMASlvErr` |
 | S2-RS-04 | A result with an error or without the end of packet shall be returned once no write of the transfer is outstanding, without waiting for the `TLast` of a packet that is being discarded. | none (architecture D7) |
+| S2-RS-05 | The error code of S2-RS-03 shall be the slave error for SLVERR and for EXOKAY (interpretation I14) and the decode error for DECERR; with responses of both kinds in one transfer, the first one decides. | `S2MM_DMASR.DMASlvErr`, `S2MM_DMASR.DMADecErr` |
 
 ### 3.5 Halt and drain
 
@@ -72,24 +74,14 @@ several buffers (phase b, gap G10), keyhole writes (phase b, gap G1) and the sta
 | --- | --- | --- |
 | S2-FT-01 | The data buffer, the chunk buffer and the write data buffer of the write master shall be protected by SECDED ECC; every corrected single error and every detected double error shall raise one pulse on the `Ecc_Sec` or `Ecc_Ded` bit of its buffer; `EccInj_Valid` of a buffer with `EccInj_Double` and `EccInj_Data` shall flip one or two parity bits or data bits of its next codeword. | none (architecture P5) |
 
-### 3.7 Requirements waiting for Open Logic
-
-Open Logic 4.7.0-ft.6 reports a failed write command of `olo_ft_axi_master_full` without its response code (gap G5 of
-the architecture). Until the release with the response code, the channel gives every failed transfer the slave error
-code; the requirement below takes effect with that release.
+### 3.7 Scatter/Gather Mode
 
 | ID | Requirement | PG021 items |
 | --- | --- | --- |
-| S2-RS-05 | The error code of S2-RS-03 shall be the slave error for SLVERR and the decode error for DECERR; with responses of both kinds in one transfer, the first one decides (gap G5). | `S2MM_DMASR.DMASlvErr`, `S2MM_DMASR.DMADecErr` |
-
-### 3.8 Requirements of phase b
-
-| ID | Requirement | PG021 items |
-| --- | --- | --- |
-| S2-SG-01 | In Scatter/Gather Mode a packet longer than the buffer of a command shall continue at byte 0 of the buffer of the next command (gap G10): the result of the full buffer carries its length and no end of packet, and S2-RS-02 does not apply. | `DESC.S2MM_CONTROL.BufferLength`, `STRM.S2MM` |
-| S2-SG-02 | The result shall carry a start of packet flag when its buffer holds the first byte of a packet, and the end of packet when the packet ended in it. | `DESC.S2MM_STATUS.RXSOF`, `DESC.S2MM_STATUS.RXEOF` |
-| S2-SG-03 | When no next command is available for the rest of a packet, the rest shall wait at the stream input (`S_S2mm_Ready` = '0') until the next command arrives. | `DESCMGMT.TAIL` |
-| S2-SG-04 | A command with keyhole shall write its buffer with FIXED bursts of at most 16 beats at the command address with the bits below the memory data width cleared (gap G1), in DR mode and in Scatter/Gather Mode. | `*_DMACR.Keyhole` |
+| S2-SG-01 | With `Split_g`, a packet longer than the buffer of a command shall continue at byte 0 of the buffer of the next command: the result of the full buffer carries its length and no end of packet, and S2-RS-02 does not apply. | `DESC.S2MM_CONTROL.BufferLength`, `STRM.S2MM` |
+| S2-SG-02 | The result shall carry the start of packet when its buffer is the first buffer of a packet (it holds the first byte, or the packet has no byte, interpretation SGI-13), and the end of packet when the packet ended in it. | `DESC.S2MM_STATUS.RXSOF`, `DESC.S2MM_STATUS.RXEOF` |
+| S2-SG-03 | With `Split_g`, when no next command is available for the rest of a packet, the rest shall wait at the stream input (`S_S2mm_Ready` = '0') until the next command arrives; a packet that starts while no command is active waits in the same way. | `DESCMGMT.TAIL` |
+| S2-SG-04 | A command with keyhole shall write its buffer with FIXED bursts of at most 16 beats at the command address with the bits below the memory data width cleared, every write of the transfer at that address, the bytes packed from lane 0 as for an incrementing write of the same number of memory words, in DR mode and in Scatter/Gather Mode; S2-WR-04 does not apply, because every beat accesses the memory word at that address, which lies in the address space. | `*_DMACR.Keyhole` |
 
 ## 4. Interpretations
 
@@ -103,13 +95,15 @@ code; the requirement below takes effect with that release.
 | S2 | Write errors in the middle of a packet are not described | No further write, rest discarded, result once the outstanding writes have answered (S2-RS-03, S2-RS-04) |
 | S3 | A double error in a buffer is not part of PG021 | The data is written as read from the buffer and counted (S2-FT-01, extension window); the result is not changed |
 | S4 | A buffer length of 0 is an internal error of a descriptor in Scatter/Gather Mode (Table 38, `DMAIntErr`) | The channel ends a command of length 0 without a write and with the internal error code (S2-WR-06); the register interface of DR mode never issues one |
+| I14 | Tables 7 and 17 (`DMASlvErr`, `DMADecErr`): the flags for SLVERR and DECERR; an EXOKAY response is not described | EXOKAY to an access that did not request exclusive access is a protocol violation of the slave; it counts as a slave error (S2-RS-05). Observable: an EXOKAY write response sets `DMASlvErr` |
+| SGI-13 | Table 38 (`S2MM_STATUS.RXSOF`, `RXEOF`): `RXSOF` marks the buffer that holds the start of a packet; a packet without bytes is not described | A packet without bytes (only a last beat without valid bytes) starts and ends in one buffer: its result carries 0 bytes, the start and the end of packet (S2-SG-02). Observable: a status word with 0 transferred bytes and `RXSOF` and `RXEOF` set |
 
 ## 5. Error conditions
 
 | Condition | Detection | Response |
 | --- | --- | --- |
-| Packet longer than the buffer | Byte count of the chunks against the buffer length | Bytes that fit written, rest discarded, internal error (S2-RS-02) |
-| SLVERR or DECERR on a write burst | `Wr_Error` of the write master (the response code with gap G5) | Error code, no further write, rest discarded (S2-RS-03, S2-RS-05) |
+| Packet longer than the buffer (without `Split_g`) | Byte count of the chunks against the buffer length | Bytes that fit written, rest discarded, internal error (S2-RS-02) |
+| SLVERR, DECERR or EXOKAY on a write burst | `Wr_Error` and `Wr_ErrorResp` of the write master | Error code, no further write, rest discarded (S2-RS-03, S2-RS-05) |
 | Buffer beyond the top of the address space | `beyondTop` of `odma_pkg` | No write, decode error (S2-WR-04) |
 | Buffer length of 0 | Length of the command | No write, internal error (S2-WR-06) |
 | Single or double error in a buffer | ECC of the buffers | `Ecc_Sec`, `Ecc_Ded` pulses (S2-FT-01) |
@@ -124,3 +118,4 @@ code; the requirement below takes effect with that release.
 | `StreamWidth_g` | 8, 16, ..., `MemWidth_g` | Data bits of the stream |
 | `BurstBeats_g` | 2, 4, ..., 256 | Longest write burst |
 | `BufferBeats_g` | at least 2 x `BurstBeats_g` x `MemWidth_g` / `StreamWidth_g` | Depth of the data buffer in stream beats |
+| `Split_g` | boolean, default false | true: the stream split of packets over several buffers (Scatter/Gather Mode, S2-SG-01, S2-SG-03); false: a packet longer than the buffer is an overflow (S2-RS-02), as in DR mode |

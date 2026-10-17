@@ -89,11 +89,11 @@ requirements of `odma_registers` (its specification, section "Requirements of ph
 | --- | --- | --- |
 | SG-FT-01 | The descriptor buffers of the channels and the data buffers of the descriptor port shall be SECDED-protected FT buffers with ECC events and error injection at the indices 6 to 9 of the extension window. | none (architecture P5) |
 
-### 3.8 Requirements waiting for Open Logic
+### 3.8 Error codes of the descriptor port
 
 | ID | Requirement | PG021 items |
 | --- | --- | --- |
-| SG-ER-04 | The engine error flag of SG-ER-02 shall be `SGSlvErr` for SLVERR and `SGDecErr` for DECERR (gap G5). | `*_DMASR.SGSlvErr`, `*_DMASR.SGDecErr` |
+| SG-ER-04 | The engine error flag of SG-ER-02 shall be `SGSlvErr` for SLVERR and for EXOKAY (interpretation I14) and `SGDecErr` for DECERR. | `*_DMASR.SGSlvErr`, `*_DMASR.SGDecErr` |
 
 ## 4. Interpretations
 
@@ -110,6 +110,8 @@ requirements of `odma_registers` (its specification, section "Requirements of ph
 | SGI-09 | Tables 7 and 17 (`DMASR.SGIntErr`): a fetched descriptor with `Cmplt` = 1; when the flag is set relative to the descriptors before it is not described | `SGIntErr` is set when the stale descriptor is the next one to be issued, while the descriptor before it may still be in progress. That descriptor completes, gets its status and can raise `IOC_Irq` after `Err_Irq`. Observable: `Err_Irq` can come before the `IOC_Irq` of the last good packet (SG-FE-05) |
 | SGI-10 | Tables 16 and 17 (`S2MM_DMACR.RS`, `S2MM_DMASR.Halted`), Table 38 (`S2MM_STATUS`): the status of a descriptor whose buffer received no byte before a halt is not described | The descriptor counts as not started: it gets no status write (`Cmplt` stays 0), and after the halt `S2MM_CURDESC` points to it, as for the descriptors that were fetched but not issued (SG-HA-01) |
 | SGI-11 | Table 38 (`S2MM_STATUS.Cmplt`, `S2MM_STATUS.RXEOF`), Tables 16 and 17 (halt): the status of a buffer whose packet a halt cut off is not described | The status gets the bytes written, `RXSOF` as received, `RXEOF` = 0 and `Cmplt` = 1: the buffer was processed, and the missing `RXEOF` shows that the packet is incomplete. `Cmplt` = 0 is reserved for failed transfers (SGI-02). Observable: after a halt, the last completed S2MM descriptor can have `Cmplt` = 1 without `RXEOF`, and no later descriptor holds the rest of that packet (SG-HA-01, SG-UP-03) |
+| SGI-13 | Table 38 (`S2MM_STATUS.RXSOF`, `RXEOF`): `RXSOF` marks the buffer that holds the start of a packet; a packet without bytes is not described | A packet without bytes (only a last beat without valid bytes) starts and ends in one buffer: its descriptor gets the status with 0 transferred bytes, `RXSOF`, `RXEOF` and `Cmplt` (SG-UP-03, `odma_s2mm` S2-SG-02). Observable: a status word with 0 transferred bytes and `RXSOF` and `RXEOF` set |
+| I14 | Tables 7 and 17 (`SGSlvErr`, `SGDecErr`): the flags for SLVERR and DECERR; an EXOKAY response is not described | EXOKAY to an access that did not request exclusive access is a protocol violation of the slave; it counts as a slave error (SG-ER-04). Observable: an EXOKAY response to a descriptor access sets `SGSlvErr` |
 | SGI-12 | Tables 7 and 17 (`IOC_Irq`, `Err_Irq`, the error flags), Tables 31 and 38 (the status words): the order of the status write and the interrupt and error flags is not described | `IOC_Irq` (through the threshold counter) and the error flags of a transfer are set only after the memory has answered the status write of the descriptor, so the status words are in memory when software sees a flag or the interrupt. A failed status write sets `SGSlvErr` or `SGDecErr` instead and raises no `IOC_Irq` for that packet (SG-UP-04, SG-UP-05, SG-ER-01, SG-ER-02) |
 
 ## 5. Error conditions

@@ -32,12 +32,16 @@ by the RTL. The AXI4-Stream VVC of UVVM is not used: its BFM takes at most 32 `T
 | `w512_s512` | 512, 512, 2, 32, 14 | Equal widths, shortest burst |
 | `w1024_s8` | 1024, 8, 2, 32, 8 | Widest ratio, shortest length width |
 | `w1024_s1024` | 1024, 1024, 256, 64, 12 | Widest stream and memory, bursts limited by 4 KB (32 beats) |
+| `s_w64_s8`, `s_w256_s16`, `s_w32_s32`, `s_w128_s64`, `s_w256_s128`, `s_w512_s256`, `s_w512_s512`, `s_w1024_s8` | as the configuration without `s_`, `Split_g` true | The stream split with every stream width (1 to 64 byte lanes) and the shortest length width (several discard segments per packet) |
 
 Every configuration has a data buffer of four bursts (`BufferBeats_g` = 4 x `BurstBeats_g` x `MemWidth_g` /
-`StreamWidth_g`); together the configurations simulate every memory width and every stream width. Every test runs in
-every configuration; lengths are limited to 2**`LengthWidth_g` - 1.
+`StreamWidth_g`); together the configurations simulate every memory width and every stream width, and every stream
+width up to 512 bits with the split. The tests of phase a run in every configuration, except three that need a packet
+in the data buffer before its command or a packet longer than its buffer, which `Split_g` excludes by design:
+TC-S2-07, TC-S2-08 and TC-S2-13 run only without `Split_g`. The tests of Scatter/Gather Mode (TC-S2-17 to TC-S2-19)
+run in the `s_` configurations; lengths are limited to 2**`LengthWidth_g` - 1.
 
-Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the batch of phase a.
+Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the batches of phases a and b.
 
 ## 3. Test cases
 
@@ -58,39 +62,39 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | `test_ecc` (TC-S2-13) | Single and double errors injected into each of the three buffers; the packet waits in the buffers for 200 clock cycles before its command, its first words at their outputs: correct data and one `Ecc_Sec` pulse of the buffer for a single error, one `Ecc_Ded` pulse for a double error; correct data and one `Ecc_Sec` pulse for a single error on a data bit (data mode) | S2-FT-01 |
 | `test_longest_back_to_back` (TC-S2-16) | Three transfers of the longest length (at most 16383 bytes) back to back into aligned buffers: each completes within 2 ms and is written completely; with 1024 bits and a length width of 12 the last write command of each transfer has the largest word count of the write master (gap G14) | S2-WR-01 |
 | `test_long_packet` (TC-S2-14) | A packet of at least 64 KB and 16384 stream beats (at most the longest length) with gaps of the stream and backpressure of the memory | S2-WR-01, S2-ST-03 |
-
-### 3.1 Test cases waiting for Open Logic
-
-The test case below takes effect with the release of Open Logic that reports the response code of a failed write
-command (specification section 3.7).
-
-| Test ID | Description | Requirements |
-| --- | --- | --- |
-| `test_error_codes` (TC-S2-15) | SLVERR only, DECERR only, SLVERR before DECERR and DECERR before SLVERR within one packet: the result carries the slave error, the decode error, the slave error and the decode error | S2-RS-05 |
+| `test_error_codes` (TC-S2-15) | SLVERR only, DECERR only, EXOKAY only, SLVERR before DECERR and DECERR before SLVERR within one packet: the result carries the slave error, the decode error, the slave error (interpretation I14), the slave error and the decode error | S2-RS-05 |
+| `test_split` (TC-S2-17) | 40 packets of random lengths written over 1 to 5 buffers each, every buffer at a random address (every offset within a memory word) and of a random length, among them a packet that ends exactly at the end of a buffer, a packet whose last beat without valid bytes follows a buffer end, a packet without bytes and buffers of one byte; random gaps of the stream, 30 % stall and a latency of 20 cycles in the memory model: memory compared byte for byte with 16 unwritten bytes around every buffer; per buffer one result with its bytes, the start of packet on the first buffer of a packet (also of the packet without bytes, interpretation SGI-13) and the end of packet on its last | S2-SG-01, S2-SG-02, S2-ST-03, S2-RS-01 |
+| `test_split_wait` (TC-S2-18) | A packet arrives without a command: `S_S2mm_Ready` stays '0' for 500 clock cycles, then the command takes it. A packet longer than the buffer of its command and no next command for 500 clock cycles: after the first buffer no stream beat is taken; the next command takes the rest | S2-SG-03, S2-ST-01 |
+| `test_split_halt` (TC-S2-19) | `Run` falls while the second buffer of a packet of three buffers is written: the complete chunks are written, the result carries no end of packet, the rest of the packet, longer than 2**`LengthWidth_g` - 1 bytes where the length width allows, is discarded up to its `TLast`; after `Run` rises the next packet starts in a new buffer with the start of packet. SLVERR on the first buffer of a packet of three buffers: result with the error, the rest of the packet discarded, the next packet complete with the start of packet. `Drain` inside a multi-buffer packet: no further write, no result, `Stopped` rises | S2-SG-01, S2-SG-02, S2-HA-01, S2-HA-02, S2-RS-03 |
+| `test_keyhole` (TC-S2-20) | Keyhole commands of packets of 1 byte, one memory word, 16 and 17 memory words and 3.5 bursts, at aligned and unaligned addresses, also next to a 4 KB boundary and at the top of the address space: every AW burst FIXED with at most 16 beats at the address with the bits below the memory width cleared, no byte outside that memory word written (write window), the word holds the bytes of the last beat over those of the beat before as the strobes give; an incrementing transfer after a keyhole transfer and the reverse are both correct; in the `s_` configurations also a keyhole packet over two buffers | S2-SG-04, S2-IF-01 |
 
 ## 4. Requirement coverage
 
 | Requirement | Test cases |
 | --- | --- |
-| S2-IF-01 | TC-S2-04 |
+| S2-IF-01 | TC-S2-04, TC-S2-20 |
 | S2-IF-02 | TC-S2-01 |
 | S2-IF-03 | TC-S2-07 |
-| S2-ST-01 | TC-S2-07, TC-S2-11 |
+| S2-ST-01 | TC-S2-07, TC-S2-11, TC-S2-18 |
 | S2-ST-02 | TC-S2-03 |
-| S2-ST-03 | TC-S2-01, TC-S2-05, TC-S2-14 |
+| S2-ST-03 | TC-S2-01, TC-S2-05, TC-S2-14, TC-S2-17 |
 | S2-WR-01 | TC-S2-01, TC-S2-02, TC-S2-05, TC-S2-14, TC-S2-16 |
 | S2-WR-02 | TC-S2-01, TC-S2-02, TC-S2-08 |
 | S2-WR-03 | TC-S2-04 |
 | S2-WR-04 | TC-S2-10 |
 | S2-WR-05 | TC-S2-06 |
 | S2-WR-06 | TC-S2-10 |
-| S2-RS-01 | TC-S2-01 |
+| S2-RS-01 | TC-S2-01, TC-S2-17 |
 | S2-RS-02 | TC-S2-08 |
-| S2-RS-03 | TC-S2-09 |
+| S2-RS-03 | TC-S2-09, TC-S2-19 |
+| S2-RS-05 | TC-S2-15 |
 | S2-RS-04 | TC-S2-08, TC-S2-09 |
-| S2-HA-01, S2-HA-03 | TC-S2-11 |
-| S2-HA-02 | TC-S2-12 |
+| S2-HA-01, S2-HA-03 | TC-S2-11, TC-S2-19 |
+| S2-HA-02 | TC-S2-12, TC-S2-19 |
 | S2-FT-01 | TC-S2-13 |
+| S2-SG-01, S2-SG-02 | TC-S2-17, TC-S2-19 |
+| S2-SG-03 | TC-S2-18 |
+| S2-SG-04 | TC-S2-20 |
 
 ## 5. Negative tests
 
@@ -98,10 +102,12 @@ command (specification section 3.7).
 | --- | --- |
 | Packet longer than the buffer | TC-S2-08 |
 | Write error responses SLVERR and DECERR | TC-S2-09 |
+| The error code of each response type, EXOKAY, the first error of a packet deciding | TC-S2-15 |
+| Halt, write error and drain inside a packet of several buffers | TC-S2-19 |
 | Buffer beyond the top of the address space, buffer length of 0 | TC-S2-10 |
 | Halt and drain in the middle of a packet | TC-S2-11, TC-S2-12 |
 | ECC single and double errors of every buffer | TC-S2-13 |
-| Writes outside the buffer (write window of the memory model, in every test) | TC-S2-01, TC-S2-02, TC-S2-08 |
+| Writes outside the buffer (write window of the memory model, in every test) | TC-S2-01, TC-S2-02, TC-S2-08, TC-S2-17, TC-S2-20 |
 
 The recovery of the state machines from an illegal state (`when others`) cannot be reached through the ports; it is
 reviewed in the code and listed in the coverage report.

@@ -2,9 +2,9 @@
 
 ## 1. Block diagram
 
-![Block diagram of odma_s2mm: the chunk former S2-1, the data buffer and the chunk buffer, and the write command
-block S2-2 with the stage of the feed jobs olo_base_pl_stage and the write master
-olo_ft_axi_master_full](img/odma_s2mm_arch.drawio.svg)
+![Block diagram of odma_s2mm: with Split_g the stream split olo_base_stream_split in front of the chunk former S2-1,
+the data buffer and the chunk buffer, and the write command block S2-2 with the segment register, the stage of the
+feed jobs olo_base_pl_stage and the write master olo_ft_axi_master_full](img/odma_s2mm_arch.drawio.svg)
 
 ## 2. Entities
 
@@ -12,8 +12,9 @@ olo_ft_axi_master_full](img/odma_s2mm_arch.drawio.svg)
 | --- | --- | --- |
 | `odma_s2mm` | Module top | Instances of the blocks below, the buffers and the write master, the stopped level |
 | `odma_s2mm_pkg` | S2-1, S2-2 | The chunk descriptor, the longest burst of the write master |
-| `odma_s2mm_chunker` | S2-1 | Stream input, cut into chunks, byte count of a chunk, chunk descriptors, discard of an interrupted packet |
-| `odma_s2mm_write` | S2-2 | Transfer commands, length and address checks, write commands per chunk, feed jobs and the feeder, responses, overflow, flush, results |
+| `odma_s2mm_chunker` | S2-1 | Stream input (with `Split_g` through the stream split and its segment input), cut into chunks, byte count of a chunk, chunk descriptors, discard of an interrupted packet |
+| `odma_s2mm_write` | S2-2 | Transfer commands, length and address checks, the segment register, write commands per chunk, feed jobs and the feeder, responses, overflow, flush, results with the start and end of packet |
+| `olo_base_stream_split` | S2-1 | Stream split at the end of every buffer (with `Split_g`) |
 | `olo_ft_fifo_sync` (two) | S2-1 to S2-2 | Data buffer (`StreamWidth_g` bits, `BufferBeats_g` entries), chunk buffer (descriptors, 32 entries) |
 | `olo_base_pl_stage` | S2-2 | Stage of the feed jobs between the command part and the feeder (up to two jobs) |
 | `olo_ft_axi_master_full` | S2-2 | AXI4 write master with the ECC-protected write data buffer of two chunks (read side not implemented) |
@@ -32,6 +33,7 @@ instantiate it.
 | `Cmd_Keyhole` | 1 | in | Keyhole (phase b) |
 | `Res_Valid`, `Res_Ready` | 1 | out, in | Transfer result |
 | `Res_Bytes`, `Res_Eof`, `Res_Err` | `LengthWidth_g`, 1, 2 | out | Bytes written, end of packet in the buffer, error code |
+| `Res_Sof` | 1 | out | The buffer is the first buffer of its packet (S2-SG-02) |
 | `Run`, `Drain`, `Stopped` | 1 | in, in, out | Channel control |
 | `S_S2mm_Data`, `_Keep`, `_Last`, `_Valid`, `_Ready` | | in/out | S2MM stream |
 | `M_Axi_Aw*`, `M_Axi_W*`, `M_Axi_B*` | | out/in | AXI4 write master (`AwAddr`, `AwLen`, `AwSize`, `AwBurst`, `AwLock`, `AwCache`, `AwProt`, `AwValid`, `AwReady`, `WData`, `WStrb`, `WLast`, `WValid`, `WReady`, `BResp`, `BValid`, `BReady`) |
@@ -40,8 +42,8 @@ instantiate it.
 | `EccInj_Double` | 1 | in | '1' double, '0' single error |
 | `EccInj_Data` | 1 | in | '1' data bits, '0' parity bits (section 5.6) |
 
-Generics as in section 6 of the specification. `ChunkBeats_c` = B x `MemWidth_g` / `StreamWidth_g` with B the smaller
-of `BurstBeats_g` and the beats of 4 KB (4096 / (`MemWidth_g` / 8)).
+Generics as in section 6 of the specification; the core sets `Split_g` = `IncludeSg_g`. `ChunkBeats_c` = B x
+`MemWidth_g` / `StreamWidth_g` with B the smaller of `BurstBeats_g` and the beats of 4 KB (4096 / (`MemWidth_g` / 8)).
 
 ## 4. Chunk former (S2-1, `odma_s2mm_chunker`)
 
@@ -55,18 +57,42 @@ clock cycle the block writes the descriptor of the chunk into the chunk buffer:
 | --- | --- | --- |
 | `Bytes` | 16 | Bytes of the chunk: beats x `StreamWidth_g` / 8, for the last chunk of a packet the full beats plus `keepBytes(TKeep)` of the last beat (I10) |
 | `Beats` | 16 | Beats of the chunk in the data buffer |
-| `Pend` | 1 | The chunk ends a packet |
+| `Pend` | 1 | The chunk ends the transfer: the packet ends, or with `Split_g` the buffer is full |
 | `Discard` | 1 | The chunk is the stored part of an interrupted packet: it is not written |
+| `PktEnd` | 1 | The chunk ends the packet (`Pend` and the packet end; with `Split_g` `Out_InLast`; '1' with `Discard`) |
 
 A descriptor never refers to beats that are not in the data buffer (S2-ST-03): its last beat is written in the same
 clock cycle, and S2-2 takes the beats from the data buffer only through its handshake.
 
-### 4.2 Halt and drain
+### 4.2 Stream split (`Split_g`)
+
+With `Split_g` the stream passes `olo_base_stream_split` (`Width_g` = `StreamWidth_g`, `MaxSegSize_g` =
+2**`LengthWidth_g` - 1) before the chunk former. `In_Be` is all '1' on a beat without `TLast` and the bytes up to
+the first lane with `TKeep` '0' on the beat with `TLast` (S2-ST-02, I10), so it is contiguous from lane 0 as the split
+requires. The chunk former takes the split output in place of the stream: `Out_Be` gives the bytes of the last beat
+of a segment (`keepBytes`), `Out_Last` ends the chunk and the transfer (`Pend`), `Out_InLast` ends the packet
+(`PktEnd`, `InPacket` cleared). A segment of the packet without bytes (one beat with `Out_Be` all '0') gives a
+descriptor of 0 bytes with `Pend` and `PktEnd` (SGI-13).
+
+Segment commands:
+
+| Source | Segment | When |
+| --- | --- | --- |
+| Segment register of S2-2 | The buffer length of the accepted command | Written at the command handshake of a transfer that is not rejected (S2-WR-04, S2-WR-06), taken by the split when no segment is active; at most one segment per transfer |
+| S2-1 in `Discard_s` | `MaxSegSize_g` (a constant, selected by the state register) | While the rest of an interrupted packet is dropped; `Discard_s` ends at the beat with `Out_InLast`, in the clock cycle in which the split ends the segment, so no further segment is taken for the next packet. A segment of S2-2 that arrives meanwhile waits |
+
+Both inputs of the split come from registers, as `olo_base_stream_split` requires. The split takes no stream beat
+while no segment is active, so a packet waits at the stream input until its command is accepted, and the rest of a
+packet until the next command (S2-SG-03, `odma_sg` SG-TR-04). `Drain` and `Rst` hold the split in reset, which clears
+the bytes it holds and the active segment.
+
+### 4.3 Halt and drain
 
 | Situation | Behaviour |
 | --- | --- |
 | `Run` falls between packets | The input is not ready until `Run` rises again (S2-ST-01) |
-| `Run` falls inside a packet | The block writes the descriptor {`Bytes` 0, `Beats` of the incomplete chunk, `Pend` '1', `Discard` '1'}, then accepts and drops input beats up to the `TLast` of the packet (`S_S2mm_Ready` = '1' in this phase), then behaves as between packets |
+| `Run` falls inside a packet | The block writes the descriptor {`Bytes` 0, `Beats` of the incomplete chunk, `Pend` '1', `Discard` '1', `PktEnd` '1'}, then accepts and drops input beats up to the `TLast` of the packet (`S_S2mm_Ready` = '1' in this phase; with `Split_g` the split output up to `Out_InLast`, with the segments of section 4.2), then behaves as between packets |
+| `FlushReq` of S2-2 inside a packet (`Split_g`) | The same as for the fall of `Run`: S2-2 flushes the rest of a packet after a write error, and with the split that rest passes only with the segments of `Discard_s` |
 | `Drain` = '1' | The input is not ready; no further descriptor is written |
 
 The block reports `PacketOpen` (a packet started and its `TLast` not yet taken, also while the rest is discarded) to
@@ -87,25 +113,36 @@ feeder still moves the data of the previous chunk.
 
 A command is accepted in `Idle_s` when `Run` = '1' and `Drain` = '0'. A buffer length of 0 ends the transfer with the
 result {0 bytes, no end of packet, `ErrInt_c`} (S2-WR-06), a buffer beyond the top of the address space
-(`beyondTop(Cmd_Addr, Cmd_Length)`) with {0 bytes, no end of packet, `ErrDec_c`} (S2-WR-04); in both cases no
-stream data is taken. Otherwise the block takes descriptors from the chunk buffer:
+(`beyondTop(Cmd_Addr, Cmd_Length)`, not checked for a keyhole command, S2-SG-04) with {0 bytes, no end of packet,
+`ErrDec_c`} (S2-WR-04); in both cases no stream data is taken. Otherwise the block writes the segment register with
+the buffer length (`Split_g`, section 4.2), records the keyhole of the command and takes descriptors from the chunk
+buffer:
 
 | Descriptor | Action |
 | --- | --- |
-| Normal, written bytes plus `Bytes` within the buffer | Write command to the master at the command address plus the written bytes with `Bytes` bytes (`CmdWr_LowLat` = '0'); feed job {ceil(`Bytes` / (`StreamWidth_g` / 8)), remaining beats}; written bytes += `Bytes` |
+| Normal, written bytes plus `Bytes` within the buffer | Write command to the master at the command address plus the written bytes (a keyhole transfer: at the command address) with `Bytes` bytes (`CmdWr_LowLat` = '0', `CmdWr_Fixed` = keyhole of the command); feed job {ceil(`Bytes` / (`StreamWidth_g` / 8)), remaining beats}; written bytes += `Bytes` |
 | Normal, beyond the buffer | Overflow: a write command with the bytes that still fit (if any) and their beats, the other beats dropped; `ErrInt_c`; then flush (S2-RS-02) |
 | `Discard` = '1' | Its beats are dropped; the transfer ends without the end of packet (S2-HA-01) |
 | `Bytes` = 0 and `Pend` = '1' (a last beat without valid bytes after a full chunk) | Its beat is dropped, no write |
 
 After a descriptor with `Pend` = '1' the transfer is complete; the block waits until no write is outstanding and
-returns the result {written bytes, end of packet, error code} (S2-RS-01). A counter of the write commands without
-response gives the outstanding level.
+returns the result {written bytes, end of packet = `PktEnd`, error code} (S2-RS-01, S2-SG-01). A counter of the write
+commands without response gives the outstanding level. With `Split_g` a full buffer (`Pend` without `PktEnd`) is a
+complete transfer without the end of packet, and the overflow row above cannot occur, because a segment is never
+longer than its buffer.
+
+Start of packet (S2-SG-02): the register `SofNext` (reset '1') gives `Res_Sof`. At every result it becomes '0' when
+the transfer ended with a full buffer of a packet that continues (`Pend` without `PktEnd`, no error, no discard),
+otherwise '1': the next buffer then starts a packet, also after an error or a halt, whose packet rest is discarded.
+Without `Split_g` every transfer ends its packet, so `Res_Sof` is always '1'.
 
 ### 5.3 Errors, halt and flush
 
-- A write response with an error (`Wr_Error`) records the first error code: the constant `WrErrCode_c` =
-  `ErrSlv_c` until Open Logic provides the response code (specification section 3.7). No further write command is
-  issued for the transfer; the remaining descriptors of the packet are flushed after the result (S2-RS-03).
+- A write response with an error (`Wr_Error`) records the first error code of the transfer: `ErrDec_c` when
+  `Wr_ErrorResp` is DECERR ("11"), `ErrSlv_c` otherwise (SLVERR, and EXOKAY, interpretation I14; S2-RS-05). No further
+  write command is issued for the transfer; the remaining descriptors of the packet, up to the one with `PktEnd`, are
+  flushed after the result (S2-RS-03). With `Split_g` the block raises `FlushReq` during the flush, so that S2-1
+  drops the rest of the packet that has not passed the split yet (section 4.3).
 - Overflow records `ErrInt_c` and flushes the rest of the packet (S2-RS-02).
 - `Run` = '0' during a transfer: the descriptors of the packet of the transfer are written up to the descriptor with
   `Pend` or `Discard`. When no descriptor is in the chunk buffer, none is stored for its output and S2-1 has no
@@ -115,8 +152,8 @@ response gives the outstanding level.
   missed.
 - In each of these cases the result is returned once no write is outstanding (S2-RS-04). Then the block flushes: it
   takes the remaining descriptors of the packet up to the one with `Pend` and drops their beats. While `Run` = '0'
-  in `Idle_s`, it drops every further packet in the chunk buffer, a whole packet at a time (data received for later
-  transfers, S2-HA-01). A new command is accepted only after the flush.
+  in `Idle_s`, it drops every further packet in the chunk buffer, a whole packet (up to `PktEnd`) at a time (data
+  received for later transfers, S2-HA-01). A new command is accepted only after the flush.
 
 ### 5.4 Drain
 
@@ -166,7 +203,14 @@ reset); feeder: `Head_s` (next job), `Feed_s` (beats to the master), `Drop_s` (b
 ## 8. Timing
 
 - Stream to memory: a chunk is written once its last beat is buffered; its write command follows the descriptor
-  after two clock cycles plus the command time of the master.
+  after two clock cycles plus the command time of the master. With `Split_g` the split holds up to one beat of bytes,
+  so a beat reaches the chunk former one input beat later on an aligned stream, and a buffer end inside a beat inserts
+  one clock cycle.
+- Buffer boundary inside a packet (`Split_g`): the next segment is written only when S2-2 accepts the next command,
+  after the result of the full buffer, that is after the write responses of its last chunk. The stream input waits
+  from the end of the buffer until then: about 10 clock cycles plus the write response latency of the memory, plus the
+  time of the command source to present the next command (the engine has it ready when it fetched one descriptor
+  ahead). The verification report of the core has the measured values.
 - Throughput: the channel issues one write command per chunk, and the write master accepts the next command after
   the data of the previous one, about 7 clock cycles of overhead per command. With equal memory and stream widths
   and chunks of C stream beats the channel takes about C / (C + 7) beats per clock cycle once its data buffer is

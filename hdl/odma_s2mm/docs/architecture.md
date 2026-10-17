@@ -224,8 +224,12 @@ of the consequence of a double error).
 
 ## 6. Stopped
 
-`Stopped` = '1' when S2-2 is in `Idle_s` (no transfer, no flush) or in the drained state, and no write is
-outstanding; S2-1 may still be dropping the rest of an interrupted packet (S2-HA-03).
+`Stopped` = '1' when no write is outstanding and S2-2 is in the drained state, or in `Idle_s` (no transfer, no
+flush) with the chunk buffer empty and no descriptor of S2-1 to come (`DescPend`: a packet is open and its rest
+is not discarded). After a halt, `Stopped` thus waits until the data received before it is flushed: a
+descriptor left in the chunk buffer, such as the discard descriptor of a packet cut after its first buffer, would
+otherwise be taken by the next transfer after a restart. S2-1 may still be dropping the rest of an interrupted
+packet (S2-HA-03). A flush that reaches the end of a packet sets `SofNext`, so the next buffer starts a packet.
 
 ## 7. State machines
 

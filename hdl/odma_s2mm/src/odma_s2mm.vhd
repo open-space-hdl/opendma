@@ -115,6 +115,7 @@ architecture rtl of odma_s2mm is
     signal Desc_InValid : std_logic;
     signal Desc_InReady : std_logic;
     signal PacketOpen   : std_logic;
+    signal DescPend     : std_logic;
     signal Seg_Valid    : std_logic;
     signal Seg_Size     : std_logic_vector(LengthWidth_g - 1 downto 0);
     signal Seg_Ready    : std_logic;
@@ -192,7 +193,8 @@ begin
             Desc_Data    => Desc_InData,
             Desc_Valid   => Desc_InValid,
             Desc_Ready   => Desc_InReady,
-            PacketOpen   => PacketOpen
+            PacketOpen   => PacketOpen,
+            DescPend     => DescPend
         );
 
     -- *** Data buffer and chunk buffer ***
@@ -277,6 +279,7 @@ begin
             Desc_Ready   => Desc_OutReady,
             Desc_Stored  => Desc_Stored,
             PacketOpen   => PacketOpen,
+            DescPend     => DescPend,
             Buf_Data     => Data_OutData,
             Buf_Valid    => Data_OutValid,
             Buf_Ready    => Data_OutReady,
@@ -356,7 +359,7 @@ begin
     Ecc_Sec(2) <= Wr_EccSec;
     Ecc_Ded(2) <= Wr_EccDed;
 
-    -- *** Stopped: no transfer in progress and no write outstanding ***
+    -- *** Stopped: no transfer in progress, no write outstanding and no data received before a halt left ***
     Stopped <= WriteIdle;
 
 end architecture;

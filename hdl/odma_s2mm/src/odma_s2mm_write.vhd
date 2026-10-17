@@ -64,6 +64,7 @@ entity odma_s2mm_write is
         Desc_Ready   : out   std_logic;
         Desc_Stored  : in    std_logic;                     -- A descriptor is written to the chunk buffer
         PacketOpen   : in    std_logic;
+        DescPend     : in    std_logic;                     -- S2-1 still writes a descriptor of its open packet
         -- Data buffer (read side)
         Buf_Data     : in    std_logic_vector(StreamWidth_g - 1 downto 0);
         Buf_Valid    : in    std_logic;
@@ -80,7 +81,7 @@ entity odma_s2mm_write is
         Wr_Done      : in    std_logic;
         Wr_Error     : in    std_logic;
         Wr_ErrorResp : in    std_logic_vector(1 downto 0);
-        -- No transfer in progress and no write outstanding
+        -- No transfer in progress, no write outstanding and no data received before a halt left
         Idle         : out   std_logic
     );
 end entity;
@@ -134,6 +135,9 @@ architecture rtl of odma_s2mm_write is
     signal Job_OutValid : std_logic;
     signal Job_OutReady : std_logic;
     signal Job_OutData  : std_logic_vector(JobWidth_c - 1 downto 0);
+
+    -- The chunk buffer and S2-1 hold no descriptor for a transfer
+    signal NoData : std_logic;
 
 begin
 
@@ -301,7 +305,9 @@ begin
                     Desc_Ready <= '1';
                     Job_v      := true;
                     if Desc_v.PktEnd = '1' then
+                        -- The flushed packet has ended: the next buffer starts a packet
                         v.FlushPend := '0';
+                        v.SofNext   := '1';
                         v.State     := Idle_s;
                     end if;
                 end if;
@@ -408,7 +414,11 @@ begin
     -- A transfer with an error has no end of packet (S2-RS-02, S2-RS-03)
     Res_Eof <= r.Eof when r.Err = ErrNone_c else '0';
     Res_Err <= r.Err;
-    Idle    <= '1' when (r.State = Idle_s or r.State = Drained_s) and r.Outstanding = 0 else '0';
+    -- Idle: no write outstanding, and drained, or in Idle_s with the chunk buffer empty and no descriptor of S2-1
+    -- to come, so that after a halt no data received before it is left for the next transfer (S2-HA-01, S2-HA-03);
+    -- the discard of the rest of an interrupted packet in S2-1 does not hold it
+    NoData <= '1' when Desc_Valid = '0' and Desc_Stored = '0' and DescPend = '0' else '0';
+    Idle   <= '1' when r.Outstanding = 0 and (r.State = Drained_s or (r.State = Idle_s and NoData = '1')) else '0';
 
     -- *** Sequential Process ***
     p_seq : process (Clk) is

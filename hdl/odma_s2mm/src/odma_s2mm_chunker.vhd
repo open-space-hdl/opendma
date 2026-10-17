@@ -63,7 +63,9 @@ entity odma_s2mm_chunker is
         Desc_Valid   : out   std_logic;
         Desc_Ready   : in    std_logic;
         -- A packet started and its end not yet taken by the chunk logic
-        PacketOpen   : out   std_logic
+        PacketOpen   : out   std_logic;
+        -- A descriptor of the open packet is still to come: the packet is open and its rest is not discarded
+        DescPend     : out   std_logic
     );
 end entity;
 
@@ -241,6 +243,7 @@ begin
     -- Outputs
     Data_Data    <= In_Data;
     PacketOpen   <= Open_i;
+    DescPend     <= Open_i when r.State = Normal_s else '0';
     S_S2mm_Ready <= S2mmReady;
 
     -- *** Sequential Process ***

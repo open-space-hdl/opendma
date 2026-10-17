@@ -2,11 +2,13 @@
 
 ## 1. Test results
 
-Run on 2026-10-17 with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7, UVVM 2026.03.20: `python run.py "*odma_s2mm*"`.
+Run on 2026-10-17 in the GHDL CI of the repository, GitHub Actions run 39072210558 on commit d7f67ed (its
+`results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
+`python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_s2mm_tb`.
 
 | Testbench | Tests | Passed |
 | --- | --- | --- |
-| `odma_s2mm_tb` | 306 (20 test cases: 14 in all 18 configurations, TC-S2-07, TC-S2-08 and TC-S2-13 in the ten without the split, TC-S2-17 to TC-S2-19 in the eight `s_` configurations) | 306 |
+| `odma_s2mm_tb` | 318 (21 test cases: 15 in all 18 configurations, TC-S2-07 and TC-S2-08 in the ten without the split, TC-S2-17 to TC-S2-19 in the eight `s_` configurations, TC-S2-21 in four) | 318 |
 
 ## 2. Summary
 
@@ -106,5 +108,12 @@ at least one test case; the RTL of the repository passes all of them:
 | A keyhole buffer checked against the top of the address space | TC-S2-20 |
 | The slave error code for every failed write | TC-S2-15 |
 | The start of packet of a result without bytes and without the end of packet from `SofNext` | TC-S2-10 |
+| The end of packet of an overflowing chunk not recorded (a second flush) | TC-S2-08 |
+| `Stopped` without the data left in the channel (chunk buffer and `DescPend` ignored) | TC-S2-19 |
+| A flush that ends a packet does not set the start of packet for the next buffer | TC-S2-19 |
+| The end of a packet in the split never recorded (`EndPend` never set) | TC-S2-11 |
+| A packet complete without the `NeedSeg` term (the rest of a packet that needs a further buffer kept) | TC-S2-19 |
+| The end of a packet in the split not counted as open (`Open_i` without `EndPend`) | TC-S2-19, TC-S2-21 |
+| A halt cuts a complete packet (`Cut` without `Complete`) | TC-S2-19 |
 
 The recovery branches of the state machines (`when others`) cannot be reached through the ports.

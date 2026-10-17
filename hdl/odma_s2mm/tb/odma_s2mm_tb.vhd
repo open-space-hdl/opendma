@@ -1208,6 +1208,77 @@ begin
                 checkMem(region(12), Len_v, Len_v / 2, source(12), "packet after the cut one, complete and alone");
                 waitPackets(Pkts_v + 2);
 
+                -- A packet of one beat and one of two beats, the halt in the clock cycle after the TLast: no beat of the
+                -- packet has reached the chunk former, its end is in the split, so only EndPend keeps it open. It is
+                -- written completely with the end of packet, and the next packet arrives complete and alone
+                for b in 1 to 2 loop
+                    Res_v  := Obs.ResCount;
+                    Pkts_v := Obs.Packets;
+                    Cnt_v  := (b - 1) * StreamBytes_c + 1;
+                    Mem_v.fill(0, region(11) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
+                    Mem_v.fill(0, region(12) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
+                    Mem_v.setWindow(0, region(11) - Guard_c, region(13));
+                    sendCmd(region(11), Len_v);
+                    cycles(10);
+                    send(source(13 + b), Cnt_v);
+                    wait until Obs.Packets > Pkts_v for 1 ms;
+                    ChRun  <= '0';
+                    waitRes(Res_v + 1);
+                    checkRes(Res_v, Cnt_v, '1', ErrNone_c, "packet of " & to_string(b) & " beats halted after its TLast");
+                    checkMem(region(11), Len_v, Cnt_v, source(13 + b), "packet of " & to_string(b) & " beats");
+                    if Stopped = '0' then
+                        wait until Stopped = '1' for 1 ms;
+                    end if;
+                    ChRun <= '1';
+                    send(source(12), Len_v / 2);
+                    sendCmd(region(12), Len_v);
+                    waitRes(Res_v + 2);
+                    checkRes(Res_v + 1, Len_v / 2, '1', ErrNone_c, "packet after the one of " & to_string(b) & " beats");
+                    check_value(Obs.Results((Res_v + 1) mod MaxResults_c).Sof, '1', ERROR,
+                                "packet after the one of " & to_string(b) & " beats: start of packet");
+                    checkMem(region(12), Len_v, Len_v / 2, source(12), "packet after the one of " & to_string(b) & " beats");
+                    waitPackets(Pkts_v + 2);
+                end loop;
+
+                -- A complete packet whose rest in the split meets a full data buffer right after the halt: the memory
+                -- holds its write responses back for 2000 clock cycles and stalls, so the eight open transactions of
+                -- the write master, its write data buffer and the data buffer fill before the TLast (16 chunks, where
+                -- the length width allows) and the stream port stalls; the halt follows the TLast at once. S2-1 takes
+                -- the rest once the data buffer has space, and the packet is written with the end of packet
+                Len2_v := minimum(16 * ChunkBytes_c, MaxLen_c);
+                Res_v  := Obs.ResCount;
+                Pkts_v := Obs.Packets;
+                Mem_v.fill(0, region(11) - Guard_c, Len2_v + 2 * Guard_c, DstSeed_c);
+                Mem_v.fill(0, region(12) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
+                Mem_v.setWindow(0, region(11) - Guard_c, region(13));
+                Mem_v.setStall(0, 90);
+                Mem_v.setLatency(0, 2000);
+                clearStream;
+                sendCmd(region(11), Len2_v);
+                send(source(16), Len2_v);
+                wait until Obs.Packets > Pkts_v for 10 ms;
+                ChRun  <= '0';
+                Cnt_v  := (Len2_v + StreamBytes_c - 1) / StreamBytes_c;
+                log(ID_SEQUENCER, "complete packet at a full data buffer: " & to_string(Cnt_v) & " beats in " &
+                    to_string(Obs.LastSent - Obs.FirstBeat + 1) & " clock cycles at the stream port");
+                waitRes(Res_v + 1);
+                checkRes(Res_v, Len2_v, '1', ErrNone_c, "complete packet at a full data buffer");
+                checkMem(region(11), Len2_v, Len2_v, source(16), "complete packet at a full data buffer");
+                Mem_v.setStall(0, 0);
+                Mem_v.setLatency(0, 0);
+                if Stopped = '0' then
+                    wait until Stopped = '1' for 1 ms;
+                end if;
+                ChRun <= '1';
+                send(source(12), Len_v / 2);
+                sendCmd(region(12), Len_v);
+                waitRes(Res_v + 2);
+                checkRes(Res_v + 1, Len_v / 2, '1', ErrNone_c, "packet after the one at a full data buffer");
+                check_value(Obs.Results((Res_v + 1) mod MaxResults_c).Sof, '1', ERROR,
+                            "packet after the one at a full data buffer: start of packet");
+                checkMem(region(12), Len_v, Len_v / 2, source(12), "packet after the one at a full data buffer");
+                waitPackets(Pkts_v + 2);
+
                 -- Drain inside a packet of several buffers: no further write, no result, Stopped
                 Res_v       := Obs.ResCount;
                 Gen.Percent <= 30;

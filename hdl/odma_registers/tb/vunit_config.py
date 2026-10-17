@@ -6,6 +6,7 @@
 default configuration only, the generic defaults of the testbench."""
 
 DEFAULT = {"AddrWidth_g": 40, "LengthWidth_g": 26, "IncludeMm2s_g": True, "IncludeS2mm_g": True, "ExtRegs_g": True}
+SG = {**DEFAULT, "IncludeSg_g": True}
 
 CONFIGS = {
     "narrow": {**DEFAULT, "AddrWidth_g": 32, "LengthWidth_g": 8},
@@ -14,6 +15,11 @@ CONFIGS = {
     "no_mm2s": {**DEFAULT, "IncludeMm2s_g": False},
     "no_s2mm": {**DEFAULT, "IncludeS2mm_g": False},
     "no_ext": {**DEFAULT, "ExtRegs_g": False},
+    "sg_narrow": {**SG, "AddrWidth_g": 32, "LengthWidth_g": 8},
+    "sg": SG,
+    "sg_wide": {**SG, "AddrWidth_g": 64},
+    "sg_no_mm2s": {**SG, "IncludeMm2s_g": False},
+    "sg_no_s2mm": {**SG, "IncludeS2mm_g": False},
 }
 
 TESTS = {
@@ -21,6 +27,14 @@ TESTS = {
     "test_widths": ("narrow", "default", "wide"),
     "test_excluded_channel": ("no_mm2s", "no_s2mm"),
     "test_no_extension": ("no_ext",),
+    "test_sg_map": ("sg_narrow", "sg", "sg_wide", "sg_no_mm2s", "sg_no_s2mm"),
+    "test_sg_curdesc": ("sg_narrow", "sg", "sg_wide"),
+    "test_sg_tail": ("sg_narrow", "sg", "sg_wide"),
+    "test_sg_state": ("sg", "sg_no_mm2s", "sg_no_s2mm"),
+    "test_sg_errors": ("sg", "sg_no_mm2s"),
+    "test_sg_threshold": ("sg",),
+    "test_sg_delay": ("sg",),
+    "test_sg_modes": ("sg_narrow", "sg"),
 }
 
 

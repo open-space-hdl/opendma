@@ -9,8 +9,14 @@ them for the checks, returns results with configurable bytes, error code and end
 delay or a configurable number of clock cycles after the next write address handshake of the register port, drops
 the transfer on `Drain` and holds `Stopped` low for a configurable drain time after `Run` falls or `Drain` rises. The
 harness records the clock cycles of the register port handshakes, of the results, of the drain request and the core
-reset, the length of the reset output pulses and the injection strobes. Expected register values are written in the
-bench from the specification, independently of the generated register package.
+reset, the length of the reset output pulses and the injection strobes. In Scatter/Gather Mode a model of the
+descriptor engine per channel stands in for `odma_sg`: the bench drives its current descriptor pointer, its idle and
+stopped levels and its packet, packet start and error pulses; the harness records the `CURDESC` value at the start
+of the channel, every tail pointer pulse with its pointer, the keyhole and cyclic outputs, the clock cycle of every
+packet pulse and every rising edge of the interrupt outputs, and the clock cycles of a running channel in which the
+`CURDESC` output differs from the engine pointer. The model's stopped level and the channel model's are combined as
+in the core. Expected register values are written in the bench from the specification, independently of the
+generated register package.
 
 Objectives:
 
@@ -19,13 +25,15 @@ Objectives:
 - interrupt flags, their write-one-to-clear including the coincidence with an event, the interrupt outputs;
 - soft and hard reset with the drain handshake, the reset outputs and their minimum length;
 - ECC counters, flags, `Ecc_Irq` and the error injection strobes;
+- Scatter/Gather Mode: the register map of Table 4, `CURDESC` and `TAILDESC` with their rules, the state machine with
+  the engine, the error flags of the engine, the threshold counter and the delay timer, the keyhole and cyclic bits;
 - the configurations of the generics that change the module.
 
 ## 2. Test configuration
 
 | Testbench | Harness | DUT and environment |
 | --- | --- | --- |
-| `odma_registers_tb` | `odma_registers_th` | `odma_registers`; AXI4-Lite VVC on `S_AxiLite_*`; one channel model per channel on the command, result and control ports; `Ecc_Sec`, `Ecc_Ded` driven by the bench; `EccInj_*`, interrupt and reset outputs observed |
+| `odma_registers_tb` | `odma_registers_th` | `odma_registers`; AXI4-Lite VVC on `S_AxiLite_*`; one channel model per channel on the command, result and control ports; one engine model per channel on the Scatter/Gather ports; `Ecc_Sec`, `Ecc_Ded` driven by the bench; `EccInj_*`, interrupt and reset outputs observed |
 
 | VUnit configuration | Generics | Purpose |
 | --- | --- | --- |
@@ -34,13 +42,17 @@ Objectives:
 | `wide` | `AddrWidth_g` 64 | Address registers (TC-RG-15) |
 | `no_mm2s`, `no_s2mm` | `IncludeMm2s_g` or `IncludeS2mm_g` false | TC-RG-12 |
 | `no_ext` | `ExtRegs_g` false | TC-RG-14 |
+| `sg_narrow` | `IncludeSg_g` true, `AddrWidth_g` 32, `LengthWidth_g` 8 | TC-RG-16, TC-RG-17, TC-RG-18, TC-RG-23 |
+| `sg` | `IncludeSg_g` true, `AddrWidth_g` 40, `LengthWidth_g` 26 | TC-RG-16 to TC-RG-23 |
+| `sg_wide` | `IncludeSg_g` true, `AddrWidth_g` 64 | TC-RG-16, TC-RG-17, TC-RG-18 |
+| `sg_no_mm2s`, `sg_no_s2mm` | `IncludeSg_g` true, one channel | TC-RG-16, TC-RG-19; TC-RG-20 (`sg_no_mm2s`) |
 
 The channel generics that only the configuration readback uses are fixed in the harness at values that differ
 between the channels: MM2S memory 64 bits, stream 32 bits, bursts of 16 beats, a buffer of 64 beats; S2MM memory 128
 bits, stream 64 bits, bursts of 32 beats, a buffer of 256 beats; `StsCntrlStrm_g` and `MicroDma_g` true,
 `UseRxLength_g` false.
 
-Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the batch of phase a.
+Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage at the end of each batch.
 
 ## 3. Test cases
 
@@ -61,6 +73,22 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | `test_ecc` (TC-RG-13) | SEC and DED pulses on the buffer indices 0 to 5 increment their counters, pulses on the indices 6 and 15 (no buffer) count nothing; a write to a counter word clears it; `ECC_CTRL` clears all; `ECC_STATUS` flags and `Ecc_Irq` with and without the enables; an event in the clock cycle of a clear is counted, for both kinds of clear; the counters saturate; `ECC_INJECT` raises exactly one `EccInj_Valid` strobe on the selected index with `EccInj_Double` and `EccInj_Data` as requested, none without the inject bit or for an index without a buffer; `EccInj_Data` is '0' after the reset, takes the mode with a strobe, keeps it on a write without the inject bit and is '0' again after a soft reset | RG-EX-03, RG-EX-04, RG-EX-05 |
 | `test_no_extension` (TC-RG-14) | Configuration `no_ext`: the extension window reads 0, writes to it have no effect, `Ecc_Irq` stays low and no injection strobe appears | RG-MAP-04 |
 | `test_widths` (TC-RG-15) | Configurations `narrow`, `default`, `wide`: the bits of the address MSB registers above `AddrWidth_g` and of the length registers above `LengthWidth_g` read 0; commands carry the full address and the written length | RG-AR-01, RG-AR-02, RG-AR-03 |
+| `test_sg_map` (TC-RG-16) | Scatter/Gather Mode: `DMACR` and `DMASR` after the reset (`Halted`, `SGIncld`, `IRQThresholdSts` 1), the pointer registers at the offsets of Table 4 with bits 5 to 0 and the bits at or above `AddrWidth_g` reading 0, the `CURDESC` output; the offsets of the registers of Table 5 (0x18 to 0x2C, 0x48 to 0x5C) read 0 and ignore writes, a length write issues no command; the ECC counters and the injection of the indices 6 to 9, 6 and 7 only with their channel; the registers of a channel that is not included read 0 | RG-SG-01, RG-SG-02, RG-SG-03, RG-SG-04, RG-EX-03, RG-EX-05 |
+| `test_sg_curdesc` (TC-RG-17) | `CURDESC` written while halted is the pointer the engine takes at the start; while running it reads the engine pointer, follows it, and ignores writes, and the output to the engine equals the engine pointer in every clock cycle after the first; after the halt it keeps the last engine pointer; the first write after a run starts from the engine pointer (a write of `CURDESC_MSB` alone keeps its low word) and is the pointer of the restart; a restart without a write starts from the last engine pointer | RG-SG-02 |
+| `test_sg_tail` (TC-RG-18) | Configurations with 32, 40 and 64 address bits: `TAILDESC` and `TAILDESC_MSB` read back; while halted and while stopping a write only stores the pointer; while running only the triggering write (`TAILDESC` with 32 bits, `TAILDESC_MSB` above) gives a tail pointer pulse, with the pointer of both words; the other word gives none | RG-SG-03 |
+| `test_sg_state` (TC-RG-19) | `DMASR.Idle` follows the engine only while running and is 0 while halted; after `RS` = 0, `Halted` waits for the engine (held busy for 50 clock cycles) and for the channel (drain time of 200 clock cycles); no transfer command | RG-SG-04, RG-SG-10 |
+| `test_sg_errors` (TC-RG-20) | Each engine error code (`SGIntErr`, `SGSlvErr`, `SGDecErr`), each transfer error code (internal, slave, decode; S2MM with `DMAIntErr` for the slave and the decode error) and both together: the flags, `RS` cleared, `Err_Irq` and the interrupt output, `Halted`; the other channel keeps running; no restart while a flag is set; the flags are read-only and cleared by a soft reset | RG-SG-05 |
+| `test_sg_threshold` (TC-RG-21) | `IRQThreshold` 3: `IRQThresholdSts` counts the packets down, the third sets `IOC_Irq` and reloads; a write of the field reloads the counter, a write of 0 changes neither the field nor the counter; the start of the channel reloads it | RG-SG-06 |
+| `test_sg_delay` (TC-RG-22) | `IRQDelay` 2: after a packet that did not set `IOC_Irq`, `IRQDelaySts` reads 1 after one unit, the interrupt output rises after a timeout of 2 x 125 clock cycles (251 to 253 clock cycles after the packet pulse as the harness sees it, so that a unit of 124 or 126 clock cycles fails), `Dly_Irq` is set, the timer cleared and the threshold counter reloaded; `Dly_Irq` is cleared by writing 1; the start of a packet stops and clears the timer; a packet that sets `IOC_Irq` stops it; `IRQDelay` 0 disables it | RG-SG-07, RG-SG-08 |
+| `test_sg_modes` (TC-RG-23) | `DMACR.Keyhole` and `DMACR.CyclicBD` drive the keyhole and cyclic outputs to the engine of each channel, halted and running | RG-SG-09 |
+
+### 3.1 Test cases waiting for Open Logic
+
+The test case below takes effect with the release of Open Logic that provides FIXED bursts (gap G1).
+
+| Test ID | Description | Requirements |
+| --- | --- | --- |
+| `test_dr_keyhole` (TC-RG-24) | Direct Register Mode: the S2MM command carries `S2MM_DMACR.Keyhole` as stored at the length write; the MM2S command never does (interpretation I1) | RG-SG-11 |
 
 ## 4. Requirement coverage
 
@@ -94,8 +122,18 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | RG-IR-03 | TC-RG-04, TC-RG-09 |
 | RG-IR-04 | TC-RG-04, TC-RG-05, TC-RG-08 |
 | RG-EX-01, RG-EX-02 | TC-RG-01 |
-| RG-EX-03, RG-EX-05 | TC-RG-12, TC-RG-13 |
+| RG-EX-03, RG-EX-05 | TC-RG-12, TC-RG-13, TC-RG-16 |
 | RG-EX-04 | TC-RG-13 |
+| RG-SG-01 | TC-RG-16 |
+| RG-SG-02 | TC-RG-16, TC-RG-17 |
+| RG-SG-03 | TC-RG-16, TC-RG-18 |
+| RG-SG-04 | TC-RG-16, TC-RG-19 |
+| RG-SG-05 | TC-RG-20 |
+| RG-SG-06 | TC-RG-21 |
+| RG-SG-07, RG-SG-08 | TC-RG-22 |
+| RG-SG-09 | TC-RG-23 |
+| RG-SG-10 | TC-RG-19 |
+| RG-SG-11 | TC-RG-24 (waiting for Open Logic) |
 
 ## 5. Negative tests
 
@@ -106,6 +144,9 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | Length writes that must not start a transfer (zero, busy, halted) | TC-RG-06 |
 | Writes during a soft reset | TC-RG-10 |
 | Accesses to unmapped and reserved offsets | TC-RG-01, TC-RG-02 |
+| Error reports of the descriptor engine, start refused while an engine flag is set | TC-RG-20 |
+| Writes of `CURDESC` while running, tail pointer writes while halted or stopping, the non-triggering word | TC-RG-17, TC-RG-18 |
+| Registers of Direct Register Mode written in Scatter/Gather Mode | TC-RG-16 |
 
 The recovery of the state machines from an illegal state (`when others`) cannot be reached through the ports; it is
 reviewed in the code and listed in the coverage report.

@@ -6,9 +6,9 @@
 ---------------------------------------------------------------------------------------------------
 -- Description
 ---------------------------------------------------------------------------------------------------
--- Register interface of OpenDMA (RG-1 to RG-4): the registers of both channels in Direct Register
--- Mode behind the AXI4-Lite port, the transfer commands and results, interrupts, soft reset and the
--- extension window.
+-- Register interface of OpenDMA (RG-1 to RG-4): the registers of both channels behind the AXI4-Lite
+-- port, in Direct Register Mode the transfer commands and results, in Scatter/Gather Mode the control
+-- interface of the descriptor engine; interrupts, soft reset and the extension window.
 --
 -- Documentation: hdl/odma_registers/docs/architecture.md
 
@@ -102,6 +102,32 @@ entity odma_registers is
         S2mm_Run          : out   std_logic;
         S2mm_Drain        : out   std_logic;
         S2mm_Stopped      : in    std_logic                                    := '1';
+        -- Scatter/Gather engine of the MM2S channel (IncludeSg_g)
+        Mm2sSg_CurDesc    : out   std_logic_vector(AddrWidth_g - 1 downto 0);
+        Mm2sSg_Tail       : out   std_logic_vector(AddrWidth_g - 1 downto 0);
+        Mm2sSg_TailWr     : out   std_logic;
+        Mm2sSg_Cyclic     : out   std_logic;
+        Mm2sSg_Keyhole    : out   std_logic;
+        Mm2sSg_CurPtr     : in    std_logic_vector(AddrWidth_g - 1 downto 0)   := (others => '0');
+        Mm2sSg_Idle       : in    std_logic                                    := '0';
+        Mm2sSg_Pkt        : in    std_logic                                    := '0';
+        Mm2sSg_ErrValid   : in    std_logic                                    := '0';
+        Mm2sSg_ErrXfer    : in    XferErr_t                                    := ErrNone_c;
+        Mm2sSg_ErrSg      : in    XferErr_t                                    := ErrNone_c;
+        Mm2s_PktStart     : in    std_logic                                    := '0';
+        -- Scatter/Gather engine of the S2MM channel (IncludeSg_g)
+        S2mmSg_CurDesc    : out   std_logic_vector(AddrWidth_g - 1 downto 0);
+        S2mmSg_Tail       : out   std_logic_vector(AddrWidth_g - 1 downto 0);
+        S2mmSg_TailWr     : out   std_logic;
+        S2mmSg_Cyclic     : out   std_logic;
+        S2mmSg_Keyhole    : out   std_logic;
+        S2mmSg_CurPtr     : in    std_logic_vector(AddrWidth_g - 1 downto 0)   := (others => '0');
+        S2mmSg_Idle       : in    std_logic                                    := '0';
+        S2mmSg_Pkt        : in    std_logic                                    := '0';
+        S2mmSg_ErrValid   : in    std_logic                                    := '0';
+        S2mmSg_ErrXfer    : in    XferErr_t                                    := ErrNone_c;
+        S2mmSg_ErrSg      : in    XferErr_t                                    := ErrNone_c;
+        S2mm_PktStart     : in    std_logic                                    := '0';
         -- Interrupts
         Mm2s_Irq          : out   std_logic;
         S2mm_Irq          : out   std_logic;
@@ -139,6 +165,15 @@ architecture rtl of odma_registers is
     constant OfsAddr_c    : Offsets_t := (RegMm2sSa_c, RegS2mmDa_c);
     constant OfsAddrMsb_c : Offsets_t := (RegMm2sSaMsb_c, RegS2mmDaMsb_c);
     constant OfsLength_c  : Offsets_t := (RegMm2sLength_c, RegS2mmLength_c);
+    constant OfsCur_c     : Offsets_t := (RegMm2sCurdesc_c, RegS2mmCurdesc_c);
+    constant OfsCurMsb_c  : Offsets_t := (RegMm2sCurdescMsb_c, RegS2mmCurdescMsb_c);
+    constant OfsTail_c    : Offsets_t := (RegMm2sTaildesc_c, RegS2mmTaildesc_c);
+    constant OfsTailMsb_c : Offsets_t := (RegMm2sTaildescMsb_c, RegS2mmTaildescMsb_c);
+
+    -- Interpretation SGI-01: the write of TAILDESC starts the engine with 32 address bits, the write of TAILDESC_MSB
+    -- above 32 bits
+    constant TailTrigger_c : Offsets_t := (choose(AddrWidth_g > 32, RegMm2sTaildescMsb_c, RegMm2sTaildesc_c),
+                                           choose(AddrWidth_g > 32, RegS2mmTaildescMsb_c, RegS2mmTaildesc_c));
 
     -- Start of the extension window
     constant ExtBase_c : natural := RegExtId_c;
@@ -147,6 +182,7 @@ architecture rtl of odma_registers is
     constant ThresholdReset_c : std_logic_vector(7 downto 0) :=
         RegMm2sDmacrReset_c(Mm2sDmacrIrqThresholdHi_c downto Mm2sDmacrIrqThresholdLo_c);
 
+    -- Direct Register Mode: all states; Scatter/Gather Mode: Halted_s, Started_s (running) and Stopping_s
     type ChannelFsm_t is (Halted_s, Started_s, Busy_s, Done_s, Stopping_s);
 
     type Channel_r is record
@@ -164,6 +200,16 @@ architecture rtl of odma_registers is
         IntErr       : std_logic;
         SlvErr       : std_logic;
         DecErr       : std_logic;
+        SgIntErr     : std_logic;
+        SgSlvErr     : std_logic;
+        SgDecErr     : std_logic;
+        -- Descriptor pointers (Scatter/Gather Mode); CurOwn: CURDESC reads the pointer of the engine
+        CurDesc      : std_logic_vector(AddrWidth_g - 1 downto 0);
+        CurOwn       : std_logic;
+        Tail         : std_logic_vector(AddrWidth_g - 1 downto 0);
+        TailWr       : std_logic;
+        -- Reload of the threshold counter, one clock cycle after the write or the start (new IRQThreshold)
+        ThrLoad      : std_logic;
         -- Buffer address and length
         Addr         : std_logic_vector(AddrWidth_g - 1 downto 0);
         Length       : std_logic_vector(LengthWidth_g - 1 downto 0);
@@ -197,6 +243,18 @@ architecture rtl of odma_registers is
     signal Stopped   : std_logic_vector(0 to 1);
     signal Included  : std_logic_vector(0 to 1);
 
+    -- Scatter/Gather engine ports indexed by channel
+    type Addr_a is array (0 to 1) of std_logic_vector(AddrWidth_g - 1 downto 0);
+
+    signal Sg_CurPtr   : Addr_a;
+    signal Sg_CurView  : Addr_a;
+    signal Sg_Idle     : std_logic_vector(0 to 1);
+    signal Sg_Pkt      : std_logic_vector(0 to 1);
+    signal Sg_ErrValid : std_logic_vector(0 to 1);
+    signal Sg_ErrXfer  : Err_a;
+    signal Sg_ErrSg    : Err_a;
+    signal PktStart    : std_logic_vector(0 to 1);
+
     -- Register bus of the AXI4-Lite slave
     signal Rb_Addr    : std_logic_vector(9 downto 0);
     signal Rb_Wr      : std_logic;
@@ -206,14 +264,21 @@ architecture rtl of odma_registers is
     signal Rb_RdValid : std_logic;
 
     -- Interrupt controllers
+    type Byte_a is array (0 to 1) of std_logic_vector(7 downto 0);
+
     signal IocEvt  : std_logic_vector(0 to 1);
     signal ErrEvt  : std_logic_vector(0 to 1);
     signal IocClr  : std_logic_vector(0 to 1);
+    signal DlyClr  : std_logic_vector(0 to 1);
     signal ErrClr  : std_logic_vector(0 to 1);
     signal IocFlag : std_logic_vector(0 to 1);
+    signal DlyFlag : std_logic_vector(0 to 1);
     signal ErrFlag : std_logic_vector(0 to 1);
     signal IocEna  : std_logic_vector(0 to 1);
+    signal DlyEna  : std_logic_vector(0 to 1);
     signal ErrEna  : std_logic_vector(0 to 1);
+    signal ThrCnt  : Byte_a;
+    signal DlyCnt  : Byte_a;
     signal Irq     : std_logic_vector(0 to 1);
 
     -- Reset controller
@@ -227,11 +292,6 @@ architecture rtl of odma_registers is
     signal Ext_RdData : std_logic_vector(31 downto 0);
 
 begin
-
-    -- *** Assertions ***
-    assert not IncludeSg_g
-        report "odma_registers: IncludeSg_g must be false, Scatter/Gather Mode is not implemented"
-        severity failure;
 
     -- *** Channel ports ***
     Included(Mm2s_c)  <= choose(IncludeMm2s_g, '1', '0');
@@ -250,6 +310,27 @@ begin
     Stopped(Mm2s_c) <= Mm2s_Stopped or not Included(Mm2s_c);
     Stopped(S2mm_c) <= S2mm_Stopped or not Included(S2mm_c);
 
+    -- Scatter/Gather engines
+    Sg_CurPtr(Mm2s_c)   <= Mm2sSg_CurPtr;
+    Sg_CurPtr(S2mm_c)   <= S2mmSg_CurPtr;
+    Sg_Idle(Mm2s_c)     <= Mm2sSg_Idle;
+    Sg_Idle(S2mm_c)     <= S2mmSg_Idle;
+    Sg_Pkt(Mm2s_c)      <= Mm2sSg_Pkt;
+    Sg_Pkt(S2mm_c)      <= S2mmSg_Pkt;
+    Sg_ErrValid(Mm2s_c) <= Mm2sSg_ErrValid;
+    Sg_ErrValid(S2mm_c) <= S2mmSg_ErrValid;
+    Sg_ErrXfer(Mm2s_c)  <= Mm2sSg_ErrXfer;
+    Sg_ErrXfer(S2mm_c)  <= S2mmSg_ErrXfer;
+    Sg_ErrSg(Mm2s_c)    <= Mm2sSg_ErrSg;
+    Sg_ErrSg(S2mm_c)    <= S2mmSg_ErrSg;
+    PktStart(Mm2s_c)    <= Mm2s_PktStart;
+    PktStart(S2mm_c)    <= S2mm_PktStart;
+
+    -- CURDESC reads the pointer of the engine once the channel has run, until software writes CURDESC again
+    g_cur : for ch in 0 to 1 generate
+        Sg_CurView(ch) <= Sg_CurPtr(ch) when r.Ch(ch).CurOwn = '1' else r.Ch(ch).CurDesc;
+    end generate;
+
     -- *** Combinatorial Process ***
     p_comb : process (all) is
         variable v        : TwoProcess_r;
@@ -261,6 +342,7 @@ begin
         variable Halt_v   : boolean;
         variable Errors_v : std_logic;
         variable RdData_v : std_logic_vector(31 downto 0);
+        variable Ptr_v    : std_logic_vector(AddrWidth_g - 1 downto 0);
     begin
         v := r;
 
@@ -274,6 +356,7 @@ begin
         IocEvt    <= (others => '0');
         ErrEvt    <= (others => '0');
         IocClr    <= (others => '0');
+        DlyClr    <= (others => '0');
         ErrClr    <= (others => '0');
         RdData_v  := (others => '0');
 
@@ -286,6 +369,8 @@ begin
                 Halt_v  := false;
                 Len_v   := Rb_WrData(LengthWidth_g - 1 downto 0);
 
+                v.Ch(ch).ThrLoad := '0';
+
                 if Wr_v and Addr_v = OfsDmacr_c(ch) then
                     if Rb_WrData(Mm2sDmacrReset_c) = '1' then
                         -- DMACR.Reset: soft reset of the whole core; the other bits of the write are not taken
@@ -297,9 +382,11 @@ begin
                         v.Ch(ch).DlyIrqEn := Rb_WrData(Mm2sDmacrDlyIrqEn_c);
                         v.Ch(ch).ErrIrqEn := Rb_WrData(Mm2sDmacrErrIrqEn_c);
                         v.Ch(ch).IrqDelay := Rb_WrData(Mm2sDmacrIrqDelayHi_c downto Mm2sDmacrIrqDelayLo_c);
-                        -- DMACR.IRQThreshold: a write of 0 leaves the field unchanged
+                        -- DMACR.IRQThreshold: a write of 0 leaves the field unchanged, any other write reloads the
+                        -- threshold counter (RG-SG-06)
                         if unsigned(Rb_WrData(Mm2sDmacrIrqThresholdHi_c downto Mm2sDmacrIrqThresholdLo_c)) /= 0 then
                             v.Ch(ch).IrqThreshold := Rb_WrData(Mm2sDmacrIrqThresholdHi_c downto Mm2sDmacrIrqThresholdLo_c);
+                            v.Ch(ch).ThrLoad      := '1';
                         end if;
                         -- DMACR.RS: 1 is taken by the state machine, 0 always
                         RsWr_v := Rb_WrData(Mm2sDmacrRs_c) = '1';
@@ -310,128 +397,242 @@ begin
                     end if;
                 end if;
 
-                -- DMASR.IOC_Irq, DMASR.Err_Irq: write one to clear
+                -- DMASR.IOC_Irq, DMASR.Dly_Irq, DMASR.Err_Irq: write one to clear
                 if Wr_v and Addr_v = OfsDmasr_c(ch) then
                     IocClr(ch) <= Rb_WrData(Mm2sDmasrIocIrq_c);
+                    DlyClr(ch) <= Rb_WrData(Mm2sDmasrDlyIrq_c);
                     ErrClr(ch) <= Rb_WrData(Mm2sDmasrErrIrq_c);
                 end if;
 
-                -- MM2S_SA, MM2S_SA_MSB, S2MM_DA, S2MM_DA_MSB: bits at or above AddrWidth_g do not exist
-                if Wr_v and Addr_v = OfsAddr_c(ch) then
-                    v.Ch(ch).Addr(31 downto 0) := Rb_WrData;
-                end if;
-                if Wr_v and Addr_v = OfsAddrMsb_c(ch) then
+                Errors_v := r.Ch(ch).IntErr or r.Ch(ch).SlvErr or r.Ch(ch).DecErr or
+                            r.Ch(ch).SgIntErr or r.Ch(ch).SgSlvErr or r.Ch(ch).SgDecErr;
 
-                    for i in 32 to AddrWidth_g - 1 loop
-                        v.Ch(ch).Addr(i) := Rb_WrData(i - 32);
-                    end loop;
+                if IncludeSg_g then
 
-                end if;
+                    -- *** Scatter/Gather Mode ***
 
-                -- MM2S_LENGTH, S2MM_LENGTH: a write of 0 has no effect
-                if Wr_v and Addr_v = OfsLength_c(ch) and unsigned(Len_v) /= 0 then
-                    LenWr_v := true;
-                end if;
+                    -- CURDESC, CURDESC_MSB: written only while the channel is halted; the first write after a run
+                    -- starts from the pointer of the engine; bits 5 to 0 and bits at or above AddrWidth_g read 0
+                    Ptr_v             := Sg_CurView(ch);
+                    Ptr_v(5 downto 0) := (others => '0');
+                    if Wr_v and r.Ch(ch).State = Halted_s and Addr_v = OfsCur_c(ch) then
+                        Ptr_v(31 downto 6) := Rb_WrData(31 downto 6);
+                        v.Ch(ch).CurDesc   := Ptr_v;
+                        v.Ch(ch).CurOwn    := '0';
+                    end if;
+                    if Wr_v and r.Ch(ch).State = Halted_s and Addr_v = OfsCurMsb_c(ch) then
 
-                -- *** Channel state machine (DR mode) ***
-                Errors_v := r.Ch(ch).IntErr or r.Ch(ch).SlvErr or r.Ch(ch).DecErr;
+                        for i in 32 to AddrWidth_g - 1 loop
+                            Ptr_v(i) := Rb_WrData(i - 32);
+                        end loop;
 
-                case r.Ch(ch).State is
+                        v.Ch(ch).CurDesc := Ptr_v;
+                        v.Ch(ch).CurOwn  := '0';
+                    end if;
+                    if r.Ch(ch).State /= Halted_s then
+                        v.Ch(ch).CurOwn := '1';
+                    end if;
 
-                    when Halted_s =>
-                        -- DMACR.RS = 1 starts the channel unless an error flag is set
-                        if RsWr_v and Errors_v = '0' then
-                            v.Ch(ch).Rs    := '1';
-                            v.Ch(ch).Run   := '1';
-                            v.Ch(ch).State := Started_s;
-                        end if;
-                        -- A length written while halted is stored without a transfer
-                        if LenWr_v then
-                            v.Ch(ch).Length := Len_v;
-                        end if;
+                    -- TAILDESC, TAILDESC_MSB: read/write; the triggering write while the channel runs passes the
+                    -- tail pointer to the engine (RG-SG-03)
+                    v.Ch(ch).TailWr := '0';
+                    if Wr_v and Addr_v = OfsTail_c(ch) then
+                        v.Ch(ch).Tail(31 downto 6) := Rb_WrData(31 downto 6);
+                    end if;
+                    if Wr_v and Addr_v = OfsTailMsb_c(ch) then
 
-                    when Started_s | Done_s =>
-                        if Halt_v then
-                            v.Ch(ch).Run   := '0';
-                            v.Ch(ch).State := Stopping_s;
-                        elsif LenWr_v then
-                            -- One transfer command with the address registers of this cycle
-                            v.Ch(ch).Length   := Len_v;
-                            v.Ch(ch).CmdAddr  := r.Ch(ch).Addr;
-                            v.Ch(ch).CmdValid := '1';
-                            v.Ch(ch).State    := Busy_s;
-                        end if;
+                        for i in 32 to AddrWidth_g - 1 loop
+                            v.Ch(ch).Tail(i) := Rb_WrData(i - 32);
+                        end loop;
 
-                    when Busy_s =>
-                        -- Length writes have no effect while the transfer is in progress
-                        if Halt_v then
-                            v.Ch(ch).HaltPend := '1';
-                        end if;
+                    end if;
+                    if Wr_v and Addr_v = TailTrigger_c(ch) and r.Ch(ch).State = Started_s then
+                        v.Ch(ch).TailWr := '1';
+                    end if;
 
-                        -- Command handshake
-                        if r.Ch(ch).CmdValid = '1' and Cmd_Ready(ch) = '1' then
-                            v.Ch(ch).CmdValid := '0';
-                        end if;
+                    -- *** Channel state machine (Scatter/Gather Mode) ***
+                    case r.Ch(ch).State is
 
-                        -- Result, always accepted
-                        if Res_Valid(ch) = '1' then
-                            if Res_Err(ch) /= ErrNone_c then
-                                -- DMASR.DMAIntErr, DMASR.DMASlvErr, DMASR.DMADecErr; S2MM: DMAIntErr also
-                                -- with the slave and the decode error
-                                if Res_Err(ch) = ErrInt_c or ch = S2mm_c then
-                                    v.Ch(ch).IntErr := '1';
-                                end if;
-                                if Res_Err(ch) = ErrSlv_c then
-                                    v.Ch(ch).SlvErr := '1';
-                                end if;
-                                if Res_Err(ch) = ErrDec_c then
-                                    v.Ch(ch).DecErr := '1';
-                                end if;
-                                ErrEvt(ch)        <= '1';
-                                v.Ch(ch).Rs       := '0';
-                                v.Ch(ch).Run      := '0';
-                                v.Ch(ch).HaltPend := '0';
-                                v.Ch(ch).State    := Stopping_s;
-                            else
-                                -- The transfer completed: DMASR.IOC_Irq; S2MM_LENGTH reads the bytes received
-                                if Res_Eof(ch) = '1' then
-                                    IocEvt(ch) <= '1';
-                                    if ch = S2mm_c then
-                                        v.Ch(ch).Length := Res_Bytes(ch);
-                                    end if;
-                                end if;
-                                if v.Ch(ch).HaltPend = '1' then
-                                    v.Ch(ch).State := Stopping_s;
-                                else
-                                    v.Ch(ch).State := Done_s;
-                                end if;
-                                v.Ch(ch).HaltPend := '0';
+                        when Halted_s =>
+                            -- DMACR.RS = 1 starts the channel unless an error flag is set; the threshold counter is
+                            -- loaded at the start
+                            if RsWr_v and Errors_v = '0' then
+                                v.Ch(ch).Rs      := '1';
+                                v.Ch(ch).Run     := '1';
+                                v.Ch(ch).State   := Started_s;
+                                v.Ch(ch).ThrLoad := '1';
                             end if;
-                        end if;
 
-                        -- A halted transfer: Run falls once its command is accepted
-                        if v.Ch(ch).HaltPend = '1' and v.Ch(ch).CmdValid = '0' then
-                            v.Ch(ch).Run := '0';
-                        end if;
+                        when Started_s =>
+                            if Halt_v then
+                                v.Ch(ch).Run   := '0';
+                                v.Ch(ch).State := Stopping_s;
+                            end if;
 
-                    when Stopping_s =>
-                        if LenWr_v then
-                            v.Ch(ch).Length := Len_v;
-                        end if;
-                        if Stopped(ch) = '1' then
+                        when Stopping_s =>
+                            -- The channel and its engine have both stopped (RG-SG-10)
+                            if Stopped(ch) = '1' then
+                                v.Ch(ch).State := Halted_s;
+                            end if;
+
+                        -- coverage off
+                        when others =>
+                            -- Unreachable, safe recovery
+                            v.Ch(ch).Run   := '0';
                             v.Ch(ch).State := Halted_s;
+                        -- coverage on
+
+                    end case;
+
+                    -- Error report of the engine (RG-SG-05): the flags of the transfer and of the engine; S2MM:
+                    -- DMAIntErr also with the slave and the decode error, as in Direct Register Mode
+                    if Sg_ErrValid(ch) = '1' then
+                        if Sg_ErrXfer(ch) = ErrInt_c or (ch = S2mm_c and Sg_ErrXfer(ch) /= ErrNone_c) then
+                            v.Ch(ch).IntErr := '1';
                         end if;
+                        if Sg_ErrXfer(ch) = ErrSlv_c then
+                            v.Ch(ch).SlvErr := '1';
+                        end if;
+                        if Sg_ErrXfer(ch) = ErrDec_c then
+                            v.Ch(ch).DecErr := '1';
+                        end if;
+                        if Sg_ErrSg(ch) = ErrInt_c then
+                            v.Ch(ch).SgIntErr := '1';
+                        end if;
+                        if Sg_ErrSg(ch) = ErrSlv_c then
+                            v.Ch(ch).SgSlvErr := '1';
+                        end if;
+                        if Sg_ErrSg(ch) = ErrDec_c then
+                            v.Ch(ch).SgDecErr := '1';
+                        end if;
+                        ErrEvt(ch)   <= '1';
+                        v.Ch(ch).Rs  := '0';
+                        v.Ch(ch).Run := '0';
+                        if v.Ch(ch).State = Started_s then
+                            v.Ch(ch).State := Stopping_s;
+                        end if;
+                    end if;
 
-                    -- coverage off
-                    when others =>
-                        -- Unreachable, safe recovery
-                        v.Ch(ch).Run      := '0';
-                        v.Ch(ch).CmdValid := '0';
-                        v.Ch(ch).HaltPend := '0';
-                        v.Ch(ch).State    := Halted_s;
-                    -- coverage on
+                else
 
-                end case;
+                    -- *** Direct Register Mode ***
+
+                    -- MM2S_SA, MM2S_SA_MSB, S2MM_DA, S2MM_DA_MSB: bits at or above AddrWidth_g do not exist
+                    if Wr_v and Addr_v = OfsAddr_c(ch) then
+                        v.Ch(ch).Addr(31 downto 0) := Rb_WrData;
+                    end if;
+                    if Wr_v and Addr_v = OfsAddrMsb_c(ch) then
+
+                        for i in 32 to AddrWidth_g - 1 loop
+                            v.Ch(ch).Addr(i) := Rb_WrData(i - 32);
+                        end loop;
+
+                    end if;
+
+                    -- MM2S_LENGTH, S2MM_LENGTH: a write of 0 has no effect
+                    if Wr_v and Addr_v = OfsLength_c(ch) and unsigned(Len_v) /= 0 then
+                        LenWr_v := true;
+                    end if;
+
+                    -- *** Channel state machine (Direct Register Mode) ***
+                    case r.Ch(ch).State is
+
+                        when Halted_s =>
+                            -- DMACR.RS = 1 starts the channel unless an error flag is set
+                            if RsWr_v and Errors_v = '0' then
+                                v.Ch(ch).Rs    := '1';
+                                v.Ch(ch).Run   := '1';
+                                v.Ch(ch).State := Started_s;
+                            end if;
+                            -- A length written while halted is stored without a transfer
+                            if LenWr_v then
+                                v.Ch(ch).Length := Len_v;
+                            end if;
+
+                        when Started_s | Done_s =>
+                            if Halt_v then
+                                v.Ch(ch).Run   := '0';
+                                v.Ch(ch).State := Stopping_s;
+                            elsif LenWr_v then
+                                -- One transfer command with the address registers of this cycle
+                                v.Ch(ch).Length   := Len_v;
+                                v.Ch(ch).CmdAddr  := r.Ch(ch).Addr;
+                                v.Ch(ch).CmdValid := '1';
+                                v.Ch(ch).State    := Busy_s;
+                            end if;
+
+                        when Busy_s =>
+                            -- Length writes have no effect while the transfer is in progress
+                            if Halt_v then
+                                v.Ch(ch).HaltPend := '1';
+                            end if;
+
+                            -- Command handshake
+                            if r.Ch(ch).CmdValid = '1' and Cmd_Ready(ch) = '1' then
+                                v.Ch(ch).CmdValid := '0';
+                            end if;
+
+                            -- Result, always accepted
+                            if Res_Valid(ch) = '1' then
+                                if Res_Err(ch) /= ErrNone_c then
+                                    -- DMASR.DMAIntErr, DMASR.DMASlvErr, DMASR.DMADecErr; S2MM: DMAIntErr also
+                                    -- with the slave and the decode error
+                                    if Res_Err(ch) = ErrInt_c or ch = S2mm_c then
+                                        v.Ch(ch).IntErr := '1';
+                                    end if;
+                                    if Res_Err(ch) = ErrSlv_c then
+                                        v.Ch(ch).SlvErr := '1';
+                                    end if;
+                                    if Res_Err(ch) = ErrDec_c then
+                                        v.Ch(ch).DecErr := '1';
+                                    end if;
+                                    ErrEvt(ch)        <= '1';
+                                    v.Ch(ch).Rs       := '0';
+                                    v.Ch(ch).Run      := '0';
+                                    v.Ch(ch).HaltPend := '0';
+                                    v.Ch(ch).State    := Stopping_s;
+                                else
+                                    -- The transfer completed: DMASR.IOC_Irq; S2MM_LENGTH reads the bytes received
+                                    if Res_Eof(ch) = '1' then
+                                        IocEvt(ch) <= '1';
+                                        if ch = S2mm_c then
+                                            v.Ch(ch).Length := Res_Bytes(ch);
+                                        end if;
+                                    end if;
+                                    if v.Ch(ch).HaltPend = '1' then
+                                        v.Ch(ch).State := Stopping_s;
+                                    else
+                                        v.Ch(ch).State := Done_s;
+                                    end if;
+                                    v.Ch(ch).HaltPend := '0';
+                                end if;
+                            end if;
+
+                            -- A halted transfer: Run falls once its command is accepted
+                            if v.Ch(ch).HaltPend = '1' and v.Ch(ch).CmdValid = '0' then
+                                v.Ch(ch).Run := '0';
+                            end if;
+
+                        when Stopping_s =>
+                            if LenWr_v then
+                                v.Ch(ch).Length := Len_v;
+                            end if;
+                            if Stopped(ch) = '1' then
+                                v.Ch(ch).State := Halted_s;
+                            end if;
+
+                        -- coverage off
+                        when others =>
+                            -- Unreachable, safe recovery
+                            v.Ch(ch).Run      := '0';
+                            v.Ch(ch).CmdValid := '0';
+                            v.Ch(ch).HaltPend := '0';
+                            v.Ch(ch).State    := Halted_s;
+                        -- coverage on
+
+                    end case;
+
+                end if;
 
                 -- *** Read data ***
                 if Addr_v = OfsDmacr_c(ch) then
@@ -446,24 +647,50 @@ begin
                     RdData_v(Mm2sDmacrIrqThresholdHi_c downto Mm2sDmacrIrqThresholdLo_c) := r.Ch(ch).IrqThreshold;
                     RdData_v(Mm2sDmacrIrqDelayHi_c downto Mm2sDmacrIrqDelayLo_c)         := r.Ch(ch).IrqDelay;
                 elsif Addr_v = OfsDmasr_c(ch) then
-                    RdData_v(Mm2sDmasrHalted_c)                                                := choose(r.Ch(ch).State = Halted_s, '1', '0');
-                    RdData_v(Mm2sDmasrIdle_c)                                                  := choose(r.Ch(ch).State = Done_s, '1', '0');
-                    RdData_v(Mm2sDmasrSgIncld_c)                                               := choose(IncludeSg_g, '1', '0');
-                    RdData_v(Mm2sDmasrDmaIntErr_c)                                             := r.Ch(ch).IntErr;
-                    RdData_v(Mm2sDmasrDmaSlvErr_c)                                             := r.Ch(ch).SlvErr;
-                    RdData_v(Mm2sDmasrDmaDecErr_c)                                             := r.Ch(ch).DecErr;
-                    RdData_v(Mm2sDmasrIocIrq_c)                                                := IocFlag(ch);
-                    RdData_v(Mm2sDmasrErrIrq_c)                                                := ErrFlag(ch);
-                    RdData_v(Mm2sDmasrIrqThresholdStsHi_c downto Mm2sDmasrIrqThresholdStsLo_c) := r.Ch(ch).IrqThreshold;
-                elsif Addr_v = OfsAddr_c(ch) then
+                    RdData_v(Mm2sDmasrHalted_c)    := choose(r.Ch(ch).State = Halted_s, '1', '0');
+                    RdData_v(Mm2sDmasrSgIncld_c)   := choose(IncludeSg_g, '1', '0');
+                    RdData_v(Mm2sDmasrDmaIntErr_c) := r.Ch(ch).IntErr;
+                    RdData_v(Mm2sDmasrDmaSlvErr_c) := r.Ch(ch).SlvErr;
+                    RdData_v(Mm2sDmasrDmaDecErr_c) := r.Ch(ch).DecErr;
+                    RdData_v(Mm2sDmasrIocIrq_c)    := IocFlag(ch);
+                    RdData_v(Mm2sDmasrErrIrq_c)    := ErrFlag(ch);
+                    if IncludeSg_g then
+                        RdData_v(Mm2sDmasrIdle_c)                                                  := choose(r.Ch(ch).State = Started_s, Sg_Idle(ch), '0');
+                        RdData_v(Mm2sDmasrSgIntErr_c)                                              := r.Ch(ch).SgIntErr;
+                        RdData_v(Mm2sDmasrSgSlvErr_c)                                              := r.Ch(ch).SgSlvErr;
+                        RdData_v(Mm2sDmasrSgDecErr_c)                                              := r.Ch(ch).SgDecErr;
+                        RdData_v(Mm2sDmasrDlyIrq_c)                                                := DlyFlag(ch);
+                        RdData_v(Mm2sDmasrIrqThresholdStsHi_c downto Mm2sDmasrIrqThresholdStsLo_c) := ThrCnt(ch);
+                        RdData_v(Mm2sDmasrIrqDelayStsHi_c downto Mm2sDmasrIrqDelayStsLo_c)         := DlyCnt(ch);
+                    else
+                        RdData_v(Mm2sDmasrIdle_c)                                                  := choose(r.Ch(ch).State = Done_s, '1', '0');
+                        RdData_v(Mm2sDmasrIrqThresholdStsHi_c downto Mm2sDmasrIrqThresholdStsLo_c) := r.Ch(ch).IrqThreshold;
+                    end if;
+                elsif IncludeSg_g and Addr_v = OfsCur_c(ch) then
+                    RdData_v(31 downto 6) := Sg_CurView(ch)(31 downto 6);
+                elsif IncludeSg_g and Addr_v = OfsCurMsb_c(ch) then
+
+                    for i in 32 to AddrWidth_g - 1 loop
+                        RdData_v(i - 32) := Sg_CurView(ch)(i);
+                    end loop;
+
+                elsif IncludeSg_g and Addr_v = OfsTail_c(ch) then
+                    RdData_v(31 downto 6) := r.Ch(ch).Tail(31 downto 6);
+                elsif IncludeSg_g and Addr_v = OfsTailMsb_c(ch) then
+
+                    for i in 32 to AddrWidth_g - 1 loop
+                        RdData_v(i - 32) := r.Ch(ch).Tail(i);
+                    end loop;
+
+                elsif not IncludeSg_g and Addr_v = OfsAddr_c(ch) then
                     RdData_v := r.Ch(ch).Addr(31 downto 0);
-                elsif Addr_v = OfsAddrMsb_c(ch) then
+                elsif not IncludeSg_g and Addr_v = OfsAddrMsb_c(ch) then
 
                     for i in 32 to AddrWidth_g - 1 loop
                         RdData_v(i - 32) := r.Ch(ch).Addr(i);
                     end loop;
 
-                elsif Addr_v = OfsLength_c(ch) then
+                elsif not IncludeSg_g and Addr_v = OfsLength_c(ch) then
                     RdData_v(LengthWidth_g - 1 downto 0) := r.Ch(ch).Length;
                 end if;
 
@@ -484,6 +711,7 @@ begin
     Rb_RdData  <= Ext_RdData when r.RdExt = '1' else r.RdData;
     Rb_RdValid <= r.RdValid;
 
+    -- Scatter/Gather Mode: the engine issues the commands, the register interface none (SG-IF-02)
     Mm2sCmd_Valid   <= r.Ch(Mm2s_c).CmdValid;
     Mm2sCmd_Addr    <= r.Ch(Mm2s_c).CmdAddr;
     Mm2sCmd_Length  <= r.Ch(Mm2s_c).Length;
@@ -497,10 +725,21 @@ begin
     S2mmCmd_Valid   <= r.Ch(S2mm_c).CmdValid;
     S2mmCmd_Addr    <= r.Ch(S2mm_c).CmdAddr;
     S2mmCmd_Length  <= r.Ch(S2mm_c).Length;
-    S2mmCmd_Keyhole <= '0';
+    S2mmCmd_Keyhole <= '0';               -- The S2MM keyhole of Direct Register Mode follows with gap G1 (S2-SG-04)
     S2mmRes_Ready   <= '1';
     S2mm_Run        <= r.Ch(S2mm_c).Run;
     S2mm_Drain      <= SoftBusy and Included(S2mm_c);
+
+    Mm2sSg_CurDesc <= Sg_CurView(Mm2s_c);
+    Mm2sSg_Tail    <= r.Ch(Mm2s_c).Tail;
+    Mm2sSg_TailWr  <= r.Ch(Mm2s_c).TailWr;
+    Mm2sSg_Cyclic  <= r.Ch(Mm2s_c).CyclicBd;
+    Mm2sSg_Keyhole <= r.Ch(Mm2s_c).Keyhole;
+    S2mmSg_CurDesc <= Sg_CurView(S2mm_c);
+    S2mmSg_Tail    <= r.Ch(S2mm_c).Tail;
+    S2mmSg_TailWr  <= r.Ch(S2mm_c).TailWr;
+    S2mmSg_Cyclic  <= r.Ch(S2mm_c).CyclicBd;
+    S2mmSg_Keyhole <= r.Ch(S2mm_c).Keyhole;
 
     Mm2s_Irq    <= Irq(Mm2s_c);
     S2mm_Irq    <= Irq(S2mm_c);
@@ -528,6 +767,14 @@ begin
                     r.Ch(ch).IntErr       <= '0';
                     r.Ch(ch).SlvErr       <= '0';
                     r.Ch(ch).DecErr       <= '0';
+                    r.Ch(ch).SgIntErr     <= '0';
+                    r.Ch(ch).SgSlvErr     <= '0';
+                    r.Ch(ch).SgDecErr     <= '0';
+                    r.Ch(ch).CurDesc      <= (others => '0');
+                    r.Ch(ch).CurOwn       <= '0';
+                    r.Ch(ch).Tail         <= (others => '0');
+                    r.Ch(ch).TailWr       <= '0';
+                    r.Ch(ch).ThrLoad      <= '0';
                     r.Ch(ch).Addr         <= (others => '0');
                     r.Ch(ch).Length       <= (others => '0');
                     r.Ch(ch).HaltPend     <= '0';
@@ -581,21 +828,35 @@ begin
     -- *** Interrupt controllers (RG-2) ***
     g_irq : for ch in 0 to 1 generate
         IocEna(ch) <= r.Ch(ch).IocIrqEn;
+        DlyEna(ch) <= r.Ch(ch).DlyIrqEn;
         ErrEna(ch) <= r.Ch(ch).ErrIrqEn;
 
         i_irq : entity work.odma_interrupt
+            generic map (
+                Sg_g => IncludeSg_g
+            )
             port map (
-                Clk      => Clk,
-                Rst      => CoreRst_i,
-                Ena_Ioc  => IocEna(ch),
-                Ena_Err  => ErrEna(ch),
-                Evt_Ioc  => IocEvt(ch),
-                Evt_Err  => ErrEvt(ch),
-                Clr_Ioc  => IocClr(ch),
-                Clr_Err  => ErrClr(ch),
-                Flag_Ioc => IocFlag(ch),
-                Flag_Err => ErrFlag(ch),
-                Irq      => Irq(ch)
+                Clk          => Clk,
+                Rst          => CoreRst_i,
+                Ena_Ioc      => IocEna(ch),
+                Ena_Dly      => DlyEna(ch),
+                Ena_Err      => ErrEna(ch),
+                Evt_Ioc      => IocEvt(ch),
+                Evt_Err      => ErrEvt(ch),
+                Evt_Pkt      => Sg_Pkt(ch),
+                Evt_PktStart => PktStart(ch),
+                Thr_Value    => r.Ch(ch).IrqThreshold,
+                Thr_Load     => r.Ch(ch).ThrLoad,
+                Dly_Value    => r.Ch(ch).IrqDelay,
+                Clr_Ioc      => IocClr(ch),
+                Clr_Dly      => DlyClr(ch),
+                Clr_Err      => ErrClr(ch),
+                Flag_Ioc     => IocFlag(ch),
+                Flag_Dly     => DlyFlag(ch),
+                Flag_Err     => ErrFlag(ch),
+                Thr_Count    => ThrCnt(ch),
+                Dly_Count    => DlyCnt(ch),
+                Irq          => Irq(ch)
             );
 
     end generate;

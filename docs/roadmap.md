@@ -27,7 +27,7 @@ The core is in development and has no technology readiness level yet. The
 | Module | Blocks (architecture section 7) | Status |
 | --- | --- | --- |
 | `odma_pkg` | Common package; shared verification components (AXI memory model, sequence player) and the model of the programming sequences | Done (GHDL) |
-| `odma_registers` | RG-1 to RG-4 (register interface) | Done (GHDL) |
+| `odma_registers` | RG-1 to RG-4 (register interface) | Done (GHDL), Scatter/Gather Mode included; the S2MM keyhole of Direct Register Mode waits for Open Logic (gap G1) |
 | `odma_mm2s` | MM-1 to MM-3 (MM2S channel) | MM-1, MM-2 done (GHDL); MM-3 in phase c |
 | `odma_s2mm` | S2-1 to S2-3 (S2MM channel) | S2-1, S2-2 done (GHDL); S2-3 in phase c |
 | `odma_sg` | SG-1 to SG-3 (Scatter/Gather engine) | Architecture and verification plan |

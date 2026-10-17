@@ -30,26 +30,34 @@ package odma_regs_pkg is
     -----------------------------------------------------------------------------------------------
     -- Register addresses (byte addresses)
     -----------------------------------------------------------------------------------------------
-    constant RegMm2sDmacr_c     : natural := 16#000#;
-    constant RegMm2sDmasr_c     : natural := 16#004#;
-    constant RegMm2sSa_c        : natural := 16#018#;
-    constant RegMm2sSaMsb_c     : natural := 16#01C#;
-    constant RegMm2sLength_c    : natural := 16#028#;
-    constant RegS2mmDmacr_c     : natural := 16#030#;
-    constant RegS2mmDmasr_c     : natural := 16#034#;
-    constant RegS2mmDa_c        : natural := 16#048#;
-    constant RegS2mmDaMsb_c     : natural := 16#04C#;
-    constant RegS2mmLength_c    : natural := 16#058#;
-    constant RegExtId_c         : natural := 16#100#;
-    constant RegExtVersion_c    : natural := 16#104#;
-    constant RegExtConfig_c     : natural := 16#108#;
-    constant RegExtMm2sConfig_c : natural := 16#10C#;
-    constant RegExtS2mmConfig_c : natural := 16#110#;
-    constant RegEccInfo_c       : natural := 16#120#;
-    constant RegEccCtrl_c       : natural := 16#124#;
-    constant RegEccStatus_c     : natural := 16#128#;
-    constant RegEccEnable_c     : natural := 16#12C#;
-    constant RegEccInject_c     : natural := 16#130#;
+    constant RegMm2sDmacr_c       : natural := 16#000#;
+    constant RegMm2sDmasr_c       : natural := 16#004#;
+    constant RegMm2sCurdesc_c     : natural := 16#008#;
+    constant RegMm2sCurdescMsb_c  : natural := 16#00C#;
+    constant RegMm2sTaildesc_c    : natural := 16#010#;
+    constant RegMm2sTaildescMsb_c : natural := 16#014#;
+    constant RegMm2sSa_c          : natural := 16#018#;
+    constant RegMm2sSaMsb_c       : natural := 16#01C#;
+    constant RegMm2sLength_c      : natural := 16#028#;
+    constant RegS2mmDmacr_c       : natural := 16#030#;
+    constant RegS2mmDmasr_c       : natural := 16#034#;
+    constant RegS2mmCurdesc_c     : natural := 16#038#;
+    constant RegS2mmCurdescMsb_c  : natural := 16#03C#;
+    constant RegS2mmTaildesc_c    : natural := 16#040#;
+    constant RegS2mmTaildescMsb_c : natural := 16#044#;
+    constant RegS2mmDa_c          : natural := 16#048#;
+    constant RegS2mmDaMsb_c       : natural := 16#04C#;
+    constant RegS2mmLength_c      : natural := 16#058#;
+    constant RegExtId_c           : natural := 16#100#;
+    constant RegExtVersion_c      : natural := 16#104#;
+    constant RegExtConfig_c       : natural := 16#108#;
+    constant RegExtMm2sConfig_c   : natural := 16#10C#;
+    constant RegExtS2mmConfig_c   : natural := 16#110#;
+    constant RegEccInfo_c         : natural := 16#120#;
+    constant RegEccCtrl_c         : natural := 16#124#;
+    constant RegEccStatus_c       : natural := 16#128#;
+    constant RegEccEnable_c       : natural := 16#12C#;
+    constant RegEccInject_c       : natural := 16#130#;
 
     -----------------------------------------------------------------------------------------------
     -- ECC_COUNT registers: address of instance n = Reg<Name>_c + n * RegEccCountStride_c
@@ -93,6 +101,22 @@ package odma_regs_pkg is
     constant Mm2sDmasrIrqDelayStsLo_c     : natural := 24;
     constant Mm2sDmasrIrqDelayStsHi_c     : natural := 31;
 
+    constant Mm2sCurdescReservedLo_c : natural := 0;
+    constant Mm2sCurdescReservedHi_c : natural := 5;
+    constant Mm2sCurdescPointerLo_c  : natural := 6;
+    constant Mm2sCurdescPointerHi_c  : natural := 31;
+
+    constant Mm2sCurdescMsbPointerLo_c : natural := 0;
+    constant Mm2sCurdescMsbPointerHi_c : natural := 31;
+
+    constant Mm2sTaildescReservedLo_c : natural := 0;
+    constant Mm2sTaildescReservedHi_c : natural := 5;
+    constant Mm2sTaildescPointerLo_c  : natural := 6;
+    constant Mm2sTaildescPointerHi_c  : natural := 31;
+
+    constant Mm2sTaildescMsbPointerLo_c : natural := 0;
+    constant Mm2sTaildescMsbPointerHi_c : natural := 31;
+
     constant Mm2sSaAddressLo_c : natural := 0;
     constant Mm2sSaAddressHi_c : natural := 31;
 
@@ -130,6 +154,22 @@ package odma_regs_pkg is
     constant S2mmDmasrIrqThresholdStsHi_c : natural := 23;
     constant S2mmDmasrIrqDelayStsLo_c     : natural := 24;
     constant S2mmDmasrIrqDelayStsHi_c     : natural := 31;
+
+    constant S2mmCurdescReservedLo_c : natural := 0;
+    constant S2mmCurdescReservedHi_c : natural := 5;
+    constant S2mmCurdescPointerLo_c  : natural := 6;
+    constant S2mmCurdescPointerHi_c  : natural := 31;
+
+    constant S2mmCurdescMsbPointerLo_c : natural := 0;
+    constant S2mmCurdescMsbPointerHi_c : natural := 31;
+
+    constant S2mmTaildescReservedLo_c : natural := 0;
+    constant S2mmTaildescReservedHi_c : natural := 5;
+    constant S2mmTaildescPointerLo_c  : natural := 6;
+    constant S2mmTaildescPointerHi_c  : natural := 31;
+
+    constant S2mmTaildescMsbPointerLo_c : natural := 0;
+    constant S2mmTaildescMsbPointerHi_c : natural := 31;
 
     constant S2mmDaAddressLo_c : natural := 0;
     constant S2mmDaAddressHi_c : natural := 31;
@@ -205,19 +245,27 @@ package odma_regs_pkg is
     -----------------------------------------------------------------------------------------------
     -- Reset values (fixed contents) of the registers whose fields all have a fixed value
     -----------------------------------------------------------------------------------------------
-    constant RegMm2sDmacrReset_c  : std_logic_vector(31 downto 0) := x"00010002";
-    constant RegMm2sSaReset_c     : std_logic_vector(31 downto 0) := x"00000000";
-    constant RegMm2sSaMsbReset_c  : std_logic_vector(31 downto 0) := x"00000000";
-    constant RegS2mmDmacrReset_c  : std_logic_vector(31 downto 0) := x"00010002";
-    constant RegS2mmDaReset_c     : std_logic_vector(31 downto 0) := x"00000000";
-    constant RegS2mmDaMsbReset_c  : std_logic_vector(31 downto 0) := x"00000000";
-    constant RegExtIdReset_c      : std_logic_vector(31 downto 0) := x"4F444D41";
-    constant RegExtVersionReset_c : std_logic_vector(31 downto 0) := x"00000100";
-    constant RegEccInfoReset_c    : std_logic_vector(31 downto 0) := x"00001010";
-    constant RegEccCtrlReset_c    : std_logic_vector(31 downto 0) := x"00000000";
-    constant RegEccStatusReset_c  : std_logic_vector(31 downto 0) := x"00000000";
-    constant RegEccEnableReset_c  : std_logic_vector(31 downto 0) := x"00000000";
-    constant RegEccInjectReset_c  : std_logic_vector(31 downto 0) := x"00000000";
-    constant RegEccCountReset_c   : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegMm2sDmacrReset_c       : std_logic_vector(31 downto 0) := x"00010002";
+    constant RegMm2sCurdescReset_c     : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegMm2sCurdescMsbReset_c  : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegMm2sTaildescReset_c    : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegMm2sTaildescMsbReset_c : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegMm2sSaReset_c          : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegMm2sSaMsbReset_c       : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegS2mmDmacrReset_c       : std_logic_vector(31 downto 0) := x"00010002";
+    constant RegS2mmCurdescReset_c     : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegS2mmCurdescMsbReset_c  : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegS2mmTaildescReset_c    : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegS2mmTaildescMsbReset_c : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegS2mmDaReset_c          : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegS2mmDaMsbReset_c       : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegExtIdReset_c           : std_logic_vector(31 downto 0) := x"4F444D41";
+    constant RegExtVersionReset_c      : std_logic_vector(31 downto 0) := x"00000100";
+    constant RegEccInfoReset_c         : std_logic_vector(31 downto 0) := x"00001010";
+    constant RegEccCtrlReset_c         : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegEccStatusReset_c       : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegEccEnableReset_c       : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegEccInjectReset_c       : std_logic_vector(31 downto 0) := x"00000000";
+    constant RegEccCountReset_c        : std_logic_vector(31 downto 0) := x"00000000";
 
 end package;

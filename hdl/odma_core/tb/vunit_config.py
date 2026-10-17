@@ -143,8 +143,8 @@ def files_keyhole(g, path):
 
 
 def files_sg_rate(g, path):
-    for name, buf in (("r1k", 1024), ("r4k", 4096)):
-        odma_model.sg_boundary_rate(g["AddrWidth_g"], g["LengthWidth_g"], buf).write(Path(path) / name)
+    for name, buf, aligned in (("r1k", 1024, True), ("r4k", 4096, True), ("u4k", 4096, False)):
+        odma_model.sg_boundary_rate(g["AddrWidth_g"], g["LengthWidth_g"], buf, aligned).write(Path(path) / name)
 
 
 def files_sg_ecc(g, path):

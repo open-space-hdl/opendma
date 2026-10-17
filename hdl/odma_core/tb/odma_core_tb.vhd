@@ -296,6 +296,7 @@ begin
         variable RateBeats_v : natural;
         variable Cyc1k_v     : integer;
         variable Cyc4k_v     : integer;
+        variable CycU_v      : integer;
 
         impure function hex (ofs : natural) return string is
         begin
@@ -940,22 +941,24 @@ begin
                 for lat in 0 to 1 loop
                     Mem_v.setLatency(MemWr_c, 50 * lat);
 
-                    for b in 0 to 1 loop
+                    -- Buffers of 1 KB and of 4 KB at multiples of 64 bytes, buffers of 4 KB 1 byte above
+                    for b in 0 to 2 loop
                         ObsClear <= not ObsClear;
                         wait for 2 * ClkPeriod_c;
                         if b = 0 then
                             scenario("r1k/", "buffers of 1 KB");
-                        else
-                            scenario("r4k/", "buffers of 4 KB");
-                        end if;
-                        if b = 0 then
                             Cyc1k_v := Obs.S2Last - Obs.S2First + 1;
-                        else
+                        elsif b = 1 then
+                            scenario("r4k/", "buffers of 4 KB");
                             Cyc4k_v := Obs.S2Last - Obs.S2First + 1;
+                        else
+                            scenario("u4k/", "buffers of 4 KB at unaligned addresses");
+                            CycU_v := Obs.S2Last - Obs.S2First + 1;
                         end if;
-                        log(ID_SEQUENCER, "TC-CO-20 buffers of " & to_string(4 ** b) & " KB, write response latency " &
-                            to_string(50 * lat) & ": " & to_string(Obs.S2Beats) & " beats in " &
-                            to_string(Obs.S2Last - Obs.S2First + 1) & " clock cycles");
+                        log(ID_SEQUENCER, "TC-CO-20 buffers of " & to_string(4 ** minimum(b, 1)) & " KB" &
+                            choose(b = 2, " (unaligned)", "") & ", write response latency " & to_string(50 * lat) &
+                            ": " & to_string(Obs.S2Beats) & " beats in " & to_string(Obs.S2Last - Obs.S2First + 1) &
+                            " clock cycles");
                         RateBeats_v := Obs.S2Beats;
                     end loop;
 
@@ -970,6 +973,9 @@ begin
                             to_string((Cyc1k_v - Cyc4k_v) / Cnt_v) & " clock cycles per buffer boundary, " &
                             to_string(RateBeats_v * 100 / Cyc4k_v) & " beats per 100 clock cycles with 4 KB");
                     end if;
+                    log(ID_SEQUENCER, "TC-CO-20 write response latency " & to_string(50 * lat) &
+                        ": unaligned buffers of 4 KB take " & to_string((CycU_v - Cyc4k_v) / 32) &
+                        " clock cycles more per KB");
                 end loop;
 
                 Mem_v.setLatency(MemWr_c, 0);

@@ -1107,14 +1107,18 @@ def keyhole(addr_width=32, length_width=14, channels=("MM2S", "S2MM"), mem_bytes
     return s
 
 
-def sg_boundary_rate(addr_width=32, length_width=14, buf_len=1024, packets=2, packet_len=16384, seed=21):
+def sg_boundary_rate(addr_width=32, length_width=14, buf_len=1024, aligned=True, packets=2, packet_len=16384,
+                     seed=21):
     """S2MM packets of packet_len bytes over buffers of buf_len bytes (at most the longest length) for the measurement
     of the pause at each buffer boundary inside a packet (odma_core TC-CO-20); the bench logs the time. The buffers of
-    each buffer length lie in their own region (offset buf_len * 4 KB), so that the scenarios of one test do not
-    overlap."""
+    each buffer length lie in their own region (offset buf_len * 4 KB, unaligned buffers 1 MB above), so that the
+    scenarios of one test do not overlap. aligned: every buffer starts at a multiple of 64 bytes (a multiple of every
+    memory word up to 512 bits, so a chunk is one burst); otherwise 1 byte above one, so that every chunk covers one
+    memory word more."""
     rng = random.Random(seed)
-    buffers = Buffers(addr_width, rng, offset=buf_len * 0x1000)
-    s = Scenario(f"sg_boundary_rate_{buf_len}", addr_width=addr_width, channels=("S2MM",), guard=16)
+    buffers = Buffers(addr_width, rng, offset=buf_len * 0x1000 + (0 if aligned else 0x10_0000))
+    s = Scenario(f"sg_boundary_rate_{buf_len}{'' if aligned else '_unaligned'}", addr_width=addr_width,
+                 channels=("S2MM",), guard=16)
     n = min(buf_len, _length_limit(length_width))
     s.reset()
     descs = []
@@ -1123,7 +1127,8 @@ def sg_boundary_rate(addr_width=32, length_width=14, buf_len=1024, packets=2, pa
         s.packet("S", data)
         parts = [data[i:i + n] for i in range(0, packet_len, n)]
         for j, part in enumerate(parts):
-            descs.append(SgBuffer(buffers.take(n), n, part, sof=j == 0, eof=j == len(parts) - 1))
+            addr = (buffers.take(n + 128) + 63) // 64 * 64 + (0 if aligned else 1)
+            descs.append(SgBuffer(addr, n, part, sof=j == 0, eof=j == len(parts) - 1))
             _guarded(s, descs[-1].addr, part)
     c = SgChain("S2MM", DESC_BASE["S2MM"] + 0x10000, descs)
     s.sg_descriptors(c, range(len(descs)))

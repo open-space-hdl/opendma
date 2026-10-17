@@ -260,20 +260,37 @@ that take longer to transfer than a fetch follow each other without a gap on the
 buffers runs at the descriptor rate.
 
 An S2MM packet over several buffers waits at every buffer boundary inside the packet: the channel takes the next
-buffer only after the data of the full one is written and its write responses have arrived. Measured in the core
-bench (TC-CO-20) with packets of 16 KB, a stream without gaps and a memory that is always ready apart from the write
-response latency:
+buffer only after the data of the full one is written and its write responses have arrived, and the stream input
+pauses until then. At the boundary the write master runs empty, and it waits until the first chunk of the next
+buffer is complete and has reached it. Stages from the last write beat of the full buffer, measured in the core bench
+(TC-CO-20) with a write response latency of L clock cycles:
 
-| Memory / stream width, burst beats | Write response latency | Pause per buffer boundary | Beats per clock cycle, 1 KB buffers | Beats per clock cycle, 4 KB buffers |
-| --- | --- | --- | --- | --- |
-| 32 / 32 bits, 16 beats (the defaults) | 0 | 69 clock cycles | 0.57 | 0.65 |
-| 32 / 32 bits, 16 beats (the defaults) | 50 | 119 clock cycles | 0.51 | 0.63 |
-| 512 / 256 bits, 4 beats | 0 | 21 clock cycles | 0.32 | 0.38 |
-| 512 / 256 bits, 4 beats | 50 | 71 clock cycles | 0.22 | 0.34 |
+| Stage | 32 / 32 bits, 16 beats (the defaults) | 512 / 256 bits, 4 beats |
+| --- | --- | --- |
+| Write response of the last burst | 1 + L | 1 + L |
+| Result accepted by the Scatter/Gather engine | 4 + L | 4 + L |
+| Next command accepted (the engine holds the next descriptor; its status write and the next fetch run meanwhile) | 5 + L | 5 + L |
+| First stream beat of the next buffer taken by the split | 6 + L | 6 + L |
+| First chunk of the next buffer complete | 22 + L | 14 + L |
+| Its write command at the write master | 25 + L | 17 + L |
+| First write beat (the master starts a burst when all its data is buffered) | 51 + L | 37 + L |
 
-The pause grows by one clock cycle per clock cycle of write response latency. Packets that fit into one buffer do not
-pause; buffers of several KB keep the loss small. The MM2S join of several buffers costs at most one clock cycle per
-packet.
+Between two bursts inside a buffer the master pauses for 7 (defaults) or 11 (512 / 256 bits) clock cycles, so a
+buffer boundary costs 43 + L and 25 + L clock cycles. Measured with packets of 16 KB, a stream without gaps and a
+memory that is always ready apart from the write response latency:
+
+| Memory / stream width, burst beats | Write response latency | Pause per buffer boundary | Beats per clock cycle, 1 KB buffers | Beats per clock cycle, 4 KB buffers | Beats per clock cycle, 4 KB buffers at unaligned addresses |
+| --- | --- | --- | --- | --- | --- |
+| 32 / 32 bits, 16 beats (the defaults) | 0 | 43 clock cycles | 0.63 | 0.69 | 0.59 |
+| 32 / 32 bits, 16 beats (the defaults) | 50 | 93 clock cycles | 0.56 | 0.67 | 0.57 |
+| 512 / 256 bits, 4 beats | 0 | 25 clock cycles | 0.36 | 0.46 | 0.38 |
+| 512 / 256 bits, 4 beats | 50 | 75 clock cycles | 0.23 | 0.39 | 0.34 |
+
+Packets that fit into one buffer do not pause; buffers of several KB keep the loss small. A buffer address that is
+not a multiple of the memory word costs time in both modes: a chunk then covers one memory word more than a burst
+holds and is written as two bursts. That adds 62 clock cycles per KB with the defaults, 14 with 512 / 256 bits and
+240 with 64 / 8 bits and 2-beat bursts (TC-CO-20). Buffers at multiples of the burst size avoid it. The MM2S join of
+several buffers costs at most one clock cycle per packet.
 
 ## 8. Integration constraints
 

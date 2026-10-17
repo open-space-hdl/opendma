@@ -147,7 +147,7 @@ bytes before and after every S2MM packet, so that a write outside the packet fai
 | `sg_reset_load` | Chains of four descriptors per channel started, without stream packets, for the soft reset under load | TC-CO-17 |
 | `sg_multi_buffer` | Per channel a chain of 12 descriptors forming packets over several buffers at random unaligned addresses; an MM2S packet halted after its first buffer; an S2MM packet with a write error in its first buffer, the next packet directly after it, a soft reset after the end of the discarded packet and the next packet in a new chain | TC-CO-18 |
 | `sg_empty` | An S2MM packet without bytes into one descriptor (interpretation SGI-13 of `odma_sg`) | TC-CO-18 |
-| `keyhole` | Keyhole transfers at the FIFO windows of the core bench: S2MM in DR mode, an MM2S transfer with `Keyhole` set in DR mode, chains of both channels in SG mode | TC-CO-19 |
+| `keyhole` | Keyhole transfers at the FIFO windows of the core bench: S2MM in DR mode, an MM2S transfer with `Keyhole` set in DR mode, chains of both channels in SG mode; the S2MM expectations include the unwritten bytes around the window word, around the backing range and after each transfer in its last word | TC-CO-19 |
 | `sg_boundary_rate` | S2MM packets of 16 KB over buffers of a given length, each buffer length in its own address region | TC-CO-20 |
 
 `run.py` calls the model in a VUnit `pre_config` of each core test configuration, which writes the files into the

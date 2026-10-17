@@ -904,6 +904,8 @@ def sg_reset_load(addr_width=32, length_width=14, channels=("MM2S", "S2MM"), see
 # word of the backing range
 KEYHOLE_WIN = {"MM2S": 0x0070_0000, "S2MM": 0x0074_0000}
 KEYHOLE_BACK = {"MM2S": 0x0078_0000, "S2MM": 0x007C_0000}
+# Unwritten bytes checked around the S2MM keyhole window and its backing range
+KEYHOLE_GUARD = 16
 
 # Status flags of a descriptor (Tables 31 and 38)
 ST_DMA_INT_ERR = 1 << 28
@@ -1084,7 +1086,17 @@ def keyhole(addr_width=32, length_width=14, channels=("MM2S", "S2MM"), mem_bytes
             else:
                 s.expected.append((KEYHOLE_BACK[ch] + off, data))
             descs.append((addr, n, data))
+            if ch == "S2MM" and n % w:
+                # The bytes of the last word after the transfer stay unwritten (strobes of the last beat)
+                s.expected.append((KEYHOLE_BACK[ch] + off + n, bytes(w - n % w)))
             off += -(-n // w) * w
+        if ch == "S2MM":
+            # Nothing else is written: the window word and the bytes around it (every beat goes to the backing
+            # range), and the bytes before and after the backing range
+            g = KEYHOLE_GUARD
+            s.expected.append((KEYHOLE_WIN[ch] - g, bytes(2 * g + w)))
+            s.expected.append((KEYHOLE_BACK[ch] - g, bytes(g)))
+            s.expected.append((KEYHOLE_BACK[ch] + off, bytes(g)))
         if not sg:
             s.comment("S2MM: keyhole transfers in DR mode")
             s.start("S2MM", keyhole=True)

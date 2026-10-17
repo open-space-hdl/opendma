@@ -7,7 +7,9 @@ streams, the interrupt and the reset outputs. The register accesses, interrupt w
 tests come from the model of the programming sequences (`tb/model/odma_model.py`, written from \[PG021\] chapter 4
 independently of the RTL): the `pre_config` of each test writes the sequence, the memory image of the source buffers
 and the expected memory of the destination buffers for the generics of its configuration into the output path of
-the test, and the sequence player of `tb/odma_tb_seq_pkg.vhd` executes them. The data of the scenarios is random
+the test, and the sequence player of `tb/odma_tb_seq_pkg.vhd` executes them. In Scatter/Gather Mode the model also
+writes the memory image of the descriptor chains and the expected descriptors with their status words; the bench
+loads and checks them in the memory model of the descriptor port. The data of the scenarios is random
 without a period (`random_bytes` of the model), so that a byte at a wrong address or in a wrong lane differs from the
 expected one. The expected memory contains, next to every S2MM packet, 16 bytes before and after it that must stay
 unwritten, so that a write outside the packet fails the comparison. Tests observe only the ports of the core and its
@@ -17,7 +19,7 @@ registers; the expected values come from \[PG021\], the specifications and the m
 
 | Testbench | Harness | DUT and environment |
 | --- | --- | --- |
-| `odma_core_tb` | `odma_core_th` | `odma_core`; the AXI4-Lite VVC on the register port; AXI memory model instance 0 (`MemRd_c`) on the MM2S read port, instance 1 (`MemWr_c`) on the S2MM write port, each with the maximum burst of its channel; the AXI4-Stream VVCs on the streams (instance 0 sends on the S2MM stream, instance 1 receives the MM2S stream); a second S2MM stream peer that sends one packet and abandons it when `S2mm_RstOut` rises, as a peer connected to the reset output does; monitors of the AXI4 bursts and responses, of read and write beats in the same clock cycle, of S2MM beats taken while `S2mm_RstOut` is high, and of the idle values of a channel that is not included (in every clock cycle after the reset) |
+| `odma_core_tb` | `odma_core_th` | `odma_core`; the AXI4-Lite VVC on the register port; AXI memory model instance 0 (`MemRd_c`) on the MM2S read port, instance 1 (`MemWr_c`) on the S2MM write port, each with the maximum burst of its channel; the AXI4-Stream VVCs on the streams (instance 0 sends on the S2MM stream, instance 1 receives the MM2S stream); a second S2MM stream peer that sends one packet and abandons it when `S2mm_RstOut` rises, as a peer connected to the reset output does; AXI memory model instance 2 (`MemSg_c`) on the descriptor port, bursts of at most 16 beats; monitors of the AXI4 bursts and responses of all three memory ports, of read and write beats in the same clock cycle, of S2MM beats taken while `S2mm_RstOut` is high, of the idle values of a channel that is not included and, in DR mode, of the idle descriptor port (in every clock cycle after the reset) |
 
 | VUnit configuration | Generics (others at their defaults) | Purpose |
 | --- | --- | --- |
@@ -28,6 +30,11 @@ registers; the expected values come from \[PG021\], the specifications and the m
 | `no_ext` | `ExtRegs_g` false | Core without the extension window |
 | `mm2s_only` | `IncludeS2mm_g` false | Configuration without the S2MM channel |
 | `s2mm_only` | `IncludeMm2s_g` false | Configuration without the MM2S channel |
+| `sg` | `IncludeSg_g` true | Scatter/Gather Mode in the default configuration |
+| `sg_aw64` | `IncludeSg_g` true, the other generics of `aw64` | Descriptors and buffers above 32 address bits, wide memories and streams |
+| `sg_lw8` | `IncludeSg_g` true, the other generics of `lw8` | The shortest length width and 8-bit streams in Scatter/Gather Mode |
+| `sg_mm2s_only` | `IncludeSg_g` true, `IncludeS2mm_g` false | Engine with the MM2S channel only |
+| `sg_s2mm_only` | `IncludeSg_g` true, `IncludeMm2s_g` false | Engine with the S2MM channel only |
 
 The data buffers hold four bursts. Stream widths stay at or below 256 bits, the limit of the AXI4-Stream VVC; the unit
 benches of the channels simulate the wider streams and every width pair. Each test runs in the configurations its
@@ -37,13 +44,19 @@ function needs:
 | --- | --- |
 | `test_dr_reference` | `aw40`, `aw64` (addresses above 32 bits) |
 | `test_dr_random`, `test_concurrent`, `test_errors`, `test_soft_reset_load` | `default`, `aw40`, `aw64`, `lw8`, `no_ext` |
-| `test_ecc_index`, `test_configuration` | all |
+| `test_ecc_index` | the seven DR configurations |
+| `test_configuration` | all |
 | `test_ecc_data` | `default`, `aw40`, `aw64`, `mm2s_only`, `s2mm_only` (extension window and streams of at least 16 bits, so that the length consequence keeps the number of beats) |
 | `test_excluded_channel` | `mm2s_only`, `s2mm_only` |
+| `test_sg_reference`, `test_sg_tail_moves`, `test_sg_cyclic`, `test_sg_errors`, `test_sg_delay`, `test_sg_soft_reset`, `test_sg_ecc_index` | the five SG configurations |
 
 The memory model responds SLVERR to reads from 0x4_0000 to 0x4_0FFF and to writes from 0x5_0000 to 0x5_0FFF in
-`test_errors` (the regions `ERR_READ_BASE` and `ERR_WRITE_BASE` of the model). Clock 100 MHz. Simulators: GHDL;
-QuestaSim with and without code coverage in the batch of phase a.
+`test_errors` (the regions `ERR_READ_BASE` and `ERR_WRITE_BASE` of the model), and the descriptor memory to reads
+from 0x6_0000 to 0x6_0FFF and to writes from 0x7_0000 to 0x7_0FFF in `test_sg_errors` (`ERR_DESC_READ_BASE` and
+`ERR_DESC_WRITE_BASE`). The descriptor chains of the model are rings at 64-byte aligned addresses 0x1C0 apart, so
+that they cross 4 KB boundaries; their buffers are unaligned, some across a 4 KB boundary, and each holds one packet
+(MM2S descriptors with `TXSOF` and `TXEOF`, S2MM packets of at most the buffer length). Clock 100 MHz. Simulators:
+GHDL; QuestaSim with and without code coverage in the batches of phases a and b.
 
 ## 3. Test cases
 
@@ -56,9 +69,26 @@ QuestaSim with and without code coverage in the batch of phase a.
 | `test_soft_reset_load` (TC-CO-05) | Both memory models with a latency of 100 cycles and 50 % stall; an MM2S transfer whose stream peer takes nothing and an S2MM packet of three data buffers from the resettable stream peer; with read and write bursts outstanding and the peer in the middle of its packet, a soft reset: both reset outputs high during the reset, every accepted burst completed or answered, no burst after the reset, no S2MM beat taken while `S2mm_RstOut` is high, the peer abandoned its packet, `DMACR` and `DMASR` of both channels at their reset values; then scenario `after_reset` (a reset and four random transfers) without stall: no beat of the interrupted transfers appears | CO-RS-01 |
 | `test_ecc_index` (TC-CO-06) | For each buffer index 0 to 6: counters and flags cleared, `ECC_ENABLE` = SEC, a single error injected at the index, one transfer of 256 bytes (at most the longest length) through the channel of the index; the SEC counter of the index counts, the DED counter stays 0, every other counter stays 0, `ECC_STATUS` shows the SEC flag and `Ecc_Irq` rises; index 6 (no buffer in DR mode), indices of an excluded channel and the configuration without the extension window count nothing and keep `Ecc_Irq` low; the transfer data is correct. Then for each index 0 to 5 of an included channel: a single error injected, a soft reset, a transfer through the channel: no counter counts (the reset cancelled the pending injection) | CO-FT-01, CO-RS-01 |
 | `test_ecc_data` (TC-CO-10) | Error injections in data mode (`ECC_INJECT.Data`), a single and then a double error into every buffer of the included channels, after a soft reset each. MM2S: the error is injected before a transfer of 254 bytes from an aligned buffer, so it goes into its first read data word (index 0), its entry (index 4) or its response (index 5). S2MM: packet A of 62 bytes waits in the data buffer before the error is injected and its transfer programmed, packet B of 62 bytes follows, both into buffers of 128 bytes; the error goes into the write data of A (index 3), the first data word of B (index 1) or the chunk entry of B (index 2). A single error leaves every packet, length and result unchanged and counts one SEC at its index. A double error counts one DED at its index and has the consequence of its buffer: index 0 byte 0 of the MM2S packet with bits 0 and 1 inverted; index 4 a packet of 253 bytes; index 5 a complete packet and the transfer halted with `DMADecErr`; index 3 byte 0 of packet A inverted in bits 0 and 1; index 1 byte 0 of packet B inverted; index 2 packet B of 61 bytes in memory and in `S2MM_LENGTH`. The other counters stay 0 | CO-FT-01, CO-FT-02 |
-| `test_configuration` (TC-CO-07) | `DMACR` and `DMASR` reset values of both channels (0 for an excluded channel); `EXT_ID`, `EXT_CONFIG`, `EXT_MM2S_CONFIG`, `EXT_S2MM_CONFIG` and `ECC_INFO` against the generics (0 without the extension window); the address registers and the MSB registers hold `AddrWidth_g` bits, the length registers `LengthWidth_g` bits; a length written while the channel is halted starts no memory access | CO-CF-01, CO-FT-01 |
+| `test_configuration` (TC-CO-07) | `DMACR` and `DMASR` reset values of both channels (0 for an excluded channel, `SGIncld` with `IncludeSg_g`); `EXT_ID`, `EXT_CONFIG`, `EXT_MM2S_CONFIG`, `EXT_S2MM_CONFIG` and `ECC_INFO` against the generics (0 without the extension window). DR mode: the address registers and the MSB registers hold `AddrWidth_g` bits, the length registers `LengthWidth_g` bits; a length written while the channel is halted starts no memory access. SG mode: `CURDESC`, `TAILDESC` and their MSB registers hold `AddrWidth_g` bits without bits 5 to 0, the length registers read 0; the pointer writes of a halted channel start no access on any memory port. In DR mode the monitor of the harness checks the idle descriptor port in every test | CO-CF-01, CO-FT-01, CO-SG-01 |
 | `test_excluded_channel` (TC-CO-08) | The registers of the excluded channel read 0 after writes (start, address, length) and start nothing; the scenario `single_channel` (six random transfers, a halt and a restart) runs on the included channel; no access of the excluded channel; the idle monitor of the harness checks every port of the excluded channel in every clock cycle | CO-CF-03 |
-| `lint/synth_check.py` (TC-CO-09) | GHDL synthesis of the core in its boundary configurations (address and length widths 32/8 and 64/26, every memory width with an 8-bit stream and the shortest burst, equal widths 32 and 1024 with the longest burst, different channel configurations, buffers of two bursts, each channel excluded, no extension window) without errors and inferred latches; each inconsistent configuration (no channel, `IncludeSg_g`, `StsCntrlStrm_g`, `UseRxLength_g`, `MicroDma_g`, a memory width that is not a power of two, a stream wider than the memory, a burst size that is not a power of two, a buffer of less than two bursts) stops the elaboration with the message of its check | CO-CF-01, CO-CF-02 |
+| `lint/synth_check.py` (TC-CO-09) | GHDL synthesis of the core in its boundary configurations (address and length widths 32/8 and 64/26, every memory width with an 8-bit stream and the shortest burst, equal widths 32 and 1024 with the longest burst, different channel configurations, buffers of two bursts, each channel excluded, no extension window; in SG mode the default configuration, address and length widths 32/8 and 64/26 and each channel excluded) without errors and inferred latches; each inconsistent configuration (no channel, `StsCntrlStrm_g`, `UseRxLength_g`, `MicroDma_g`, a memory width that is not a power of two, a stream wider than the memory, a burst size that is not a power of two, a buffer of less than two bursts) stops the elaboration with the message of its check | CO-CF-01, CO-CF-02, CO-SG-01 |
+| `test_sg_reference` (TC-CO-11) | Scenario `sg_reference`: soft reset, then per channel the Scatter/Gather programming sequence (\[PG021\] chapter 4: `CURDESC`, `DMACR` with `RS`, `IOC_IrqEn`, `Err_IrqEn` and the threshold 1, `Halted` polled to 0, `TAILDESC`; above 32 address bits the MSB words, the upper word last) for a chain of four descriptors above 32 address bits when the address width allows; MM2S sends every buffer as one packet, S2MM writes every packet into its buffer with 16 unwritten bytes before and after it; afterwards `Idle`, `IOC_Irq` set and cleared by writing one, the interrupt output low, `CURDESC` at the tail; the status of every descriptor in the descriptor memory (transferred bytes, `RXSOF` and `RXEOF` of S2MM, `Cmplt`), no other descriptor word changed | CO-SG-02, CO-SG-03 |
+| `test_sg_tail_moves` (TC-CO-12) | Scenario `sg_tail_moves`: chains of 12 descriptors per channel, both channels started with the threshold 2; the tail pointer of each channel moved by one to four descriptors at a time, while the engine still works or, after about half of the rounds, once both engines have reached the tail (`Idle` polled); MM2S and S2MM memory with 20 % stall, the descriptor memory with 30 % stall and a latency of 6 cycles; every packet in order and in memory, every status written, `CURDESC` at the last descriptor | CO-SG-04, CO-SG-02, CO-SG-03 |
+| `test_sg_cyclic` (TC-CO-13) | Scenario `sg_cyclic`: rings of three descriptors per channel with `CyclicBD`, the tail pointer at the second descriptor; two laps per channel (the S2MM packets of the first lap with other bytes of the same lengths, so that the buffers hold those of the last lap), the status of every descriptor after the last lap; the S2MM channel halted after its last packet (`CURDESC` at the first descriptor, which was not started, `odma_sg` SGI-10), the MM2S channel, which is sending its third lap, stopped by a soft reset | CO-SG-05 |
+| `test_sg_errors` (TC-CO-14) | Scenario `sg_errors`, per channel after a soft reset each: a descriptor fetch with SLVERR (`SGSlvErr`; MM2S the second descriptor, after the packet of the first, which sets `IOC_Irq`; S2MM the first descriptor), a stale descriptor (`SGIntErr`, the same positions), a buffer length of 0 (`DMAIntErr` in `DMASR` and bit 28 in the status, `Cmplt` 0) and a status write with SLVERR (`SGSlvErr`, no `IOC_Irq`); each with `Err_Irq`, the interrupt output, `Halted`, `CURDESC` at the descriptor of the error and the write-one-to-clear of `Err_Irq`; the descriptor memory unchanged except the statuses written; a soft reset at the end and the flags cleared | CO-SG-06 |
+| `test_sg_delay` (TC-CO-16) | Scenarios `sg_delay` and `sg_delay_overlap`, threshold 2, `IRQDelay` 4 (500 clock cycles) with `Dly_IrqEn`, per channel. The stream VVCs pause every packet after its first beat. With a pause of 1500 clock cycles: one packet, then `Dly_Irq` and the interrupt output when the timer expires, no `IOC_Irq`; a second packet that completes, the threshold counter at 1 (`IRQThresholdSts`), then a third packet that starts after this completion and pauses longer than the delay: `IOC_Irq` at its completion and no `Dly_Irq`, also 1000 clock cycles later. With a pause of 400 clock cycles: two packets back to back, the first completes during the pause of the second, which then runs for at least 250 beats: `Dly_Irq` is set, `IOC_Irq` is not, the threshold counter reads 1 | CO-SG-07 |
+| `test_sg_soft_reset` (TC-CO-17) | All three memories with a latency of 100 cycles and 50 % stall; chains of four descriptors per channel started, the MM2S stream peer takes nothing, the resettable peer of the harness sends one S2MM packet; a soft reset when a descriptor access is outstanding, then, after a restart, a soft reset when data bursts are outstanding (S2MM writes; MM2S reads without S2MM) and no descriptor access: after each, every accepted burst of the three ports completed or answered, no burst after the reset, no S2MM beat taken while `S2mm_RstOut` is high, the peer has ended its packet, `DMACR` and `DMASR` at their reset values; then scenario `sg_reference` without stall | CO-SG-08 |
+| `test_sg_ecc_index` (TC-CO-15) | For each index 6 to 9: soft reset, counters and flags cleared, `ECC_ENABLE` = SEC, a single error injected at the index, scenario `sg_reference` without its soft reset (which would cancel the injection); the SEC counter of the index counts one when its buffer exists (6 with MM2S, 7 with S2MM, 8 and 9 always), every other counter stays 0; the chains are transferred correctly | CO-FT-01 |
+
+### 3.1 Test cases waiting for Open Logic
+
+The test cases below take effect with the release of Open Logic that provides the stream join and split (gap G10)
+and the FIXED bursts (gap G1).
+
+| Test ID | Description | Requirements |
+| --- | --- | --- |
+| `test_sg_multi_buffer` (TC-CO-18) | MM2S packets of two to five descriptors, each buffer at a random unaligned address and of a random length, sent as one packet each; S2MM packets longer than one buffer written over several buffers with `RXSOF` in the first and `RXEOF` in the last status | CO-SG-09, CO-SG-10 |
+| `test_keyhole` (TC-CO-19) | Transfers with `DMACR.Keyhole` in DR mode and in SG mode: FIXED bursts of at most 16 beats at the buffer address, the data on the streams as for incrementing transfers | CO-SG-11 |
 
 ## 4. Requirement coverage
 
@@ -74,8 +104,17 @@ QuestaSim with and without code coverage in the batch of phase a.
 | CO-SQ-04 | TC-CO-02 |
 | CO-ER-01, CO-ER-02 | TC-CO-04 |
 | CO-RS-01 | TC-CO-05, TC-CO-06 |
-| CO-FT-01 | TC-CO-06, TC-CO-07, TC-CO-10 |
+| CO-FT-01 | TC-CO-06, TC-CO-07, TC-CO-10, TC-CO-15 |
 | CO-FT-02 | TC-CO-10 |
+| CO-SG-01 | TC-CO-07, TC-CO-09 |
+| CO-SG-02, CO-SG-03 | TC-CO-11, TC-CO-12 |
+| CO-SG-04 | TC-CO-12 |
+| CO-SG-05 | TC-CO-13 |
+| CO-SG-06 | TC-CO-14 |
+| CO-SG-07 | TC-CO-16 |
+| CO-SG-08 | TC-CO-17 |
+| CO-SG-09, CO-SG-10 | TC-CO-18 (waiting for Open Logic) |
+| CO-SG-11 | TC-CO-19 (waiting for Open Logic) |
 
 ## 5. Negative tests
 
@@ -87,4 +126,8 @@ QuestaSim with and without code coverage in the batch of phase a.
 | Single and double errors on data bits of every FT buffer: correction of a data bit, consequence of a double error | TC-CO-10 |
 | Writes to the registers of an excluded channel; idle values of its ports | TC-CO-08 |
 | Inconsistent configurations | TC-CO-09 |
-| Writes outside an S2MM packet (unwritten bytes around every packet in the expected memory) | TC-CO-02 to TC-CO-06, TC-CO-08 |
+| Writes outside an S2MM packet (unwritten bytes around every packet in the expected memory) | TC-CO-02 to TC-CO-06, TC-CO-08, TC-CO-11, TC-CO-12, TC-CO-16 |
+| Failed descriptor fetch and status write, stale descriptor, buffer length 0 | TC-CO-14 |
+| Soft reset with descriptor accesses and with data bursts outstanding in Scatter/Gather Mode | TC-CO-17 |
+| Error injection into each buffer of the engine | TC-CO-15 |
+| Accesses of the descriptor port in DR mode (idle monitor), writes of descriptor words other than the status | TC-CO-07 and every DR test; TC-CO-11 to TC-CO-14 |

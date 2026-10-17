@@ -8,7 +8,7 @@
 ---------------------------------------------------------------------------------------------------
 -- Test harness of odma_core: clock, reset, DUT, AXI4-Lite VVC on the register port, one AXI memory
 -- model on each memory port (instance MemRd_c on the MM2S read port, MemWr_c on the S2MM write
--- port), AXI4-Stream VVCs on the streams (instance 0 transmits on the S2MM stream, instance 1
+-- port, MemSg_c on the descriptor port), AXI4-Stream VVCs on the streams (instance 0 transmits on the S2MM stream, instance 1
 -- receives the MM2S stream), a second S2MM stream peer that sends one packet on request and
 -- abandons it when S2mm_RstOut rises, monitors of the AXI4 transactions, of the S2MM beats during a
 -- soft reset and of the idle values of a channel that is not included.
@@ -50,7 +50,8 @@ entity odma_core_th is
         S2mmBurstBeats_g  : positive := 16;
         Mm2sBufferBeats_g : positive := 64;
         S2mmBufferBeats_g : positive := 64;
-        ExtRegs_g         : boolean  := true
+        ExtRegs_g         : boolean  := true;
+        IncludeSg_g       : boolean  := false
     );
     port (
         Mm2sIrq    : out   std_logic;
@@ -148,7 +149,34 @@ architecture sim of odma_core_th is
 
     signal Mm2sIrq_i : std_logic;
     signal S2mmIrq_i : std_logic;
-    signal Obs_i     : CoreObs_r := (0, 0, 0, 0, false, 0, false);
+    signal Obs_i     : CoreObs_r := (0, 0, 0, 0, false, 0, false, 0, 0, 0, 0);
+
+    -- Descriptor port
+    signal Sg_ArAddr  : std_logic_vector(AddrWidth_g - 1 downto 0);
+    signal Sg_ArLen   : std_logic_vector(7 downto 0);
+    signal Sg_ArSize  : std_logic_vector(2 downto 0);
+    signal Sg_ArBurst : std_logic_vector(1 downto 0);
+    signal Sg_ArValid : std_logic;
+    signal Sg_ArReady : std_logic;
+    signal Sg_RData   : std_logic_vector(31 downto 0);
+    signal Sg_RResp   : std_logic_vector(1 downto 0);
+    signal Sg_RLast   : std_logic;
+    signal Sg_RValid  : std_logic;
+    signal Sg_RReady  : std_logic;
+    signal Sg_AwAddr  : std_logic_vector(AddrWidth_g - 1 downto 0);
+    signal Sg_AwLen   : std_logic_vector(7 downto 0);
+    signal Sg_AwSize  : std_logic_vector(2 downto 0);
+    signal Sg_AwBurst : std_logic_vector(1 downto 0);
+    signal Sg_AwValid : std_logic;
+    signal Sg_AwReady : std_logic;
+    signal Sg_WData   : std_logic_vector(31 downto 0);
+    signal Sg_WStrb   : std_logic_vector(3 downto 0);
+    signal Sg_WLast   : std_logic;
+    signal Sg_WValid  : std_logic;
+    signal Sg_WReady  : std_logic;
+    signal Sg_BResp   : std_logic_vector(1 downto 0);
+    signal Sg_BValid  : std_logic;
+    signal Sg_BReady  : std_logic;
 
 begin
 
@@ -162,6 +190,7 @@ begin
     -----------------------------------------------------------------------------------------------
     i_dut : entity work.odma_core
         generic map (
+            IncludeSg_g       => IncludeSg_g,
             IncludeMm2s_g     => IncludeMm2s_g,
             IncludeS2mm_g     => IncludeS2mm_g,
             LengthWidth_g     => LengthWidth_g,
@@ -237,6 +266,31 @@ begin
             M_AxiS2mm_BResp   => Wr_BResp,
             M_AxiS2mm_BValid  => Wr_BValid,
             M_AxiS2mm_BReady  => Wr_BReady,
+            M_AxiSg_ArAddr    => Sg_ArAddr,
+            M_AxiSg_ArLen     => Sg_ArLen,
+            M_AxiSg_ArSize    => Sg_ArSize,
+            M_AxiSg_ArBurst   => Sg_ArBurst,
+            M_AxiSg_ArValid   => Sg_ArValid,
+            M_AxiSg_ArReady   => Sg_ArReady,
+            M_AxiSg_RData     => Sg_RData,
+            M_AxiSg_RResp     => Sg_RResp,
+            M_AxiSg_RLast     => Sg_RLast,
+            M_AxiSg_RValid    => Sg_RValid,
+            M_AxiSg_RReady    => Sg_RReady,
+            M_AxiSg_AwAddr    => Sg_AwAddr,
+            M_AxiSg_AwLen     => Sg_AwLen,
+            M_AxiSg_AwSize    => Sg_AwSize,
+            M_AxiSg_AwBurst   => Sg_AwBurst,
+            M_AxiSg_AwValid   => Sg_AwValid,
+            M_AxiSg_AwReady   => Sg_AwReady,
+            M_AxiSg_WData     => Sg_WData,
+            M_AxiSg_WStrb     => Sg_WStrb,
+            M_AxiSg_WLast     => Sg_WLast,
+            M_AxiSg_WValid    => Sg_WValid,
+            M_AxiSg_WReady    => Sg_WReady,
+            M_AxiSg_BResp     => Sg_BResp,
+            M_AxiSg_BValid    => Sg_BValid,
+            M_AxiSg_BReady    => Sg_BReady,
             Mm2s_Irq          => Mm2sIrq_i,
             S2mm_Irq          => S2mmIrq_i,
             Ecc_Irq           => EccIrq,
@@ -353,6 +407,43 @@ begin
             RReady  => '1'
         );
 
+    -- Descriptors of the Scatter/Gather engine in instance MemSg_c
+    i_ram_sg : entity work.odma_tb_axi_ram
+        generic map (
+            Index_g     => MemSg_c,
+            AddrWidth_g => AddrWidth_g,
+            DataWidth_g => 32
+        )
+        port map (
+            Clk     => Clk,
+            Rst     => Rst,
+            AwAddr  => Sg_AwAddr,
+            AwLen   => Sg_AwLen,
+            AwSize  => Sg_AwSize,
+            AwBurst => Sg_AwBurst,
+            AwValid => Sg_AwValid,
+            AwReady => Sg_AwReady,
+            WData   => Sg_WData,
+            WStrb   => Sg_WStrb,
+            WLast   => Sg_WLast,
+            WValid  => Sg_WValid,
+            WReady  => Sg_WReady,
+            BResp   => Sg_BResp,
+            BValid  => Sg_BValid,
+            BReady  => Sg_BReady,
+            ArAddr  => Sg_ArAddr,
+            ArLen   => Sg_ArLen,
+            ArSize  => Sg_ArSize,
+            ArBurst => Sg_ArBurst,
+            ArValid => Sg_ArValid,
+            ArReady => Sg_ArReady,
+            RData   => Sg_RData,
+            RResp   => Sg_RResp,
+            RLast   => Sg_RLast,
+            RValid  => Sg_RValid,
+            RReady  => Sg_RReady
+        );
+
     -----------------------------------------------------------------------------------------------
     -- Streams: AXI4-Stream VVCs
     -----------------------------------------------------------------------------------------------
@@ -453,6 +544,18 @@ begin
             if S2mm_Valid = '1' and S2mm_Ready = '1' and S2mmRstOut_i = '1' then
                 Obs_i.RstBeats <= Obs_i.RstBeats + 1;
             end if;
+            if Sg_ArValid = '1' and Sg_ArReady = '1' then
+                Obs_i.SgFetch <= Obs_i.SgFetch + 1;
+            end if;
+            if Sg_AwValid = '1' and Sg_AwReady = '1' then
+                Obs_i.SgUpdate <= Obs_i.SgUpdate + 1;
+            end if;
+            if Sg_RValid = '1' and Sg_RReady = '1' and Sg_RLast = '1' then
+                Obs_i.SgRDone <= Obs_i.SgRDone + 1;
+            end if;
+            if Sg_BValid = '1' and Sg_BReady = '1' then
+                Obs_i.SgBDone <= Obs_i.SgBDone + 1;
+            end if;
         end if;
     end process;
 
@@ -465,8 +568,17 @@ begin
     p_idle : process (Clk) is
         variable Mm2sReported_v : boolean := false;
         variable S2mmReported_v : boolean := false;
+        variable SgReported_v   : boolean := false;
     begin
         if rising_edge(Clk) then
+            -- Direct Register Mode: the descriptor port keeps its idle values (CO-SG-01)
+            if not IncludeSg_g and not SgReported_v and Rst = '0' then
+                if Sg_ArValid /= '0' or Sg_RReady /= '0' or Sg_AwValid /= '0' or Sg_WValid /= '0' or
+                   Sg_BReady /= '0' then
+                    alert(ERROR, "the descriptor port left its idle values in Direct Register Mode", "odma_core_th");
+                    SgReported_v := true;
+                end if;
+            end if;
             if not IncludeMm2s_g and not Mm2sReported_v and Rst = '0' then
                 if Rd_ArValid /= '0' or Rd_RReady /= '0' or Mm2s_Valid /= '0' or Mm2sIrq_i /= '0' or
                    unsigned(Rd_ArAddr) /= 0 or Rd_ArLen /= x"00" or Rd_ArSize /= "000" or Rd_ArBurst /= "01" or

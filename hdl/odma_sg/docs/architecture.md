@@ -301,7 +301,7 @@ their own (the descriptor buffer, `Issued` and the `Update` stage hold the state
 
 ## 11. Integration
 
-The engine changes three neighbouring modules, each in its own work package:
+The engine is integrated with three neighbouring modules:
 
 - `odma_registers`: the requirements of its section "Requirements of phase b" (register map of Scatter/Gather Mode,
   `CURDESC` following `CurPtr` while the channel is not halted, `TailWr` per interpretation SGI-01, `Idle` from

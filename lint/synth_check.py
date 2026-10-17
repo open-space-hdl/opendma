@@ -48,9 +48,14 @@ def configs():
             ({"Mm2sBufferBeats_g": "32", "S2mmBufferBeats_g": "32"}, None)]
     # Channels and the extension window
     cfg += [({"IncludeMm2s_g": "false"}, None), ({"IncludeS2mm_g": "false"}, None), ({"ExtRegs_g": "false"}, None)]
+    # Scatter/Gather Mode: the ends of the address and length ranges, each single-channel build
+    cfg += [({"IncludeSg_g": "true"}, None),
+            ({"IncludeSg_g": "true", "AddrWidth_g": "32", "LengthWidth_g": "8"}, None),
+            ({"IncludeSg_g": "true", "AddrWidth_g": "64", "LengthWidth_g": "26"}, None),
+            ({"IncludeSg_g": "true", "IncludeMm2s_g": "false"}, None),
+            ({"IncludeSg_g": "true", "IncludeS2mm_g": "false"}, None)]
     # Inconsistent configurations
     cfg += [({"IncludeMm2s_g": "false", "IncludeS2mm_g": "false"}, "IncludeMm2s_g or IncludeS2mm_g must be true"),
-            ({"IncludeSg_g": "true"}, "IncludeSg_g must be false"),
             ({"StsCntrlStrm_g": "true"}, "StsCntrlStrm_g and UseRxLength_g must be false"),
             ({"UseRxLength_g": "true"}, "StsCntrlStrm_g and UseRxLength_g must be false"),
             ({"MicroDma_g": "true"}, "MicroDma_g must be false"),

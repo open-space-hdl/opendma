@@ -190,6 +190,11 @@ def pre_config(writer, generics):
 
 def configure(lib):
     tb = lib.test_bench("odma_core_tb")
+    # Every test of the testbench has an entry and every entry a test: a test without an entry would run once with
+    # the generic defaults only
+    names = {test.name for test in tb.get_tests()}
+    assert names == set(TESTS), (f"odma_core_tb: tests without an entry {sorted(names - set(TESTS))}, "
+                                 f"entries without a test {sorted(set(TESTS) - names)}")
     for name, (selected, writer) in TESTS.items():
         test = tb.test(name)
         for cfg, generics in CONFIGS.items():

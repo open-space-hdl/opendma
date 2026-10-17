@@ -30,6 +30,10 @@ SG_TESTS = ("test_join", "test_join_results", "test_join_halt")
 
 def configure(lib):
     tb = lib.test_bench("odma_mm2s_tb")
+    # Every test runs in the configurations below; the names of the lists must be tests and configurations
+    names = {test.name for test in tb.get_tests()}
+    assert set(SG_TESTS) <= names, f"odma_mm2s_tb: unknown tests {sorted(set(SG_TESTS) - names)}"
+    assert set(JOIN) <= set(CONFIGS), f"odma_mm2s_tb: unknown configurations {sorted(set(JOIN) - set(CONFIGS))}"
     for test in tb.get_tests():
         for name, (mem, stream, burst, addr, length) in CONFIGS.items():
             generics = {

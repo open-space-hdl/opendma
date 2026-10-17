@@ -32,7 +32,7 @@ Findings:
 | The counters of the window stopped the simulation with a range error right after a clock edge: the buffer output and the command handshake follow the edge one delta cycle after the registers, so one delta cycle combined the pop of the last cycle with the new count. At a clock edge the counts never leave 0 to 2 | The counters are modular 2-bit values and the queue of the issued commands is written without an index from a count, so no delta cycle produces an out-of-range value; no saturation logic |
 | A fetch could start in the clock cycle between the arrival of a stale descriptor and its check at the head of the buffer | A fetched stale descriptor stops further fetch requests at once (`StaleHold`, architecture section 4.3); TC-SG-07 checks that nothing behind it is fetched |
 | The cyclic test expected a status write for every command; at the halt that ends the ring, the S2MM model ends its transfer without data | Correct behaviour (interpretation SGI-10): the test expects every completed descriptor written |
-| TC-SG-18 ran only with the generic defaults of the testbench, outside the six configurations: the test list of the VUnit configuration did not name it | The list names every test; TC-SG-18 runs in all six configurations |
+| TC-SG-18 ran only with the generic defaults of the testbench, outside the six configurations: the test list of the VUnit configuration did not name it | The list names every test; TC-SG-18 runs in all six configurations. The VUnit configuration of every testbench checks that its lists of tests and configurations match the tests of the testbench, so that a test missing from a list stops the run |
 
 ## 3. Generic ranges
 

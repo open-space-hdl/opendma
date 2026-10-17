@@ -20,4 +20,8 @@ def write_reference(output_path):
 
 
 def configure(lib):
-    lib.test_bench("odma_pkg_tb").test("test_model_dr").set_pre_config(write_reference)
+    tb = lib.test_bench("odma_pkg_tb")
+    # Every test runs with the generic defaults; the model test is the only one with a pre_config
+    names = {test.name for test in tb.get_tests()}
+    assert "test_model_dr" in names, "odma_pkg_tb: no test_model_dr"
+    tb.test("test_model_dr").set_pre_config(write_reference)

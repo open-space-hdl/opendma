@@ -38,8 +38,21 @@ TESTS = {
 }
 
 
+# Tests that run with the generic defaults of the testbench only
+DEFAULT_ONLY = ("test_reset_values", "test_mm2s_transfer", "test_s2mm_transfer", "test_start_halt",
+                "test_halt_during_transfer", "test_soft_reset", "test_hard_reset", "test_errors", "test_length_rules",
+                "test_irq_clear_race", "test_ecc", "test_dr_keyhole")
+
+
 def configure(lib):
     tb = lib.test_bench("odma_registers_tb")
+    # Every test of the testbench is in exactly one of the lists and every name of the lists a test
+    tests = {test.name for test in tb.get_tests()}
+    listed = set(TESTS) | set(DEFAULT_ONLY)
+    twice = set(TESTS) & set(DEFAULT_ONLY)
+    assert not twice, f"odma_registers_tb: listed twice {sorted(twice)}"
+    assert tests == listed, (f"odma_registers_tb: tests not listed {sorted(tests - listed)}, "
+                             f"listed without a test {sorted(listed - tests)}")
     for test, names in TESTS.items():
         for name in names:
             tb.test(test).add_config(name=name, generics=CONFIGS[name])

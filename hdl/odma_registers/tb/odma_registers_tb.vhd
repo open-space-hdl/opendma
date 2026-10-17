@@ -1261,6 +1261,15 @@ begin
                         check_value(Obs.SgStartPtr(ch), cmdAddr(Exp_v, Data_v), ERROR, "pointer at the restart");
                         chk(CurLo_c(ch), Zero_c, "CURDESC reads the engine again");
                         sgHalt(ch);
+                        -- A restart without a CURDESC write starts from the last pointer of the engine
+                        Sg(ch).CurPtr <= x"0000000700003FC0";
+                        cycles(2);
+                        chk(CurLo_c(ch), x"00003FC0", "CURDESC after the halt, no write");
+                        wr(Dmacr_c(ch), Rs_c);
+                        cycles(3);
+                        check_value(Obs.SgStartPtr(ch), cmdAddr(x"00000007", x"00003FC0"), ERROR,
+                                    "restart without a CURDESC write: the pointer of the engine");
+                        sgHalt(ch);
                     end if;
                 end loop;
 

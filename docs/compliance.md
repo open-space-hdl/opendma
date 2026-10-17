@@ -23,11 +23,11 @@ the published interface are listed in section 6 of the architecture and in the m
 | `MAP.WSTRB` | Register Space, note on the write strobes | RG-1 | a | RG-IF-03 | TC-RG-02 | Verified |
 | `MAP.ACCESS` | Register Access Type Description (RO, R/W, R/WC) | RG-1 | a | RG-CR-04, RG-IR-03, RG-MAP-02 | TC-RG-02, TC-RG-04, TC-RG-09 | Verified |
 | `MM2S_DMACR.RS` | Tables 6, 16, bit 0 | RG-1 | a | CO-SG-12, CO-SQ-04, MM-HA-01, MM-SG-04, RG-CR-01, RG-CR-02, SG-HA-01 | TC-CO-02, TC-CO-18, TC-MM-11, TC-MM-18, TC-RG-03, TC-RG-07, TC-RG-08, TC-SG-11 | Verified |
-| `S2MM_DMACR.RS` | Tables 6, 16, bit 0 | RG-1 | a | CO-SG-12, CO-SQ-04, MM-SG-04, RG-CR-01, RG-CR-02, S2-HA-01, S2-HA-03, SG-HA-01 | TC-CO-02, TC-CO-18, TC-MM-18, TC-RG-03, TC-RG-07, TC-RG-08, TC-S2-09, TC-S2-11, TC-S2-19, TC-SG-11 | Verified |
+| `S2MM_DMACR.RS` | Tables 6, 16, bit 0 | RG-1 | a | CO-SG-12, CO-SQ-04, MM-SG-04, RG-CR-01, RG-CR-02, S2-HA-01, S2-HA-03, SG-HA-01 | TC-CO-02, TC-CO-18, TC-MM-18, TC-RG-03, TC-RG-07, TC-RG-08, TC-S2-09, TC-S2-11, TC-S2-19, TC-S2-21, TC-SG-11 | Verified |
 | `MM2S_DMACR.Reserved` | Tables 6, 16, bits 1, 11 to 5, 15 | RG-1 | a | RG-CR-03 | TC-RG-01 | Verified |
 | `S2MM_DMACR.Reserved` | Tables 6, 16, bits 1, 11 to 5, 15 | RG-1 | a | RG-CR-03 | TC-RG-01 | Verified |
 | `MM2S_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | CO-ER-02, CO-RS-01, CO-SG-08, MM-HA-02, RG-CR-06, RG-RS-02, RG-RS-04, SG-HA-02 | TC-CO-04, TC-CO-05, TC-CO-06, TC-CO-17, TC-MM-12, TC-MM-18, TC-RG-10, TC-SG-12 | Verified |
-| `S2MM_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | CO-ER-02, CO-RS-01, CO-SG-08, RG-CR-06, RG-RS-02, RG-RS-04, S2-HA-02, SG-HA-02 | TC-CO-04, TC-CO-05, TC-CO-06, TC-CO-17, TC-RG-10, TC-S2-09, TC-S2-12, TC-S2-19, TC-SG-12 | Verified |
+| `S2MM_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | CO-ER-02, CO-RS-01, CO-SG-08, RG-CR-06, RG-RS-02, RG-RS-04, S2-HA-02, SG-HA-02 | TC-CO-04, TC-CO-05, TC-CO-06, TC-CO-17, TC-RG-10, TC-S2-09, TC-S2-12, TC-S2-19, TC-S2-21, TC-SG-12 | Verified |
 | `MM2S_DMACR.Keyhole` | Tables 6, 16, bit 3 | MM-1 (MM2S), S2-2 (S2MM) | b | CO-SG-11, MM-SG-03, RG-SG-09, S2-SG-04, SG-TR-03 | TC-CO-19, TC-MM-19, TC-RG-23, TC-S2-20, TC-SG-14 | Verified |
 | `S2MM_DMACR.Keyhole` | Tables 6, 16, bit 3 | MM-1 (MM2S), S2-2 (S2MM) | b | CO-SG-11, MM-SG-03, RG-SG-09, RG-SG-11, S2-SG-04, SG-TR-03 | TC-CO-19, TC-MM-19, TC-RG-23, TC-RG-24, TC-S2-20, TC-SG-14 | Verified |
 | `MM2S_DMACR.CyclicBD` | Tables 6, 16, bit 4 | SG-1 | b | RG-SG-09, SG-CY-01 | TC-RG-23, TC-SG-07, TC-SG-13 | Verified |

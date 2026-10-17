@@ -123,6 +123,8 @@ architecture sim of odma_s2mm_th is
                              LastBeat  => 0,
                              Packets   => 0,
                              LastSent  => 0,
+                             RunBeats  => 0,
+                             RunPkts   => 0,
                              AwCount   => 0,
                              BCount    => 0,
                              AwBadAttr => 0,
@@ -367,6 +369,14 @@ begin
                 if S_Last = '1' then
                     O_v.Packets  := O_v.Packets + 1;
                     O_v.LastSent := Obs_i.Cycle;
+                end if;
+                -- The beats the channel took while it ran; after the fall of Run it takes only the rest of an
+                -- interrupted packet
+                if Run = '1' then
+                    O_v.RunBeats := O_v.RunBeats + 1;
+                    if S_Last = '1' then
+                        O_v.RunPkts := O_v.RunPkts + 1;
+                    end if;
                 end if;
             end if;
 

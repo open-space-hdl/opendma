@@ -74,6 +74,16 @@ architecture sim of odma_s2mm_tb is
 
     constant SplitLag_c : natural := splitLag;
 
+    -- Message prefix of one halt of the halt sweep (TC-S2-21)
+    function sweepMsg (
+        st : natural;
+        c  : natural;
+        k  : integer) return string is
+    begin
+        return "halt sweep, memory stall " & to_string(st) & ", length case " & to_string(c) & ", offset " &
+               to_string(k) & ": ";
+    end function;
+
     -- Longest FIXED burst: 16 beats, at most the bursts of the write master (S2-SG-04)
     constant FixedBeats_c : positive := minimum(16, minimum(BurstBeats_g, 4096 / MemBytes_c));
     -- Expected results of the split tests, checked while the commands are sent
@@ -191,6 +201,11 @@ begin
         variable ExpWr_v  : CmdNat_a;
         variable ExpSof_v : std_logic_vector(0 to MaxCmds_c - 1);
         variable ExpEof_v : std_logic_vector(0 to MaxCmds_c - 1);
+        variable Lp_v     : natural;
+        variable Beats0_v : natural;
+        variable Pkts0_v  : natural;
+        variable Start_v  : boolean;
+        variable End_v    : boolean;
 
         procedure cycles (n : natural) is
         begin
@@ -1207,6 +1222,131 @@ begin
                 check_value(Obs.AwCount, Cnt_v, ERROR, "no write after the drain");
                 check_value(Obs.ResCount, Res_v + 1, ERROR, "no result of the drained buffer");
                 check_value(Obs.BCount, Obs.AwCount, ERROR, "every write answered");
+
+            elsif run("test_halt_sweep") then
+                log(ID_LOG_HDR, "TC-S2-21 halt at every clock cycle around the end of a packet");
+                -- Buffer B of six chunks, more than the data buffer holds, at most the longest length less one byte;
+                -- buffer C, one byte longer, for a packet that had not started at the halt; buffer D for the next
+                -- packet, of two chunks and three bytes. One write window over the three buffers
+                Len_v  := minimum(6 * ChunkBytes_c, MaxLen_c - 1);
+                Len2_v := minimum(2 * ChunkBytes_c + 3, Len_v);
+                Mem_v.setWindow(0, region(1) - Guard_c, region(4));
+                N_v    := 0;
+
+                for st in 0 to 1 loop
+
+                    if st = 1 then
+                        -- A slow memory: the data buffer fills, and the stream port stalls inside the long packets
+                        Mem_v.setStall(0, 80);
+                        Mem_v.setLatency(0, 20);
+                    end if;
+
+                    for c in 0 to 6 loop
+
+                        -- Packet lengths at the buffer, the chunk and the beat boundaries
+                        Lp_v  := Len_v - 1 when c = 0 else
+                                 Len_v when c = 1 else
+                                 Len_v + 1 when c = 2 else
+                                 ChunkBytes_c - 1 when c = 3 else
+                                 ChunkBytes_c + 1 when c = 4 else
+                                 StreamBytes_c when c = 5 else
+                                 StreamBytes_c + 1;
+                        Cnt_v := (Lp_v + StreamBytes_c - 1) / StreamBytes_c;
+
+                        for k in -4 to 6 loop
+                            N_v      := N_v + 1;
+                            Src_v    := source(1) + N_v * 4096;
+                            Back_v   := source(2) + N_v * 4096;
+                            Res_v    := Obs.ResCount;
+                            Beats0_v := Obs.RunBeats;
+                            Pkts0_v  := Obs.RunPkts;
+                            Mem_v.fill(0, region(1) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
+                            Mem_v.fill(0, region(2) - Guard_c, Len_v + 1 + 2 * Guard_c, DstSeed_c);
+                            Mem_v.fill(0, region(3) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
+                            sendCmd(region(1), Len_v);
+                            send(Src_v, Lp_v);
+                            -- The fall of Run: after the beat k beats before the last one (at once where the packet
+                            -- has fewer beats), or k clock cycles after the handshake of the TLast
+                            if k < 0 then
+                                if Cnt_v + k >= 1 and Obs.RunBeats - Beats0_v < Cnt_v + k then
+                                    wait until Obs.RunBeats - Beats0_v >= Cnt_v + k for 1 ms;
+                                end if;
+                            else
+                                if Obs.RunPkts = Pkts0_v then
+                                    wait until Obs.RunPkts > Pkts0_v for 1 ms;
+                                end if;
+                                cycles(k);
+                            end if;
+                            ChRun <= '0';
+                            -- What the channel took while it ran
+                            cycles(3);
+                            Start_v := Obs.RunBeats > Beats0_v;
+                            End_v   := Obs.RunPkts > Pkts0_v;
+                            -- (1) Stopped within a bound, then the restart at once, as a driver that polls Halted
+                            if Stopped = '0' then
+                                wait until Stopped = '1' for 4000 * ClkPeriod_c;
+                            end if;
+                            check_value(Stopped, '1', ERROR, sweepMsg(st, c, k) & "Stopped within 4000 clock cycles");
+                            ChRun <= '1';
+                            -- The result of buffer B
+                            waitRes(Res_v + 1);
+                            Wr_v := Obs.Results(Res_v mod MaxResults_c).Bytes;
+                            if End_v and Lp_v <= Len_v then
+                                -- (2) The packet ended before the halt and fits: complete, with the end of packet
+                                checkRes(Res_v, Lp_v, '1', ErrNone_c, sweepMsg(st, c, k) & "packet ended before the halt");
+                            elsif End_v and not Split_g then
+                                -- A packet longer than the buffer without the split: the overflow (S2-RS-02)
+                                checkRes(Res_v, Len_v, '0', ErrInt_c, sweepMsg(st, c, k) & "overflow");
+                            else
+                                -- Cut: complete chunks, or with the split the full buffer, without the end of packet;
+                                -- without the split a packet longer than the buffer may meet the overflow first
+                                check_value(Obs.Results(Res_v mod MaxResults_c).Eof, '0', ERROR,
+                                            sweepMsg(st, c, k) & "cut packet without the end of packet");
+                                check_value(Obs.Results(Res_v mod MaxResults_c).Err = ErrNone_c or
+                                            (not Split_g and Lp_v > Len_v and Wr_v = Len_v and
+                                             Obs.Results(Res_v mod MaxResults_c).Err = ErrInt_c), ERROR,
+                                            sweepMsg(st, c, k) & "cut packet: error code");
+                                check_value((Wr_v mod ChunkBytes_c = 0 or Wr_v = Len_v) and Wr_v <= minimum(Lp_v, Len_v),
+                                            ERROR, sweepMsg(st, c, k) & "cut packet: complete chunks, " &
+                                            to_string(Wr_v) & " bytes");
+                            end if;
+                            -- (3) The start of packet in the first buffer of every packet, none without bytes or end
+                            SofB_v := '1' when Wr_v /= 0 or Obs.Results(Res_v mod MaxResults_c).Eof = '1' else '0';
+                            check_value(Obs.Results(Res_v mod MaxResults_c).Sof, SofB_v, ERROR,
+                                        sweepMsg(st, c, k) & "start of packet of buffer B");
+                            -- (4) Buffer B holds the bytes of the result, nothing else is written
+                            checkMem(region(1), Len_v, Wr_v, Src_v, sweepMsg(st, c, k) & "buffer B");
+                            Res_v := Res_v + 1;
+                            if not Start_v then
+                                -- The packet had not started: it is the next packet after the restart, written completely
+                                -- by the next command
+                                sendCmd(region(2), Len_v + 1);
+                                waitRes(Res_v + 1);
+                                checkRes(Res_v, Lp_v, '1', ErrNone_c, sweepMsg(st, c, k) & "packet after the restart");
+                                check_value(Obs.Results(Res_v mod MaxResults_c).Sof, '1', ERROR,
+                                            sweepMsg(st, c, k) & "packet after the restart: start of packet");
+                                checkMem(region(2), Len_v + 1, Lp_v, Src_v, sweepMsg(st, c, k) & "buffer C");
+                                Res_v := Res_v + 1;
+                            else
+                                checkMem(region(2), Len_v + 1, 0, Src_v, sweepMsg(st, c, k) & "buffer C untouched");
+                            end if;
+                            -- (3) The next packet: complete, alone and with the start of packet; no byte of the cut packet
+                            send(Back_v, Len2_v);
+                            sendCmd(region(3), Len_v);
+                            waitRes(Res_v + 1);
+                            checkRes(Res_v, Len2_v, '1', ErrNone_c, sweepMsg(st, c, k) & "next packet");
+                            check_value(Obs.Results(Res_v mod MaxResults_c).Sof, '1', ERROR,
+                                        sweepMsg(st, c, k) & "next packet: start of packet");
+                            checkMem(region(3), Len_v, Len2_v, Back_v, sweepMsg(st, c, k) & "buffer D");
+                        end loop;
+
+                    end loop;
+
+                end loop;
+
+                Mem_v.setStall(0, 0);
+                Mem_v.setLatency(0, 0);
+                log(ID_SEQUENCER, "halts: " & to_string(N_v));
 
             elsif run("test_keyhole") then
                 log(ID_LOG_HDR, "TC-S2-20 keyhole writes with FIXED bursts");

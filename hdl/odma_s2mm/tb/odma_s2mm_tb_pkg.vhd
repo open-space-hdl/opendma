@@ -93,6 +93,8 @@ package odma_s2mm_tb_pkg is
         LastBeat  : natural;
         Packets   : natural; -- Packets sent completely (not restarted)
         LastSent  : natural; -- Clock cycle of the handshake of the last TLast
+        RunBeats  : natural; -- Stream handshakes in clock cycles with Run '1' (taken before a halt)
+        RunPkts   : natural; -- Handshakes with TLast in clock cycles with Run '1'
         AwCount   : natural; -- AW handshakes
         BCount    : natural; -- B handshakes
         AwBadAttr : natural; -- AW handshakes with AwSize, AwBurst, AwLock, AwCache or AwProt not as specified

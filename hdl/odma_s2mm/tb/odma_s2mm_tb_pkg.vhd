@@ -73,6 +73,7 @@ package odma_s2mm_tb_pkg is
 
     type Result_r is record
         Bytes : natural;
+        Sof   : std_logic;
         Eof   : std_logic;
         Err   : std_logic_vector(1 downto 0);
         Cycle : natural;
@@ -95,6 +96,9 @@ package odma_s2mm_tb_pkg is
         AwCount   : natural; -- AW handshakes
         BCount    : natural; -- B handshakes
         AwBadAttr : natural; -- AW handshakes with AwSize, AwBurst, AwLock, AwCache or AwProt not as specified
+        AwFixed   : natural; -- AW handshakes of FIXED bursts
+        AwFixLong : natural; -- FIXED bursts of more than 16 beats
+        AwFixAddr : natural; -- FIXED bursts at another address than FixedAddr of the harness
         WGaps     : natural; -- Clock cycles between two data beats of a burst with WReady high and WValid low
         EccSec    : Nat3_a;  -- Pulses per buffer
         EccDed    : Nat3_a;

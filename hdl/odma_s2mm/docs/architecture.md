@@ -79,12 +79,28 @@ Segment commands:
 | Source | Segment | When |
 | --- | --- | --- |
 | Segment register of S2-2 | The buffer length of the accepted command | Written at the command handshake of a transfer that is not rejected (S2-WR-04, S2-WR-06), taken by the split when no segment is active; at most one segment per transfer |
-| S2-1 in `Discard_s` | `MaxSegSize_g` (a constant, selected by the state register) | While the rest of an interrupted packet is dropped; `Discard_s` ends at the beat with `Out_InLast`, in the clock cycle in which the split ends the segment, so no further segment is taken for the next packet. A segment of S2-2 that arrives meanwhile waits |
+| S2-1 in `Discard_s` | `MaxSegSize_g` (a constant, selected by the state register) | While the rest of an interrupted packet is dropped and the split has no segment for it: the register `NeedSeg` is set when a beat with `Out_Last` but without `Out_InLast` passes (the segment ended inside the packet) and cleared by every segment handshake. A segment of S2-2 that arrives meanwhile waits |
 
-Both inputs of the split come from registers, as `olo_base_stream_split` requires. The split takes no stream beat
+Both inputs of the split come from registers, as `olo_base_stream_split` requires. The split takes a segment in
+the clock cycle in which its previous one has ended, while S2-1 sees that end one clock cycle later at the output.
+An offer of a discard segment that only depended on `Discard_s` would therefore be taken once more after the last
+beat of the discarded packet, and that segment would let the next packet pass without a command; `NeedSeg` offers a
+discard segment only when one is missing. The split takes no stream beat
 while no segment is active, so a packet waits at the stream input until its command is accepted, and the rest of a
-packet until the next command (S2-SG-03, `odma_sg` SG-TR-04). `Drain` and `Rst` hold the split in reset, which clears
-the bytes it holds and the active segment.
+packet until the next command (S2-SG-03, `odma_sg` SG-TR-04).
+
+The stream enters the split only while `Run` = '1' or S2-1 discards (S2-ST-01). The split holds the first beat of a
+packet until the next beat shows whether the packet continues, so the chunk former sees a packet later than the
+stream port: S2-1 keeps `StrmOpen` (a packet entered the split and its `TLast` has not), and a packet counts as open
+while `InPacket` or `StrmOpen` is set. That open state decides the discard after a halt or a flush and gives
+`PacketOpen` to S2-2.
+
+Reset of the split: `Rst`, `Drain`, and `Run` = '0' while no packet is open and S2-1 does not discard. The last case
+clears the segment of a transfer that ended before its packet arrived (a command accepted just before a halt): the
+next packet then gets the segment of its own command. The segment register of S2-2 needs no clearing of its own:
+the split is idle at every command handshake (the segment of the transfer before has ended with its buffer or its
+packet, or the reset has cleared it) and takes the segment in the next clock cycle, during a reset as well, since
+`Seg_Ready` is '1' while no segment is active.
 
 ### 4.3 Halt and drain
 
@@ -92,7 +108,7 @@ the bytes it holds and the active segment.
 | --- | --- |
 | `Run` falls between packets | The input is not ready until `Run` rises again (S2-ST-01) |
 | `Run` falls inside a packet | The block writes the descriptor {`Bytes` 0, `Beats` of the incomplete chunk, `Pend` '1', `Discard` '1', `PktEnd` '1'}, then accepts and drops input beats up to the `TLast` of the packet (`S_S2mm_Ready` = '1' in this phase; with `Split_g` the split output up to `Out_InLast`, with the segments of section 4.2), then behaves as between packets |
-| `FlushReq` of S2-2 inside a packet (`Split_g`) | The same as for the fall of `Run`: S2-2 flushes the rest of a packet after a write error, and with the split that rest passes only with the segments of `Discard_s` |
+| `FlushReq` of S2-2 inside a packet (`Split_g`) | The same as for the fall of `Run`: S2-2 flushes the rest of a packet after a write error, and with the split that rest passes only with the segments of `Discard_s`. The next packet cannot be caught by the same flush: S2-2 accepts no command until the flush is done, and `NeedSeg` offers no discard segment after the end of the discarded packet, so its beats wait at the stream port |
 | `Drain` = '1' | The input is not ready; no further descriptor is written |
 
 The block reports `PacketOpen` (a packet started and its `TLast` not yet taken, also while the rest is discarded) to

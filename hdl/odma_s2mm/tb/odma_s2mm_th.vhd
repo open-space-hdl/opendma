@@ -36,7 +36,8 @@ entity odma_s2mm_th is
         MemWidth_g    : positive;
         StreamWidth_g : positive;
         BurstBeats_g  : positive;
-        BufferBeats_g : positive
+        BufferBeats_g : positive;
+        Split_g       : boolean
     );
     port (
         Clk          : out   std_logic;
@@ -44,12 +45,15 @@ entity odma_s2mm_th is
         Cmd_Ready    : out   std_logic;
         Cmd_Addr     : in    std_logic_vector(63 downto 0);
         Cmd_Length   : in    natural;
+        Cmd_Keyhole  : in    std_logic;
         Res_Ready    : in    std_logic;
         Run          : in    std_logic;
         Drain        : in    std_logic;
+        RstIn        : in    std_logic;                      -- '1': reset of the DUT (the core reset)
         Stopped      : out   std_logic;
         Gen          : in    GenCfg_r;
         StreamClear  : in    std_logic;                      -- A change restarts the stream counters
+        FixedAddr    : in    std_logic_vector(63 downto 0);  -- Expected address of FIXED bursts
         EccInjValid  : in    std_logic_vector(2 downto 0);
         EccInjDouble : in    std_logic;
         EccInjData   : in    std_logic;
@@ -65,8 +69,10 @@ architecture sim of odma_s2mm_th is
     constant KeepWidth_c : positive := StreamWidth_g / 8;
     constant Log2Bytes_c : natural  := olo.olo_base_pkg_math.log2(MemWidth_g / 8);
 
-    signal Clk_i : std_logic := '0';
-    signal Rst   : std_logic := '1';
+    signal Clk_i   : std_logic := '0';
+    signal Rst     : std_logic := '1';
+    signal DutRst  : std_logic;
+    signal Res_Sof : std_logic;
 
     -- DUT
     signal DutAddr   : std_logic_vector(AddrWidth_g - 1 downto 0);
@@ -111,7 +117,7 @@ architecture sim of odma_s2mm_th is
     signal Obs_i : Obs_r := (
                               Cycle     => 0,
                              ResCount  => 0,
-                             Results   => (others => (Bytes => 0, Eof => '0', Err => "00", Cycle => 0)),
+                             Results   => (others => (Bytes => 0, Sof => '0', Eof => '0', Err => "00", Cycle => 0)),
                               Beats     => 0,
                              FirstBeat => 0,
                              LastBeat  => 0,
@@ -120,6 +126,9 @@ architecture sim of odma_s2mm_th is
                              AwCount   => 0,
                              BCount    => 0,
                              AwBadAttr => 0,
+                             AwFixed   => 0,
+                             AwFixLong => 0,
+                             AwFixAddr => 0,
                              WGaps     => 0,
                              EccSec    => (others => 0),
                               EccDed    => (others => 0)
@@ -138,6 +147,8 @@ begin
     -----------------------------------------------------------------------------------------------
     -- DUT
     -----------------------------------------------------------------------------------------------
+    DutRst <= Rst or RstIn;
+
     i_dut : entity work.odma_s2mm
         generic map (
             AddrWidth_g   => AddrWidth_g,
@@ -145,21 +156,23 @@ begin
             MemWidth_g    => MemWidth_g,
             StreamWidth_g => StreamWidth_g,
             BurstBeats_g  => BurstBeats_g,
-            BufferBeats_g => BufferBeats_g
+            BufferBeats_g => BufferBeats_g,
+            Split_g       => Split_g
         )
         port map (
             Clk           => Clk_i,
-            Rst           => Rst,
+            Rst           => DutRst,
             Cmd_Valid     => Cmd_Valid,
             Cmd_Ready     => Cmd_Ready,
             Cmd_Addr      => DutAddr,
             Cmd_Length    => DutLength,
-            Cmd_Keyhole   => Zero,
+            Cmd_Keyhole   => Cmd_Keyhole,
             Res_Valid     => Res_Valid,
             Res_Ready     => Res_Ready,
             Res_Bytes     => Res_Bytes,
             Res_Eof       => Res_Eof,
             Res_Err       => Res_Err,
+            Res_Sof       => Res_Sof,
             Run           => Run,
             Drain         => Drain,
             Stopped       => Stopped,
@@ -330,6 +343,7 @@ begin
             -- Results
             if Res_Valid = '1' and Res_Ready = '1' then
                 O_v.Results(O_v.ResCount mod MaxResults_c) := (Bytes => to_integer(unsigned(Res_Bytes)),
+                                                               Sof => Res_Sof,
                                                                Eof => Res_Eof,
                                                                Err => Res_Err,
                                                                Cycle => Obs_i.Cycle);
@@ -352,7 +366,17 @@ begin
             -- AXI4 write port: attributes, gaps between the data beats of a burst
             if AwValid = '1' and AwReady = '1' then
                 O_v.AwCount := O_v.AwCount + 1;
-                if to_integer(unsigned(AwSize)) /= Log2Bytes_c or AwBurst /= "01" or AwLock /= '0' or
+                if AwBurst = "00" then
+                    -- FIXED burst of a keyhole command (S2-SG-04)
+                    O_v.AwFixed := O_v.AwFixed + 1;
+                    if unsigned(AwLen) > 15 then
+                        O_v.AwFixLong := O_v.AwFixLong + 1;
+                    end if;
+                    if AwAddr /= FixedAddr(AddrWidth_g - 1 downto 0) then
+                        O_v.AwFixAddr := O_v.AwFixAddr + 1;
+                    end if;
+                end if;
+                if to_integer(unsigned(AwSize)) /= Log2Bytes_c or (AwBurst /= "01" and AwBurst /= "00") or AwLock /= '0' or
                    AwCache /= "0011" or AwProt /= "000" then
                     O_v.AwBadAttr := O_v.AwBadAttr + 1;
                 end if;

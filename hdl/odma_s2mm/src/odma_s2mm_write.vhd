@@ -32,46 +32,56 @@ entity odma_s2mm_write is
     generic (
         AddrWidth_g   : positive;
         LengthWidth_g : positive;
-        StreamWidth_g : positive
+        StreamWidth_g : positive;
+        Split_g       : boolean := false
     );
     port (
         -- Control Signals
-        Clk         : in    std_logic;
-        Rst         : in    std_logic;
-        Run         : in    std_logic;
-        Drain       : in    std_logic;
+        Clk          : in    std_logic;
+        Rst          : in    std_logic;
+        Run          : in    std_logic;
+        Drain        : in    std_logic;
         -- Transfer command and result
-        Cmd_Valid   : in    std_logic;
-        Cmd_Ready   : out   std_logic;
-        Cmd_Addr    : in    std_logic_vector(AddrWidth_g - 1 downto 0);
-        Cmd_Length  : in    std_logic_vector(LengthWidth_g - 1 downto 0);
-        Res_Valid   : out   std_logic;
-        Res_Ready   : in    std_logic;
-        Res_Bytes   : out   std_logic_vector(LengthWidth_g - 1 downto 0);
-        Res_Eof     : out   std_logic;
-        Res_Err     : out   XferErr_t;
+        Cmd_Valid    : in    std_logic;
+        Cmd_Ready    : out   std_logic;
+        Cmd_Addr     : in    std_logic_vector(AddrWidth_g - 1 downto 0);
+        Cmd_Length   : in    std_logic_vector(LengthWidth_g - 1 downto 0);
+        Cmd_Keyhole  : in    std_logic;
+        Res_Valid    : out   std_logic;
+        Res_Ready    : in    std_logic;
+        Res_Bytes    : out   std_logic_vector(LengthWidth_g - 1 downto 0);
+        Res_Eof      : out   std_logic;
+        Res_Err      : out   XferErr_t;
+        Res_Sof      : out   std_logic;
+        -- Segment of the stream split (Split_g) and the flush of the rest of a packet
+        Seg_Valid    : out   std_logic;
+        Seg_Size     : out   std_logic_vector(LengthWidth_g - 1 downto 0);
+        Seg_Ready    : in    std_logic;
+        FlushReq     : out   std_logic;
         -- Chunk buffer (read side) and the state of the chunk former
-        Desc_Data   : in    std_logic_vector(DescWidth_c - 1 downto 0);
-        Desc_Valid  : in    std_logic;
-        Desc_Ready  : out   std_logic;
-        Desc_Stored : in    std_logic;                     -- A descriptor is written to the chunk buffer
-        PacketOpen  : in    std_logic;
+        Desc_Data    : in    std_logic_vector(DescWidth_c - 1 downto 0);
+        Desc_Valid   : in    std_logic;
+        Desc_Ready   : out   std_logic;
+        Desc_Stored  : in    std_logic;                     -- A descriptor is written to the chunk buffer
+        PacketOpen   : in    std_logic;
         -- Data buffer (read side)
-        Buf_Data    : in    std_logic_vector(StreamWidth_g - 1 downto 0);
-        Buf_Valid   : in    std_logic;
-        Buf_Ready   : out   std_logic;
+        Buf_Data     : in    std_logic_vector(StreamWidth_g - 1 downto 0);
+        Buf_Valid    : in    std_logic;
+        Buf_Ready    : out   std_logic;
         -- Write master
-        CmdWr_Addr  : out   std_logic_vector(AddrWidth_g - 1 downto 0);
-        CmdWr_Size  : out   std_logic_vector(LengthWidth_g - 1 downto 0);
-        CmdWr_Valid : out   std_logic;
-        CmdWr_Ready : in    std_logic;
-        Wr_Data     : out   std_logic_vector(StreamWidth_g - 1 downto 0);
-        Wr_Valid    : out   std_logic;
-        Wr_Ready    : in    std_logic;
-        Wr_Done     : in    std_logic;
-        Wr_Error    : in    std_logic;
+        CmdWr_Addr   : out   std_logic_vector(AddrWidth_g - 1 downto 0);
+        CmdWr_Size   : out   std_logic_vector(LengthWidth_g - 1 downto 0);
+        CmdWr_Fixed  : out   std_logic;
+        CmdWr_Valid  : out   std_logic;
+        CmdWr_Ready  : in    std_logic;
+        Wr_Data      : out   std_logic_vector(StreamWidth_g - 1 downto 0);
+        Wr_Valid     : out   std_logic;
+        Wr_Ready     : in    std_logic;
+        Wr_Done      : in    std_logic;
+        Wr_Error     : in    std_logic;
+        Wr_ErrorResp : in    std_logic_vector(1 downto 0);
         -- No transfer in progress and no write outstanding
-        Idle        : out   std_logic
+        Idle         : out   std_logic
     );
 end entity;
 
@@ -79,14 +89,6 @@ end entity;
 -- Architecture
 ---------------------------------------------------------------------------------------------------
 architecture rtl of odma_s2mm_write is
-
-    -----------------------------------------------------------------------------------------------
-    -- G5 interim: olo_ft_axi_master_full of Open Logic 4.7.0-ft.6 signals a failed write command with
-    -- Wr_Error only, without the AXI response code. Until the Open Logic release with the response
-    -- code (gap G5, specification section 3.7), every failed transfer gets the slave error code.
-    -- With that release this constant is replaced by the response code output of the write master.
-    -----------------------------------------------------------------------------------------------
-    constant WrErrCode_c : XferErr_t := ErrSlv_c;
 
     constant StreamBytes_c    : positive := StreamWidth_g / 8;
     -- Write commands without response: at most the open transactions of the master
@@ -107,6 +109,12 @@ architecture rtl of odma_s2mm_write is
         Err         : XferErr_t;
         Eof         : std_logic;
         FlushPend   : std_logic;                           -- The rest of the packet is flushed after the result
+        Keyhole     : std_logic;                           -- Every write of the transfer at the command address
+        Cont        : std_logic;                           -- The transfer ended with a full buffer, the packet goes on
+        Disc        : std_logic;                           -- The transfer ended with a discarded packet
+        SofNext     : std_logic;                           -- The next buffer is the first buffer of a packet
+        SegValid    : std_logic;                           -- Split_g: segment of the transfer not yet taken
+        SegSize     : std_logic_vector(LengthWidth_g - 1 downto 0);
         CmdAddr     : unsigned(AddrWidth_g - 1 downto 0);
         CmdSize     : unsigned(LengthWidth_g - 1 downto 0);
         CmdLast     : std_logic;                           -- The write command ends the transfer
@@ -167,16 +175,23 @@ begin
                         v.Err       := ErrNone_c;
                         v.Eof       := '0';
                         v.FlushPend := '0';
+                        v.Keyhole   := Cmd_Keyhole;
+                        v.Cont      := '0';
+                        v.Disc      := '0';
                         if unsigned(Cmd_Length) = 0 then
                             -- No write and no stream data for a length of 0 (S2-WR-06)
                             v.Err   := ErrInt_c;
                             v.State := Result_s;
-                        elsif beyondTop(unsigned(Cmd_Addr), unsigned(Cmd_Length)) then
-                            -- No write and no stream data for a buffer beyond the top of the address space (S2-WR-04)
+                        elsif Cmd_Keyhole = '0' and beyondTop(unsigned(Cmd_Addr), unsigned(Cmd_Length)) then
+                            -- No write and no stream data for a buffer beyond the top of the address space (S2-WR-04);
+                            -- a keyhole buffer is the memory word at the address (S2-SG-04)
                             v.Err   := ErrDec_c;
                             v.State := Result_s;
                         else
-                            v.State := Take_s;
+                            -- Split_g: the buffer length is the segment of the split (architecture section 4.2)
+                            v.SegValid := '1' when Split_g else '0';
+                            v.SegSize  := Cmd_Length;
+                            v.State    := Take_s;
                         end if;
                     end if;
                 elsif Desc_Valid = '1' then
@@ -196,28 +211,32 @@ begin
                     Job_v      := true;
                     if Desc_v.Discard = '1' then
                         -- Interrupted packet: its stored beats are dropped, the transfer ends without the end of packet
+                        v.Disc  := '1';
                         v.State := Wait_s;
                     elsif Desc_v.Bytes = 0 then
-                        -- A last beat without valid bytes: dropped, no write
-                        v.Eof   := Desc_v.Pend;
+                        -- A last beat without valid bytes (with Split_g a packet without bytes): dropped, no write
+                        v.Eof   := Desc_v.PktEnd;
+                        v.Cont  := Desc_v.Pend and not Desc_v.PktEnd;
                         v.State := Wait_s when Desc_v.Pend = '1' else Take_s;
                     elsif r.Written + Desc_v.Bytes <= r.Length then
-                        -- The chunk fits into the buffer
+                        -- The chunk fits into the buffer; a keyhole transfer writes every chunk at the command address
                         Feed_v    := resize((Desc_v.Bytes + StreamBytes_c - 1) / StreamBytes_c, CntWidth_c);
-                        v.CmdAddr := r.Addr + r.Written;
+                        v.CmdAddr := r.Addr when r.Keyhole = '1' else r.Addr + r.Written;
                         v.CmdSize := resize(Desc_v.Bytes, LengthWidth_g);
                         v.CmdLast := Desc_v.Pend;
                         v.Written := resize(r.Written + Desc_v.Bytes, LengthWidth_g + 1);
-                        v.Eof     := Desc_v.Pend;
+                        v.Eof     := Desc_v.PktEnd;
+                        v.Cont    := Desc_v.Pend and not Desc_v.PktEnd;
                         v.State   := Issue_s;
                     else
-                        -- Overflow: the bytes that fit are written, the rest of the packet is discarded (S2-RS-02)
+                        -- Overflow (without Split_g): the bytes that fit are written, the rest of the packet is
+                        -- discarded (S2-RS-02)
                         Fit_v       := r.Length - r.Written;
                         v.Err       := ErrInt_c;
-                        v.FlushPend := not Desc_v.Pend;
+                        v.FlushPend := not Desc_v.PktEnd;
                         if Fit_v /= 0 then
                             Feed_v    := resize((Fit_v + StreamBytes_c - 1) / StreamBytes_c, CntWidth_c);
-                            v.CmdAddr := r.Addr + r.Written;
+                            v.CmdAddr := r.Addr when r.Keyhole = '1' else r.Addr + r.Written;
                             v.CmdSize := resize(Fit_v, LengthWidth_g);
                             v.CmdLast := '1';
                             v.Written := r.Length;
@@ -246,6 +265,10 @@ begin
                 if Drain = '1' then
                     v.State := Drained_s;
                 elsif r.Outstanding = 0 then
+                    -- An error before the end of the packet: the rest of the packet is flushed (S2-RS-03)
+                    if r.Err /= ErrNone_c and r.Eof = '0' and r.Disc = '0' then
+                        v.FlushPend := '1';
+                    end if;
                     v.State := Result_s;
                 end if;
 
@@ -255,6 +278,12 @@ begin
                 else
                     Res_Valid <= '1';
                     if Res_Ready = '1' then
+                        -- The next buffer continues the packet only after a full buffer without error (S2-SG-02)
+                        if r.Cont = '1' and r.Disc = '0' and r.Err = ErrNone_c then
+                            v.SofNext := '0';
+                        else
+                            v.SofNext := '1';
+                        end if;
                         if r.FlushPend = '1' then
                             v.State := Flush_s;
                         else
@@ -270,8 +299,9 @@ begin
                 elsif Desc_Valid = '1' and Job_InReady = '1' then
                     Desc_Ready <= '1';
                     Job_v      := true;
-                    if Desc_v.Pend = '1' then
-                        v.State := Idle_s;
+                    if Desc_v.PktEnd = '1' then
+                        v.FlushPend := '0';
+                        v.State     := Idle_s;
                     end if;
                 end if;
 
@@ -298,8 +328,14 @@ begin
         elsif not Issue_v and (Wr_Done = '1' or Wr_Error = '1') and r.Outstanding > 0 then
             v.Outstanding := r.Outstanding - 1;
         end if;
+        -- SLVERR and EXOKAY give the slave error, DECERR the decode error (S2-RS-05, interpretation I14)
         if Wr_Error = '1' and v.Err = ErrNone_c then
-            v.Err := WrErrCode_c;
+            v.Err := respErr(Wr_ErrorResp);
+        end if;
+
+        -- The split takes the segment of the transfer
+        if r.SegValid = '1' and Seg_Ready = '1' then
+            v.SegValid := '0';
         end if;
 
         -- *** Feeder ***
@@ -357,9 +393,15 @@ begin
     -- Outputs
     CmdWr_Addr  <= std_logic_vector(r.CmdAddr);
     CmdWr_Size  <= std_logic_vector(r.CmdSize);
+    CmdWr_Fixed <= r.Keyhole;
     CmdWr_Valid <= '1' when r.State = Issue_s else '0';
-    Wr_Data     <= Buf_Data;
-    Res_Bytes   <= std_logic_vector(r.Written(LengthWidth_g - 1 downto 0));
+    Seg_Valid   <= r.SegValid;
+    Seg_Size    <= r.SegSize;
+    -- Split_g: S2-1 discards the rest of the packet that has not passed the split (architecture section 4.3)
+    FlushReq  <= '1' when Split_g and (r.FlushPend = '1' or r.State = Flush_s) else '0';
+    Res_Sof   <= r.SofNext;
+    Wr_Data   <= Buf_Data;
+    Res_Bytes <= std_logic_vector(r.Written(LengthWidth_g - 1 downto 0));
     -- A transfer with an error has no end of packet (S2-RS-02, S2-RS-03)
     Res_Eof <= r.Eof when r.Err = ErrNone_c else '0';
     Res_Err <= r.Err;
@@ -374,6 +416,9 @@ begin
                 r.State       <= Idle_s;
                 r.Outstanding <= 0;
                 r.Feed        <= Head_s;
+                r.FlushPend   <= '0';
+                r.SofNext     <= '1';
+                r.SegValid    <= '0';
             end if;
         end if;
     end process;

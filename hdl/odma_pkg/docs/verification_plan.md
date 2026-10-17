@@ -27,7 +27,8 @@ Simulator: GHDL; QuestaSim for the coverage batch. Clock 100 MHz.
 | `test_err_codes` (TC-PKG-05) | Values of the error codes: SLVERR and DECERR equal the AXI response codes | PKG-05 |
 | `test_flip_pattern` (TC-PKG-13) | `flipPattern` for codewords of 8 and 39 bits in the four combinations of single or double error and parity or data mode: exactly the bits 0, 0 and 1, 3, 3 and 5 | PKG-11 |
 | `test_mem_bursts` (TC-PKG-06) | INCR bursts of 1, 2, 16 and 256 beats, unaligned start addresses, partial strobes, FIXED bursts of 1 and 16 beats, addresses below and above 2**32 and at the top of the 64-bit space; written data checked through the backdoor and by read bursts; statistics (bytes written, lowest and highest address, bursts, maximum outstanding); repeated with 50 % backpressure and a latency of 20 cycles | PKG-06 |
-| `test_mem_errors` (TC-PKG-07) | SLVERR and DECERR ranges for reads and writes: the response of each burst that touches a range, no byte of a failed write beat written, unaffected bursts with OKAY | PKG-06 |
+| `test_mem_errors` (TC-PKG-07) | SLVERR, DECERR and EXOKAY ranges for reads and writes: the response of each burst that touches a range, no byte of a failed write beat written, unaffected bursts with OKAY | PKG-06 |
+| `test_mem_fifo` (TC-PKG-14) | A FIFO window: FIXED read bursts of 1 and 16 beats and two bursts back to back at the window word return the consecutive words of the backing range; FIXED write bursts with partial strobes on the last beat write the consecutive backing words (backdoor), the window word itself unchanged; an INCR burst over the neighbouring words is unaffected; a new setting restarts both counters | PKG-12 |
 | `test_mem_checks` (TC-PKG-08) | One provocation per protocol check, each expecting exactly one error alert: INCR burst across 4 KB, burst above the configured maximum, FIXED burst of 17 beats, WRAP burst, narrow beat, `WLast` missing on the last beat and set before it (raw driver), a strobed byte outside the write window | PKG-07 |
 | `test_seq_player` (TC-PKG-09) | A sequence file with every command (W, R with and without mask, P that matches after a delay, I for both interrupt signals, S and E of the same packet through the looped streams, A, D, L) executes without alert | PKG-08 |
 | `test_seq_errors` (TC-PKG-10) | A mismatching R, a P and an I whose timeout expires, an E that does not match the sent packet: each raises one error alert that names its line | PKG-08 |
@@ -46,6 +47,7 @@ Simulator: GHDL; QuestaSim for the coverage batch. Clock 100 MHz.
 | PKG-11 | TC-PKG-13 |
 | PKG-06 | TC-PKG-06, TC-PKG-07 |
 | PKG-07 | TC-PKG-08 |
+| PKG-12 | TC-PKG-14 |
 | PKG-08 | TC-PKG-09, TC-PKG-10 |
 | PKG-09 | TC-PKG-11 |
 | PKG-10 | TC-PKG-12 |

@@ -41,7 +41,8 @@ test can place buffers anywhere in a 64-bit space, also at the top of a 32-bit s
 
 | Setting (per instance) | Default | Effect |
 | --- | --- | --- |
-| `setError(idx, n, first, last, resp, dir)` | none | Error range n (0 to 7): accesses to a byte from `first` to `last` respond with `resp` (SLVERR or DECERR) in direction `dir` (read, write or both). A write beat with a strobed byte in an error range writes none of its bytes and fails the burst |
+| `setError(idx, n, first, last, resp, dir)` | none | Error range n (0 to 7): accesses to a byte from `first` to `last` respond with `resp` (SLVERR, DECERR or EXOKAY) in direction `dir` (read, write or both). A write beat with a strobed byte in an error range writes none of its bytes and fails the burst |
+| `setFifo(idx, window, backing)` | none | FIFO window (PKG-12): the k-th read beat and the k-th write beat at the memory word that contains `window` access the word at `backing` + k x data width instead; the two counters start at 0 with the setting. Other words are not affected |
 | `setWindow(idx, first, last)` | whole space | Write window: a strobed byte outside it raises an error alert (PKG-07); the byte is still written, so that the test also sees the damage |
 | `setMaxBeats(idx, n)` | 256 | Longest accepted burst (`AxLen` + 1) |
 | `setStall(idx, percent)` | 0 | Share of cycles in which the model holds `AwReady`, `WReady`, `ArReady` and `RValid` low (0 to 90) |

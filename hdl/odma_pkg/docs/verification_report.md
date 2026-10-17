@@ -57,7 +57,7 @@ errors and no warnings.
 | Memory model: narrow beat | TC-PKG-08 | 1 |
 | Memory model: `WLast` missing, `WLast` early | TC-PKG-08 | 1 each |
 | Memory model: strobed bytes outside the write window | TC-PKG-08 | 3 (one per beat) |
-| Sequence player: compare, poll, interrupt wait, stream packet | TC-PKG-10 | 1 each |
+| Sequence player: compare, poll, interrupt wait, stream packet, wait for a packet not sent | TC-PKG-10 | 1 each |
 
 ## 4. Remarks on the environment
 

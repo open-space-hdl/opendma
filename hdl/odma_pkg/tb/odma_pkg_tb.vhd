@@ -547,6 +547,9 @@ begin
                 increment_expected_alerts_and_stop_limit(ERROR, 1);
                 odmaSequence(tb_path(runner_cfg) & "sequences/error_stream.txt", AXILITE_VVCT, 0, AXISTREAM_VVCT,
                              0, 1, Mm2sIrq, S2mmIrq, ClkPeriod_c);
+                increment_expected_alerts_and_stop_limit(TB_ERROR, 1);
+                odmaSequence(tb_path(runner_cfg) & "sequences/error_wait.txt", AXILITE_VVCT, 0, AXISTREAM_VVCT,
+                             0, 1, Mm2sIrq, S2mmIrq, ClkPeriod_c);
 
             elsif run("test_mem_fill") then
                 log(ID_LOG_HDR, "TC-PKG-12 address-dependent fill pattern");

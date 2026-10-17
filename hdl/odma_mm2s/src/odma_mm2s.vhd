@@ -94,11 +94,9 @@ end entity;
 ---------------------------------------------------------------------------------------------------
 architecture rtl of odma_mm2s is
 
-    -- Longest burst of the read master: no AXI burst crosses 4 KB, so longer bursts never occur, and
-    -- olo_axi_master_simple of Open Logic 4.7.0-ft.6 does not elaborate with more beats than 4 KB holds
+    -- Longest burst of the read master: no AXI burst crosses 4 KB, so longer bursts never occur (G13)
     constant MasterBeats_c : positive := minimum(BurstBeats_g, 4096 / (MemWidth_g / 8));
-    -- Size bits of the read master: one more than the length, as for the write master of odma_s2mm, where the
-    -- word count of olo_axi_master_full of Open Logic 4.7.0-ft.6 wraps in the last user word below 2**size bits (G14)
+    -- Size bits of the read master: one more than the length, as for the write master of odma_s2mm (G14)
     constant SizeBits_c    : positive := LengthWidth_g + 1;
 
     -- Transfer buffer {code, end of packet, length} and response buffer {code}

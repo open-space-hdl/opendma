@@ -62,11 +62,9 @@ drain is still issued to the master; its data
 is discarded by MM-2. The response buffer never overflows: every response belongs to an entry of the transfer buffer,
 which has the same depth.
 
-The read master runs with `UserTransactionSizeBits_g` = `LengthWidth_g` + 1 (gap G14 of the architecture: the
-write path of `olo_axi_master_full` of Open Logic 4.7.0-ft.6 stalls after a command whose size lies in the last user
-data word below 2**`UserTransactionSizeBits_g`; the read master uses the same setting), `AxiMaxBeats_g` = the smaller of
-`BurstBeats_g` and the beats of 4 KB (4096 / (`MemWidth_g` / 8); no AXI burst crosses 4 KB, so the bursts are the
-same, and `olo_axi_master_simple` of Open Logic 4.7.0-ft.6 does not elaborate with more beats than 4 KB holds),
+The read master runs with `UserTransactionSizeBits_g` = `LengthWidth_g` + 1 (the setting of the write master of
+`odma_s2mm`, gap G14 of the architecture), `AxiMaxBeats_g` = the smaller of `BurstBeats_g` and the beats of 4 KB
+(4096 / (`MemWidth_g` / 8); no AXI burst crosses 4 KB, so the bursts are the same, gap G13),
 `AxiMaxOpenTransactions_g` = 8, `DataFifoDepth_g` = `BufferBeats_g` (in stream beats), `UserDataWidth_g` =
 `StreamWidth_g`, `AxiDataWidth_g` = `MemWidth_g`, `ImplWrite_g` = false. Its fixed `ArCache` 0011 and `ArProt` 000
 are the values of MM-IF-01. In `olo_ft_axi_master_full`, `DataFifoDepth_g` is the depth of its ECC-protected read

@@ -587,14 +587,24 @@ begin
                 sendCmd(region(1), 0);
                 waitRes(3);
                 checkRes(2, 0, '0', ErrInt_c, "buffer length of 0");
+                -- A result without bytes and without the end of a packet belongs to no packet
+                check_value(Obs.Results(1).Sof, '0', ERROR, "buffer beyond the top: no start of packet");
+                check_value(Obs.Results(2).Sof, '0', ERROR, "buffer length of 0: no start of packet");
                 check_value(Obs.AwCount, Cnt_v, ERROR, "no write burst");
-                waitPackets(2);
-                check_value(Obs.Beats, (5 + StreamBytes_c - 1) / StreamBytes_c, ERROR, "the packet waits in the buffer");
+                if Split_g then
+                    -- The split takes no beat without a segment: the packet waits at the stream port
+                    check_value(Obs.Beats, 0, ERROR, "the packet waits at the stream port");
+                else
+                    waitPackets(2);
+                    check_value(Obs.Beats, (5 + StreamBytes_c - 1) / StreamBytes_c, ERROR,
+                                "the packet waits in the buffer");
+                end if;
                 -- The packet goes to the next transfer
                 prefill(region(1), 5);
                 sendCmd(region(1), 5);
                 waitRes(4);
                 checkRes(3, 5, '1', ErrNone_c, "packet after the rejected commands");
+                check_value(Obs.Results(3).Sof, '1', ERROR, "packet after the rejected commands: start of packet");
                 checkMem(region(1), 5, 5, source(2), "packet after the rejected commands");
 
             elsif run("test_halt") then

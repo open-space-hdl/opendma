@@ -147,10 +147,13 @@ commands without response gives the outstanding level. With `Split_g` a full buf
 complete transfer without the end of packet, and the overflow row above cannot occur, because a segment is never
 longer than its buffer.
 
-Start of packet (S2-SG-02): the register `SofNext` (reset '1') gives `Res_Sof`. At every result it becomes '0' when
-the transfer ended with a full buffer of a packet that continues (`Pend` without `PktEnd`, no error, no discard),
-otherwise '1': the next buffer then starts a packet, also after an error or a halt, whose packet rest is discarded.
-Without `Split_g` every transfer ends its packet, so `Res_Sof` is always '1'.
+Start of packet (S2-SG-02): the register `SofNext` (reset '1') gives `Res_Sof` of a result with bytes or with the
+end of packet (a packet without bytes, SGI-13). A result without bytes and without the end of packet (a buffer length
+of 0, a buffer beyond the top of the address space, a transfer that has not started) belongs to no packet and has
+`Res_Sof` '0'. At every result `SofNext` becomes '0' when the transfer ended with a full buffer of a packet that
+continues (`Pend` without `PktEnd`, no error, no discard), otherwise '1': the next buffer then starts a packet, also
+after an error or a halt, whose packet rest is discarded. Without `Split_g` every transfer ends its packet, so
+`SofNext` is always '1'.
 
 ### 5.3 Errors, halt and flush
 

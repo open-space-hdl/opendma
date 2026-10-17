@@ -398,8 +398,10 @@ begin
     Seg_Valid   <= r.SegValid;
     Seg_Size    <= r.SegSize;
     -- Split_g: S2-1 discards the rest of the packet that has not passed the split (architecture section 4.3)
-    FlushReq  <= '1' when Split_g and (r.FlushPend = '1' or r.State = Flush_s) else '0';
-    Res_Sof   <= r.SofNext;
+    FlushReq <= '1' when Split_g and (r.FlushPend = '1' or r.State = Flush_s) else '0';
+    -- The first buffer of a packet: a result with bytes or with the end of packet (a packet without bytes, SGI-13); a
+    -- result without data and without the end of packet (length 0, beyond the top, not started) belongs to no packet
+    Res_Sof   <= r.SofNext when r.Written /= 0 or r.Eof = '1' else '0';
     Wr_Data   <= Buf_Data;
     Res_Bytes <= std_logic_vector(r.Written(LengthWidth_g - 1 downto 0));
     -- A transfer with an error has no end of packet (S2-RS-02, S2-RS-03)

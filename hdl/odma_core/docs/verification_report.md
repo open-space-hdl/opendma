@@ -2,19 +2,22 @@
 
 ## 1. Test results
 
-Run on 2026-10-16 with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7, UVVM 2026.03.20: `python run.py "*odma_core*"` and
+Run on 2026-10-17 with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7, UVVM 2026.03.20: `python run.py "*odma_core*"` and
 `python lint/synth_check.py`.
 
 | Testbench or check | Tests | Passed |
 | --- | --- | --- |
-| `odma_core_tb` | 43 (9 test cases in the configurations of verification plan section 2) | 43 |
-| `lint/synth_check.py` (TC-CO-09) | 25 (16 configurations synthesised, 9 inconsistent ones rejected) | 25 |
+| `odma_core_tb` | 83 (16 test cases in the configurations of verification plan section 2: 9 in the DR, 7 in the SG configurations) | 83 |
+| `lint/synth_check.py` (TC-CO-09) | 29 (21 configurations synthesised, 5 of them in SG mode; 8 inconsistent ones rejected) | 29 |
+
+The test cases of section 3.1 of the plan (TC-CO-18, TC-CO-19) wait for Open Logic and are not run.
 
 ## 2. Summary
 
-All test cases pass; every requirement of the specification is covered. VSG reports no errors and no warnings. The
-core synthesises with `ghdl --synth` without errors and without latches in the configurations of section 4, and each
-inconsistent configuration stops the elaboration with its message.
+All test cases pass; every requirement of the specification is covered except CO-SG-09 to CO-SG-11, which wait
+for Open Logic. VSG reports no errors and no warnings. The core synthesises with `ghdl --synth` without errors and
+without latches in the configurations of section 4, in DR mode and in SG mode, and each inconsistent configuration
+stops the elaboration with its message.
 
 Findings of the verification:
 
@@ -24,6 +27,8 @@ Findings of the verification:
 | Right after the error interrupt `S2MM_DMASR.Halted` can still read 0: the error flags and `Err_Irq` are set with the result, `Halted` follows when the channel has shut down. \[PG021\] describes the same order for an error (`RS` falls, `Halted` is set when the engine has shut down) | The model polls `Halted` after the error interrupt (`failed_transfer`); the user guide states the order (section 5.4) |
 | The injection flipped parity bits only, so a double error never changed data and a single error never exercised the correction of a data bit: a channel that used the uncorrected word of a buffer would have passed every injection test, and the buffers of one channel could not be told apart | `ECC_INJECT.Data` selects data bits; TC-CO-10, TC-MM-13 and TC-S2-13 inject single errors on a data bit, TC-CO-10 double errors with the consequence of each buffer (`odma_registers` RG-EX-05) |
 | A mutation check found the channel reset and the S2MM drain of the soft reset not observed: with the transfers drained the channels reached the same state without them | TC-CO-05 sends the S2MM packet from a stream peer that is still sending at the reset and counts the beats taken during the reset; TC-CO-06 shows that the soft reset cancels an injection pending in each buffer |
+| The first S2MM error scenario failed the fetch of the second descriptor: the halt then came while the packet of the first descriptor was still arriving, which ended that packet early (interpretation I8 of `odma_registers`), so no `IOC_Irq` came. The behaviour is correct; the scenario did not match it | `sg_errors` lets the S2MM fetch error and the stale descriptor hit the first descriptor, before any packet; MM2S keeps them at the second descriptor, whose predecessor completes first (the model documents why) |
+| A mutation check of the Scatter/Gather integration found three faults that passed: every stream beat taken as a packet start, `Stopped` of the S2MM channel without its engine (and without the channel), and the indices 6 to 9 rotated. The first is visible only when a packet starts before the completion of the one before; the second only when a soft reset meets an outstanding descriptor access or data burst of the channel alone; the third not at all while every index is injected at once | TC-CO-16 runs two packets back to back so that the delay timer must run during the second (interpretation R10), TC-CO-17 resets once with a descriptor access and once with only data bursts outstanding, TC-CO-15 injects one index at a time |
 
 ## 3. Checks of the testbench
 
@@ -44,6 +49,19 @@ repository passes all of them:
 | The MM2S channel does not receive `Drain` | TC-CO-05 |
 | The idle burst type of an excluded MM2S channel is FIXED | TC-CO-07 (idle monitor) |
 | The error code of the S2MM result does not reach the register interface | TC-CO-04 |
+| The MM2S packet start pulse at '0' (no packet start reaches the delay timer) | TC-CO-16 |
+| The S2MM packet start pulse at '0' | TC-CO-16 |
+| Every MM2S stream beat taken as a packet start (`InPkt` held '0') | TC-CO-16 |
+| Every S2MM stream beat taken as a packet start | TC-CO-16 |
+| `Res_Sof` of the S2MM results at '0' | TC-CO-11 |
+| `Stopped` of the MM2S channel without its engine | TC-CO-17 |
+| `Stopped` of the MM2S channel from its engine only | TC-CO-17 |
+| `Stopped` of the S2MM channel without its engine | TC-CO-17 |
+| `Stopped` of the S2MM channel from its engine only | TC-CO-17 |
+| The ECC events of the engine rotated by one index | TC-CO-15 |
+| The injection strobes of the engine rotated by one index | TC-CO-15 |
+| `ArValid` of the descriptor port at '1' in DR mode | TC-CO-07 (idle monitor) |
+| `BReady` of the descriptor port at '1' in DR mode | TC-CO-07 (idle monitor) |
 
 One fault passes and is equivalent by design: `Stopped` of an excluded channel at '0'. `odma_registers` treats a
 channel that is not included as stopped, so the idle value has no effect.
@@ -58,9 +76,10 @@ double error in data mode, so such a permutation fails it.
 | Generic | Declared range | Simulated (core) | Synthesised |
 | --- | --- | --- | --- |
 | `IncludeMm2s_g`, `IncludeS2mm_g` | boolean, at least one true | true/true, true/false, false/true | all three; false/false rejected |
-| `IncludeSg_g`, `StsCntrlStrm_g`, `UseRxLength_g`, `MicroDma_g` | false in phase a | false | false; true rejected |
-| `LengthWidth_g` | 8 to 26 | 8, 14, 20, 26 | 8, 14, 26 |
-| `AddrWidth_g` | 32 to 64 | 32, 40, 64 | 32, 64 |
+| `IncludeSg_g` | boolean | false, true (with both channels and with each channel alone) | false, true (default, 32/8, 64/26 address and length widths, each channel alone) |
+| `StsCntrlStrm_g`, `UseRxLength_g`, `MicroDma_g` | false until phase c | false | false; true rejected |
+| `LengthWidth_g` | 8 to 26 | 8, 14, 20, 26 (SG mode 8, 14, 20) | 8, 14, 26 (SG mode 8, 14, 26) |
+| `AddrWidth_g` | 32 to 64 | 32, 40, 64 (SG mode 32, 64) | 32, 64 (both modes) |
 | `Mm2sMemWidth_g`, `S2mmMemWidth_g` | 32, 64, 128, 256, 512, 1024 | MM2S 32, 64, 128, 256; S2MM 32, 64, 128, 512 | all; 48 rejected |
 | `Mm2sStreamWidth_g`, `S2mmStreamWidth_g` | 8 to 1024, powers of 2, at most the memory width | MM2S 8, 32, 64; S2MM 8, 32, 64, 256 | 8, 32, 1024; a stream wider than the memory rejected |
 | `Mm2sBurstBeats_g`, `S2mmBurstBeats_g` | 2 to 256, powers of 2 | MM2S 4, 8, 16; S2MM 2, 4, 16, 32 | 2, 16, 256; 3 rejected |
@@ -73,4 +92,4 @@ the streams at or below 256 bits, the limit of the AXI4-Stream VVC.
 
 ## 5. Coverage
 
-Code coverage is collected with QuestaSim in the batch of phase a (`docs/coverage.md`).
+Code coverage is collected with QuestaSim in the batches of phases a and b (`docs/coverage.md`).

@@ -19,7 +19,7 @@ DEFAULTS = {
     "IncludeMm2s_g": True, "IncludeS2mm_g": True, "LengthWidth_g": 14, "AddrWidth_g": 32,
     "Mm2sMemWidth_g": 32, "S2mmMemWidth_g": 32, "Mm2sStreamWidth_g": 32, "S2mmStreamWidth_g": 32,
     "Mm2sBurstBeats_g": 16, "S2mmBurstBeats_g": 16, "Mm2sBufferBeats_g": 64, "S2mmBufferBeats_g": 64,
-    "ExtRegs_g": True,
+    "ExtRegs_g": True, "IncludeSg_g": False,
 }
 
 
@@ -39,11 +39,25 @@ CONFIGS = {
     "no_ext": {"ExtRegs_g": False},
     "mm2s_only": {"IncludeS2mm_g": False},
     "s2mm_only": {"IncludeMm2s_g": False},
+    "sg": {"IncludeSg_g": True},
+    "sg_aw64": {"IncludeSg_g": True, "AddrWidth_g": 64, "LengthWidth_g": 20, **channel("Mm2s", 256, 64, 8),
+                **channel("S2mm", 512, 256, 4)},
+    "sg_lw8": {"IncludeSg_g": True, "LengthWidth_g": 8, **channel("Mm2s", 128, 8, 4), **channel("S2mm", 64, 8, 2)},
+    "sg_mm2s_only": {"IncludeSg_g": True, "IncludeS2mm_g": False},
+    "sg_s2mm_only": {"IncludeSg_g": True, "IncludeMm2s_g": False},
 }
 
 
 def both(g):
-    return g["IncludeMm2s_g"] and g["IncludeS2mm_g"]
+    return g["IncludeMm2s_g"] and g["IncludeS2mm_g"] and not g["IncludeSg_g"]
+
+
+def dr(g):
+    return not g["IncludeSg_g"]
+
+
+def sg(g):
+    return g["IncludeSg_g"]
 
 
 def channels(g):
@@ -76,6 +90,38 @@ def files_ecc(g, path):
             Path(path) / f"ecc_{ch.lower()}")
 
 
+def files_sg_reference(g, path):
+    odma_model.sg_reference(g["AddrWidth_g"], g["LengthWidth_g"], channels(g)).write(path)
+
+
+def files_sg_tail_moves(g, path):
+    odma_model.sg_tail_moves(g["AddrWidth_g"], g["LengthWidth_g"], channels(g)).write(path)
+
+
+def files_sg_cyclic(g, path):
+    odma_model.sg_cyclic(g["AddrWidth_g"], g["LengthWidth_g"], channels(g)).write(path)
+
+
+def files_sg_errors(g, path):
+    odma_model.sg_errors(g["AddrWidth_g"], g["LengthWidth_g"], channels(g)).write(path)
+
+
+def files_sg_delay(g, path):
+    odma_model.sg_delay(g["AddrWidth_g"], g["LengthWidth_g"], channels(g)).write(Path(path) / "hold")
+    beats = {"MM2S": g["Mm2sStreamWidth_g"] // 8, "S2MM": g["S2mmStreamWidth_g"] // 8}
+    odma_model.sg_delay_overlap(g["AddrWidth_g"], g["LengthWidth_g"], channels(g), beats).write(
+        Path(path) / "overlap")
+
+
+def files_sg_soft_reset(g, path):
+    odma_model.sg_reset_load(g["AddrWidth_g"], g["LengthWidth_g"], channels(g)).write(Path(path) / "start")
+    odma_model.sg_reference(g["AddrWidth_g"], g["LengthWidth_g"], channels(g)).write(Path(path) / "after")
+
+
+def files_sg_ecc(g, path):
+    odma_model.sg_reference(g["AddrWidth_g"], g["LengthWidth_g"], channels(g), reset=False).write(path)
+
+
 def files_excluded(g, path):
     odma_model.dr_random(g["AddrWidth_g"], g["LengthWidth_g"], channels=channels(g), seed=6, count=6,
                          name="single_channel").write(path)
@@ -88,10 +134,18 @@ TESTS = {
     "test_concurrent": (both, files_concurrent),
     "test_errors": (both, files_errors),
     "test_soft_reset_load": (both, files_after_reset),
-    "test_ecc_index": (lambda g: True, files_ecc),
-    "test_ecc_data": (lambda g: g["ExtRegs_g"] and min(g["Mm2sStreamWidth_g"], g["S2mmStreamWidth_g"]) >= 16, None),
+    "test_ecc_index": (dr, files_ecc),
+    "test_ecc_data": (lambda g: dr(g) and g["ExtRegs_g"] and min(g["Mm2sStreamWidth_g"], g["S2mmStreamWidth_g"]) >= 16,
+                      None),
     "test_configuration": (lambda g: True, None),
-    "test_excluded_channel": (lambda g: not both(g), files_excluded),
+    "test_excluded_channel": (lambda g: dr(g) and not (g["IncludeMm2s_g"] and g["IncludeS2mm_g"]), files_excluded),
+    "test_sg_reference": (sg, files_sg_reference),
+    "test_sg_tail_moves": (sg, files_sg_tail_moves),
+    "test_sg_cyclic": (sg, files_sg_cyclic),
+    "test_sg_errors": (sg, files_sg_errors),
+    "test_sg_delay": (sg, files_sg_delay),
+    "test_sg_soft_reset": (sg, files_sg_soft_reset),
+    "test_sg_ecc_index": (sg, files_sg_ecc),
 }
 
 

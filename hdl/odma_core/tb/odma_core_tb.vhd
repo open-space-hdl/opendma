@@ -60,7 +60,8 @@ entity odma_core_tb is
         S2mmBurstBeats_g  : positive := 16;
         Mm2sBufferBeats_g : positive := 64;
         S2mmBufferBeats_g : positive := 64;
-        ExtRegs_g         : boolean  := true
+        ExtRegs_g         : boolean  := true;
+        IncludeSg_g       : boolean  := false
     );
 end entity;
 
@@ -101,8 +102,24 @@ architecture sim of odma_core_tb is
     constant ResetBit_c   : Word_t := x"00000004";
     constant DmacrReset_c : Word_t := x"00010002";
     constant DmasrReset_c : Word_t := x"00010001";
-    constant Ones_c       : Word_t := x"FFFFFFFF";
-    constant Zero_c       : Word_t := x"00000000";
+    constant SgIncld_c    : Word_t := x"00000008"; -- DMASR.SGIncld
+
+    -- Scatter/Gather Mode: pointer registers of PG021 Table 4
+    constant Mm2sCur_c     : natural := 16#008#;
+    constant Mm2sCurMsb_c  : natural := 16#00C#;
+    constant Mm2sTail_c    : natural := 16#010#;
+    constant Mm2sTailMsb_c : natural := 16#014#;
+    constant S2mmCur_c     : natural := 16#038#;
+    constant S2mmCurMsb_c  : natural := 16#03C#;
+    constant S2mmTail_c    : natural := 16#040#;
+    constant S2mmTailMsb_c : natural := 16#044#;
+
+    -- Regions of the memory model of the descriptor port that answer SLVERR (tb/model/odma_model.py,
+    -- ERR_DESC_READ_BASE, ERR_DESC_WRITE_BASE)
+    constant ErrDescReadBase_c  : unsigned(63 downto 0) := x"0000_0000_0006_0000";
+    constant ErrDescWriteBase_c : unsigned(63 downto 0) := x"0000_0000_0007_0000";
+    constant Ones_c             : Word_t                := x"FFFFFFFF";
+    constant Zero_c             : Word_t                := x"00000000";
 
     -- Regions of the memory model that answer SLVERR (tb/model/odma_model.py, ERR_READ_BASE, ERR_WRITE_BASE)
     constant ErrReadBase_c  : unsigned(63 downto 0) := x"0000_0000_0004_0000";
@@ -186,6 +203,7 @@ architecture sim of odma_core_tb is
     function extConfig return Word_t is
         variable W_v : Word_t := (others => '0');
     begin
+        W_v(0)            := '1' when IncludeSg_g else '0';
         W_v(1)            := '1' when IncludeMm2s_g else '0';
         W_v(2)            := '1' when IncludeS2mm_g else '0';
         W_v(12 downto 8)  := std_logic_vector(to_unsigned(LengthWidth_g, 5));
@@ -228,7 +246,8 @@ begin
             S2mmBurstBeats_g  => S2mmBurstBeats_g,
             Mm2sBufferBeats_g => Mm2sBufferBeats_g,
             S2mmBufferBeats_g => S2mmBufferBeats_g,
-            ExtRegs_g         => ExtRegs_g
+            ExtRegs_g         => ExtRegs_g,
+            IncludeSg_g       => IncludeSg_g
         )
         port map (
             Mm2sIrq    => Mm2sIrq,
@@ -323,9 +342,15 @@ begin
         begin
             log(ID_SEQUENCER, "scenario " & msg);
             odmaLoadImage(MemRd_c, Path_c & "memory.txt");
+            if IncludeSg_g then
+                odmaLoadImage(MemSg_c, Path_c & "desc_memory.txt");
+            end if;
             odmaSequence(Path_c & "sequence.txt", AXILITE_VVCT, 0, AXISTREAM_VVCT, 0, 1, Mm2sIrq, S2mmIrq,
                          ClkPeriod_c);
             odmaCheckImage(MemWr_c, Path_c & "expected_memory.txt");
+            if IncludeSg_g then
+                odmaCheckImage(MemSg_c, Path_c & "expected_desc_memory.txt");
+            end if;
         end procedure;
 
         -- Address registers of a channel: low word and, above 32 address bits, the MSB register
@@ -444,6 +469,7 @@ begin
         -- Every burst is checked against the burst limit of its channel and 4 KB
         Mem_v.setMaxBeats(MemRd_c, Mm2sBurstBeats_g);
         Mem_v.setMaxBeats(MemWr_c, S2mmBurstBeats_g);
+        Mem_v.setMaxBeats(MemSg_c, 16);
         await_uvvm_initialization(VOID);
         -- The sequences issue thousands of VVC commands: the log keeps the headers and the sequence steps
         disable_log_msg(AXILITE_VVCT, 0, ALL_MESSAGES);
@@ -665,9 +691,11 @@ begin
             elsif run("test_configuration") then
                 log(ID_LOG_HDR, "TC-CO-07 configuration readback and register widths");
                 chk(Mm2sDmacr_c, choose(IncludeMm2s_g, DmacrReset_c, Zero_c), "MM2S_DMACR reset value");
-                chk(Mm2sDmasr_c, choose(IncludeMm2s_g, DmasrReset_c, Zero_c), "MM2S_DMASR reset value");
+                chk(Mm2sDmasr_c, choose(IncludeMm2s_g, DmasrReset_c or choose(IncludeSg_g, SgIncld_c, Zero_c), Zero_c),
+                    "MM2S_DMASR reset value");
                 chk(S2mmDmacr_c, choose(IncludeS2mm_g, DmacrReset_c, Zero_c), "S2MM_DMACR reset value");
-                chk(S2mmDmasr_c, choose(IncludeS2mm_g, DmasrReset_c, Zero_c), "S2MM_DMASR reset value");
+                chk(S2mmDmasr_c, choose(IncludeS2mm_g, DmasrReset_c or choose(IncludeSg_g, SgIncld_c, Zero_c), Zero_c),
+                    "S2MM_DMASR reset value");
                 if ExtRegs_g then
                     chk(ExtId_c, x"4F444D41", "EXT_ID");
                     chk(ExtConfig_c, extConfig, "EXT_CONFIG");
@@ -680,24 +708,50 @@ begin
                     chk(ExtId_c, Zero_c, "EXT_ID without the extension window");
                     chk(ExtConfig_c, Zero_c, "EXT_CONFIG without the extension window");
                 end if;
-                -- Address and length registers hold AddrWidth_g and LengthWidth_g bits; a length written while
-                -- the channel is halted starts nothing (interpretation I7 of odma_registers)
-                wr(Mm2sSa_c, Ones_c);
-                wr(Mm2sSaMsb_c, Ones_c);
-                wr(Mm2sLength_c, Ones_c);
-                wr(S2mmDa_c, Ones_c);
-                wr(S2mmDaMsb_c, Ones_c);
-                wr(S2mmLength_c, Ones_c);
-                chk(Mm2sSa_c, choose(IncludeMm2s_g, Ones_c, Zero_c), "MM2S_SA width");
-                chk(Mm2sSaMsb_c, choose(IncludeMm2s_g and AddrWidth_g > 32, lowOnes(AddrWidth_g - 32), Zero_c),
-                    "MM2S_SA_MSB width");
-                chk(Mm2sLength_c, choose(IncludeMm2s_g, lowOnes(LengthWidth_g), Zero_c), "MM2S_LENGTH width");
-                chk(S2mmDa_c, choose(IncludeS2mm_g, Ones_c, Zero_c), "S2MM_DA width");
-                chk(S2mmDaMsb_c, choose(IncludeS2mm_g and AddrWidth_g > 32, lowOnes(AddrWidth_g - 32), Zero_c),
-                    "S2MM_DA_MSB width");
-                chk(S2mmLength_c, choose(IncludeS2mm_g, lowOnes(LengthWidth_g), Zero_c), "S2MM_LENGTH width");
-                wait for 1 us;
-                check_value(Obs.ArBursts + Obs.AwBursts, 0, ERROR, "no memory access while the channels are halted");
+                -- Scatter/Gather Mode: the pointer registers hold AddrWidth_g bits without bits 5 to 0; the registers
+                -- of Direct Register Mode do not exist (CO-SG-01)
+                if IncludeSg_g then
+
+                    for i in 0 to 1 loop
+                        if (i = 0 and IncludeMm2s_g) or (i = 1 and IncludeS2mm_g) then
+                            wr(choose(i = 0, Mm2sCur_c, S2mmCur_c), Ones_c);
+                            wr(choose(i = 0, Mm2sCurMsb_c, S2mmCurMsb_c), Ones_c);
+                            wr(choose(i = 0, Mm2sTail_c, S2mmTail_c), Ones_c);
+                            wr(choose(i = 0, Mm2sTailMsb_c, S2mmTailMsb_c), Ones_c);
+                            chk(choose(i = 0, Mm2sCur_c, S2mmCur_c), x"FFFFFFC0", "CURDESC width");
+                            chk(choose(i = 0, Mm2sCurMsb_c, S2mmCurMsb_c), lowOnes(AddrWidth_g - 32), "CURDESC_MSB width");
+                            chk(choose(i = 0, Mm2sTail_c, S2mmTail_c), x"FFFFFFC0", "TAILDESC width");
+                            chk(choose(i = 0, Mm2sTailMsb_c, S2mmTailMsb_c), lowOnes(AddrWidth_g - 32), "TAILDESC_MSB width");
+                        end if;
+                    end loop;
+
+                    wr(Mm2sLength_c, Ones_c);
+                    wr(S2mmLength_c, Ones_c);
+                    chk(Mm2sLength_c, Zero_c, "no MM2S_LENGTH in Scatter/Gather Mode");
+                    chk(S2mmLength_c, Zero_c, "no S2MM_LENGTH in Scatter/Gather Mode");
+                    wait for 1 us;
+                    check_value(Obs.ArBursts + Obs.AwBursts + Obs.SgFetch + Obs.SgUpdate, 0, ERROR,
+                                "no memory access while the channels are halted");
+                else
+                    -- Address and length registers hold AddrWidth_g and LengthWidth_g bits; a length written while
+                    -- the channel is halted starts nothing (interpretation I7 of odma_registers)
+                    wr(Mm2sSa_c, Ones_c);
+                    wr(Mm2sSaMsb_c, Ones_c);
+                    wr(Mm2sLength_c, Ones_c);
+                    wr(S2mmDa_c, Ones_c);
+                    wr(S2mmDaMsb_c, Ones_c);
+                    wr(S2mmLength_c, Ones_c);
+                    chk(Mm2sSa_c, choose(IncludeMm2s_g, Ones_c, Zero_c), "MM2S_SA width");
+                    chk(Mm2sSaMsb_c, choose(IncludeMm2s_g and AddrWidth_g > 32, lowOnes(AddrWidth_g - 32), Zero_c),
+                        "MM2S_SA_MSB width");
+                    chk(Mm2sLength_c, choose(IncludeMm2s_g, lowOnes(LengthWidth_g), Zero_c), "MM2S_LENGTH width");
+                    chk(S2mmDa_c, choose(IncludeS2mm_g, Ones_c, Zero_c), "S2MM_DA width");
+                    chk(S2mmDaMsb_c, choose(IncludeS2mm_g and AddrWidth_g > 32, lowOnes(AddrWidth_g - 32), Zero_c),
+                        "S2MM_DA_MSB width");
+                    chk(S2mmLength_c, choose(IncludeS2mm_g, lowOnes(LengthWidth_g), Zero_c), "S2MM_LENGTH width");
+                    wait for 1 us;
+                    check_value(Obs.ArBursts + Obs.AwBursts, 0, ERROR, "no memory access while the channels are halted");
+                end if;
 
             elsif run("test_excluded_channel") then
                 log(ID_LOG_HDR, "TC-CO-08 configuration with one channel");
@@ -723,6 +777,131 @@ begin
                 end if;
                 check_value(choose(IncludeMm2s_g, Obs.AwBursts, Obs.ArBursts), 0, ERROR,
                             "no access of the excluded channel");
+
+            elsif run("test_sg_reference") then
+                log(ID_LOG_HDR, "TC-CO-11 programming sequence of Scatter/Gather Mode");
+                scenario("", "sg_reference");
+
+            elsif run("test_sg_tail_moves") then
+                log(ID_LOG_HDR, "TC-CO-12 tail pointer moved while the channels run, with memory backpressure");
+                Mem_v.setStall(MemRd_c, 20);
+                Mem_v.setStall(MemWr_c, 20);
+                Mem_v.setStall(MemSg_c, 30);
+                Mem_v.setLatency(MemSg_c, 6);
+                scenario("", "sg_tail_moves");
+
+            elsif run("test_sg_cyclic") then
+                log(ID_LOG_HDR, "TC-CO-13 cyclic mode");
+                scenario("", "sg_cyclic");
+
+            elsif run("test_sg_errors") then
+                log(ID_LOG_HDR, "TC-CO-14 errors of Scatter/Gather Mode and their recovery");
+                Mem_v.setError(MemSg_c, 0, ErrDescReadBase_c, ErrDescReadBase_c + ErrSize_c - 1, "10", TbDirRead);
+                Mem_v.setError(MemSg_c, 1, ErrDescWriteBase_c, ErrDescWriteBase_c + ErrSize_c - 1, "10", TbDirWrite);
+                scenario("", "sg_errors");
+
+            elsif run("test_sg_delay") then
+                log(ID_LOG_HDR, "TC-CO-16 interrupt delay and the start of a packet");
+                -- Every packet pauses after its first beat: for 1500 clock cycles, longer than the delay of the
+                -- scenarios, then for 400 clock cycles, shorter than the delay
+                shared_axistream_vvc_config(0).bfm_config.valid_low_at_word_num := 1;
+                shared_axistream_vvc_config(0).bfm_config.valid_low_duration    := 1500;
+                shared_axistream_vvc_config(1).bfm_config.ready_low_at_word_num := 1;
+                shared_axistream_vvc_config(1).bfm_config.ready_low_duration    := 1500;
+                scenario("hold/", "sg_delay");
+                shared_axistream_vvc_config(0).bfm_config.valid_low_duration    := 400;
+                shared_axistream_vvc_config(1).bfm_config.ready_low_duration    := 400;
+                scenario("overlap/", "sg_delay_overlap");
+
+            elsif run("test_sg_soft_reset") then
+                log(ID_LOG_HDR, "TC-CO-17 soft reset in Scatter/Gather Mode under load");
+                Mem_v.setLatency(MemSg_c, 100);
+                Mem_v.setStall(MemSg_c, 50);
+                Mem_v.setLatency(MemRd_c, 100);
+                Mem_v.setLatency(MemWr_c, 100);
+                Mem_v.setStall(MemRd_c, 50);
+                Mem_v.setStall(MemWr_c, 50);
+
+                -- Phase 0: the soft reset comes while a descriptor access is outstanding; phase 1: while data bursts
+                -- of the channels are outstanding (S2MM writes, without S2MM MM2S reads) and no descriptor access
+                for phase in 0 to 1 loop
+                    -- The chains of both channels started; the MM2S stream peer takes nothing, the S2MM peer of the
+                    -- harness sends one packet into the first buffer of the chain and abandons it at the reset
+                    scenario("start/", "chains started under load");
+                    if IncludeS2mm_g then
+                        PeerBytes <= minimum(minimum(MaxLen_c, 3 * S2mmBufferBeats_g * S2mmStreamWidth_g / 8), 16384);
+                    end if;
+
+                    loop
+                        Mm2s_v := Obs.SgFetch > Obs.SgRDone or Obs.SgUpdate > Obs.SgBDone;
+                        if phase = 1 then
+                            Mm2s_v := not Mm2s_v and
+                                      ((IncludeS2mm_g and Obs.AwBursts > Obs.BResps) or
+                                         (not IncludeS2mm_g and Obs.ArBursts > Obs.RBursts));
+                        end if;
+                        exit when Mm2s_v or now > 1 ms;
+                        wait for ClkPeriod_c;
+                    end loop;
+
+                    check_value(Mm2s_v, ERROR, "accesses outstanding before the reset of phase " & to_string(phase));
+                    wr(choose(IncludeMm2s_g, Mm2sDmacr_c, S2mmDmacr_c), Reset_c);
+                    poll(choose(IncludeMm2s_g, Mm2sDmacr_c, S2mmDmacr_c), Zero_c, ResetBit_c, 200 us,
+                         "end of the soft reset");
+                    -- Every accepted transaction completed, none started after the reset
+                    check_value(Obs.SgRDone, Obs.SgFetch, ERROR, "every descriptor read completed");
+                    check_value(Obs.SgBDone, Obs.SgUpdate, ERROR, "every descriptor write answered");
+                    check_value(Obs.RBursts, Obs.ArBursts, ERROR, "every read burst completed");
+                    check_value(Obs.BResps, Obs.AwBursts, ERROR, "every write burst answered");
+                    check_value(Obs.RstBeats, 0, ERROR, "S2MM stream beats taken during the soft reset");
+                    check_value(Obs.PeerDone or not IncludeS2mm_g, ERROR, "S2MM stream peer abandoned its packet");
+                    PeerBytes <= 0;
+                    Ar_v      := Obs.SgFetch + Obs.ArBursts;
+                    Aw_v      := Obs.SgUpdate + Obs.AwBursts;
+                    wait for 2 us;
+                    check_value(Obs.SgFetch + Obs.ArBursts, Ar_v, ERROR, "no read burst after the soft reset");
+                    check_value(Obs.SgUpdate + Obs.AwBursts, Aw_v, ERROR, "no write burst after the soft reset");
+                    chk(Mm2sDmacr_c, choose(IncludeMm2s_g, DmacrReset_c, Zero_c), "MM2S_DMACR after the soft reset");
+                    chk(Mm2sDmasr_c, choose(IncludeMm2s_g, DmasrReset_c or SgIncld_c, Zero_c),
+                        "MM2S_DMASR after the soft reset");
+                    chk(S2mmDmacr_c, choose(IncludeS2mm_g, DmacrReset_c, Zero_c), "S2MM_DMACR after the soft reset");
+                    chk(S2mmDmasr_c, choose(IncludeS2mm_g, DmasrReset_c or SgIncld_c, Zero_c),
+                        "S2MM_DMASR after the soft reset");
+                end loop;
+
+                -- The core works normally afterwards
+                Mem_v.setLatency(MemSg_c, 0);
+                Mem_v.setStall(MemSg_c, 0);
+                Mem_v.setLatency(MemRd_c, 0);
+                Mem_v.setLatency(MemWr_c, 0);
+                Mem_v.setStall(MemRd_c, 0);
+                Mem_v.setStall(MemWr_c, 0);
+                scenario("after/", "sg_reference after the soft reset");
+
+            elsif run("test_sg_ecc_index") then
+                log(ID_LOG_HDR, "TC-CO-15 FT buffers 6 to 9 of the Scatter/Gather engine");
+
+                -- One index at a time: the event is counted at the index of the injection only
+                for k in 6 to 9 loop
+                    softReset;
+                    wr(EccCtrl_c, x"00000001");
+                    wr(EccStatus_c, x"00000003");
+                    wr(EccInject_c, std_logic_vector(to_unsigned(InjInject_c + k, 32)));
+                    scenario("", "SG chains through buffer " & to_string(k));
+
+                    for n in 0 to 15 loop
+                        rd(EccCount_c + 4 * n, Data_v);
+                        Counts_v := n = k and ((n = 6 and IncludeMm2s_g) or (n = 7 and IncludeS2mm_g) or n >= 8);
+                        if Counts_v then
+                            check_value(Data_v, x"00000001", ERROR, "one SEC event of buffer " & to_string(n),
+                                        C_TB_SCOPE_DEFAULT, HEX);
+                        else
+                            check_value(Data_v, Zero_c, ERROR, "counters of buffer " & to_string(n) &
+                                        " after an injection at " & to_string(k), C_TB_SCOPE_DEFAULT, HEX);
+                        end if;
+                    end loop;
+
+                end loop;
+
             end if;
 
         end loop;

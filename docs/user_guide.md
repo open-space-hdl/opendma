@@ -1,7 +1,8 @@
 # OpenDMA User Guide
 
-This guide describes how to integrate and operate `odma_core` in phase a, Direct Register Mode (DR mode). The
-register map, the register fields and the programming sequences are those of \[PG021\] (AMD AXI DMA product guide,
+This guide describes how to integrate and operate `odma_core` in Direct Register Mode (DR mode, phase a) and in
+Scatter/Gather Mode (SG mode, phase b). The register map, the register fields, the descriptor format and the
+programming sequences are those of \[PG021\] (AMD AXI DMA product guide,
 version 7.1); this guide states where OpenDMA implements, interprets or omits a part of it. The register map with all
 fields is [hdl/odma_registers/docs/register_map.md](../hdl/odma_registers/docs/register_map.md), the C header
 `sw/odma_regs.h`.
@@ -15,17 +16,17 @@ top level is `opendma.odma_core`. Open Logic is the submodule `open-logic/` (ope
 
 ## 2. Generics
 
-| Generic | \[PG021\] parameter | Range in phase a | Default |
+| Generic | \[PG021\] parameter | Range | Default |
 | --- | --- | --- | --- |
-| `IncludeSg_g` | `c_include_sg` | false | false |
+| `IncludeSg_g` | `c_include_sg` | boolean: false DR mode, true SG mode | false |
 | `IncludeMm2s_g`, `IncludeS2mm_g` | `c_include_mm2s`, `c_include_s2mm` | boolean, at least one true | true |
 | `LengthWidth_g` | `c_sg_length_width` | 8 to 26 | 14 |
 | `AddrWidth_g` | `c_addr_width` | 32 to 64 | 32 |
 | `Mm2sMemWidth_g`, `S2mmMemWidth_g` | `c_m_axi_mm2s_data_width`, `c_m_axi_s2mm_data_width` | 32, 64, 128, 256, 512, 1024 | 32 |
 | `Mm2sStreamWidth_g`, `S2mmStreamWidth_g` | `c_m_axis_mm2s_tdata_width`, `c_s_axis_s2mm_tdata_width` | 8, 16, ..., 1024, at most the memory width | 32 |
 | `Mm2sBurstBeats_g`, `S2mmBurstBeats_g` | `c_mm2s_burst_size`, `c_s2mm_burst_size` | 2, 4, ..., 256 | 16 |
-| `StsCntrlStrm_g`, `UseRxLength_g` | `c_sg_include_stscntrl_strm`, `c_sg_use_stsapp_length` | false | false |
-| `MicroDma_g` | `c_micro_dma` | false | false |
+| `StsCntrlStrm_g`, `UseRxLength_g` | `c_sg_include_stscntrl_strm`, `c_sg_use_stsapp_length` | false until phase c | false |
+| `MicroDma_g` | `c_micro_dma` | false until phase c | false |
 | `Mm2sBufferBeats_g`, `S2mmBufferBeats_g` | none: depth of the data buffer of a channel in stream beats | at least two bursts (2 x burst x memory width / stream width) | 64 |
 | `ExtRegs_g` | none: extension register window 0x100 to 0x1FF | boolean | true |
 
@@ -51,12 +52,14 @@ registers but not the AXI4-Lite slave, so that the register access that starts i
 | MM2S stream | `M_Mm2s_Data`, `_Keep`, `_Last`, `_Valid`, `_Ready` | AXI4-Stream master: one packet per transfer, first byte in lane 0, `TKeep` contiguous from lane 0 in the last beat |
 | S2MM stream | `S_S2mm_Data`, `_Keep`, `_Last`, `_Valid`, `_Ready` | AXI4-Stream slave: packets of any length; the bytes of the last beat are those up to the first lane whose `TKeep` bit is clear; `TKeep` of the other beats is not used |
 | S2MM memory port | `M_AxiS2mm_Aw*`, `M_AxiS2mm_W*`, `M_AxiS2mm_B*` | AXI4 write master: INCR bursts with write strobes, `AwCache` 0011, `AwProt` 000, no ID signals; a burst is requested only when all its data is in the core |
-| Interrupts | `Mm2s_Irq`, `S2mm_Irq` | Level, high-active: the OR of the enabled `IOC_Irq` and `Err_Irq` flags of the channel |
+| Descriptor port | `M_AxiSg_Ar*`, `M_AxiSg_R*`, `M_AxiSg_Aw*`, `M_AxiSg_W*`, `M_AxiSg_B*` | SG mode only: AXI4 master with `AddrWidth_g` address bits and 32 data bits for the descriptors of both channels. A fetch is one INCR burst of 8 beats (descriptor words 0x00 to 0x1C), a status write one beat at descriptor offset 0x1C with all strobes; `AxSize` 4 bytes, `AxCache` 0011, `AxProt` 000, no ID signals; at most one fetch and one status write at a time, the channels served round robin. In DR mode the port is idle and its inputs may stay open |
+| Interrupts | `Mm2s_Irq`, `S2mm_Irq` | Level, high-active: the OR of the enabled `IOC_Irq`, `Dly_Irq` (SG mode) and `Err_Irq` flags of the channel |
 | ECC interrupt | `Ecc_Irq` | Level, high-active: an enabled flag of `ECC_STATUS` (extension window) |
 | Reset outputs | `Mm2s_RstOut`, `S2mm_RstOut` | High-active, during `Rst` and during a soft reset: reset of the stream peers |
 
 The ports of a channel that the configuration does not include keep constant idle values (valid and ready outputs
-'0', burst type INCR, cache 0011, all other outputs 0), and its inputs may stay open.
+'0', burst type INCR, cache 0011, all other outputs 0), and its inputs may stay open. The same holds for the
+descriptor port in DR mode, whose `AxSize` outputs read 4 bytes.
 
 ## 5. Programming sequence
 
@@ -103,13 +106,76 @@ The soft reset resets both channels. It stops them at once, completes every AXI 
 outputs high; the stream peers connected to them abandon their packets. Then the registers return to their reset
 values, and an error injection pending in an FT buffer is cancelled.
 
-### 5.5 Extension window
+### 5.5 Scatter/Gather Mode
+
+With `IncludeSg_g` the channels take their transfers from descriptor chains in memory (\[PG021\], descriptors of
+Tables 25 to 40, programming sequence of chapter 4). The registers of DR mode (`MM2S_SA`, `MM2S_LENGTH`, `S2MM_DA`,
+`S2MM_LENGTH`) are replaced by `CURDESC`, `TAILDESC` and their MSB registers; `DMASR.SGIncld` reads 1.
+
+Descriptors and chains:
+
+- A descriptor is 16 words aligned to 64 bytes; the engine reads words 0x00 to 0x1C (`NXTDESC`, `NXTDESC_MSB`,
+  `BUFFER_ADDRESS`, `BUFFER_ADDRESS_MSB`, two reserved words, `CONTROL`, `STATUS`) and writes only the `STATUS`
+  word. The user application words follow with the control and status streams of phase c.
+- A chain is linked by `NXTDESC`; the last descriptor normally points back to the first, as the drivers build their
+  rings. Software clears `Cmplt` in the `STATUS` word of every descriptor it hands to the engine.
+- Buffers lie at any byte address, also across 4 KB boundaries, with lengths from 1 to 2**`LengthWidth_g` - 1.
+- Until Open Logic provides the stream join and split (gap G10), every packet uses one descriptor: an MM2S
+  descriptor has `TXSOF` and `TXEOF` set, and an S2MM packet fits into the buffer of one descriptor (section 9).
+
+Programming sequence of each channel:
+
+1. Write the address of the first descriptor to `CURDESC` (above 32 address bits also `CURDESC_MSB`) while the
+   channel is halted.
+2. Write `DMACR` with `RS` = 1, the interrupt enables and, as needed, `IRQThreshold`, `IRQDelay` and `CyclicBD`.
+3. Poll `DMASR` until `Halted` reads 0.
+4. Write the address of the last prepared descriptor to `TAILDESC`. This write starts the engine; above 32 address
+   bits write `TAILDESC` first and `TAILDESC_MSB` last, which starts it (interpretation SGI-01 of `odma_sg`), as the
+   public drivers do.
+5. The engine fetches the descriptors up to the tail, transfers their buffers and writes their status: transferred
+   bytes, the error flags, S2MM `RXSOF` and `RXEOF`, and `Cmplt` = 1 after a transfer without error. It fetches one
+   descriptor ahead, so consecutive transfers follow each other without waiting for a fetch.
+6. After the tail descriptor the engine stops and `DMASR.Idle` reads 1; `CURDESC` reads the tail. Software processes
+   the completed descriptors, clears their status and moves the tail pointer, also while the engine still works.
+
+Interrupts: every completed packet counts down the threshold counter; when it reaches 0, `IOC_Irq` is set and the
+counter is reloaded with `IRQThreshold`. The status words of a packet are in memory before its interrupt flag is set.
+With `IRQDelay` not 0, a packet completion that does not reach the threshold starts the delay timer (units of 125
+clock cycles); the first stream beat of the next packet stops and clears it, and when it expires `Dly_Irq` is set and
+the threshold counter reloaded. An MM2S packet can start before the completion of the packet before it, because the
+engine issues the next descriptor ahead: the timer then runs during that packet, and `Dly_Irq` can be set while it is
+being sent (interpretation R10 of `odma_registers`).
+
+Cyclic mode (`DMACR.CyclicBD` = 1): after the first tail pointer write the engine processes the ring until the
+channel is halted or reset, ignores `Cmplt` of the fetched descriptors and the tail pointer, and still writes the
+status of every descriptor.
+
+Halt (`RS` = 0): the engine issues no further descriptor, the channel ends the transfer in progress as in DR mode,
+and its status is written; descriptors fetched but not started keep their status, and `CURDESC` points to the first
+of them. `DMASR.Halted` is set when the channel and the engine have both stopped.
+
+Errors: each halts its channel with `Err_Irq`, and `CURDESC` points to the descriptor of the error. The descriptors
+before it are completed with their status; an MM2S descriptor after it may also be completed, because it was already
+issued (interpretation SGI-08 of `odma_sg`).
+
+| Error | Flags |
+| --- | --- |
+| Descriptor fetch or status write answered with SLVERR or DECERR | `SGSlvErr` (`SGDecErr` for DECERR follows with Open Logic, gap G5) |
+| Stale descriptor: `Cmplt` = 1 at the fetch outside cyclic mode; the descriptor is not processed and not written | `SGIntErr` |
+| Buffer length 0: no transfer, the status gets `DMAIntErr` and `Cmplt` 0 | `DMAIntErr` |
+| Transfer error of the channel (section 5.4): the status gets the flag and `Cmplt` 0 | `DMASlvErr`, `DMADecErr` (S2MM also `DMAIntErr`) |
+
+Recovery is the soft reset of section 5.4; in SG mode it also completes every descriptor access the memory has
+accepted.
+
+### 5.6 Extension window
 
 With `ExtRegs_g` the offsets 0x100 to 0x1FF hold an identification word (`EXT_ID` = 0x4F444D41), the version, the
 values of all generics, the ECC counters of the FT buffers, their flags with the enables of `Ecc_Irq` and an error
 injection (register map). The FT buffer indices are 0 MM2S read data, 1 S2MM data, 2 S2MM chunk, 3 S2MM write
-data, 4 MM2S transfer and 5 MM2S response; the other indices count nothing in phase a. Software written for
-\[PG021\] does not access the window.
+data, 4 MM2S transfer and 5 MM2S response; in SG mode 6 MM2S descriptor buffer, 7 S2MM descriptor buffer, 8 read
+data and 9 write data of the descriptor port. The other indices count nothing. Software written for \[PG021\] does
+not access the window.
 
 `ECC_INJECT` flips one bit (single error) or two bits (double error) of the next word written to the selected
 buffer, in one of two modes:
@@ -117,7 +183,7 @@ buffer, in one of two modes:
 | `ECC_INJECT.Data` | Bits flipped | Effect |
 | --- | --- | --- |
 | 0 (after every reset) | Parity bits of the code | The data never changes: a single error is corrected, a double error is detected and counted. Safe in a running system |
-| 1 | Data bits 0 and 1 | A single error is corrected (data unchanged). A double error corrupts the word: a byte of the MM2S stream (index 0), of the S2MM packet in memory (indices 1 and 3), the length of the MM2S packet (index 4), the result code of the MM2S transfer (index 5, `DMADecErr`) or the length of an S2MM chunk (index 2). For tests only |
+| 1 | Data bits 0 and 1 | A single error is corrected (data unchanged). A double error corrupts the word: a byte of the MM2S stream (index 0), of the S2MM packet in memory (indices 1 and 3), the length of the MM2S packet (index 4), the result code of the MM2S transfer (index 5, `DMADecErr`), the length of an S2MM chunk (index 2), the buffer length of a descriptor (indices 6 and 7), the `NXTDESC` bits 1 and 0 of a fetch, which the engine ignores (index 8), or the transferred bytes of a status word (index 9). For tests only |
 
 ## 6. Protection scope
 
@@ -127,7 +193,7 @@ TMR for all other logic:
 
 | Part | Protection | Indication and test |
 | --- | --- | --- |
-| The six FT buffers: MM2S read data, transfer and response buffers; S2MM data, chunk and write data buffers | SECDED ECC of the Open Logic ft entities: a single error is corrected, a double error is detected and counted; the word of a double error is passed on as read (corrupted data, length or result code of the transfer it belongs to), and the core does not turn the double error into a transfer error | `ECC_COUNT_0` to `ECC_COUNT_5`, `ECC_STATUS`, `Ecc_Irq` with `ECC_ENABLE`; error injection through `ECC_INJECT` (parity mode non-destructive, data mode corrupts data with a double error, section 5.5) |
+| The FT buffers: MM2S read data, transfer and response buffers; S2MM data, chunk and write data buffers; in SG mode the descriptor buffers of both channels and the read and write data buffers of the descriptor port | SECDED ECC of the Open Logic ft entities: a single error is corrected, a double error is detected and counted; the word of a double error is passed on as read (corrupted data, length, result code or descriptor field of the transfer it belongs to), and the core does not turn the double error into a transfer error | `ECC_COUNT_0` to `ECC_COUNT_9`, `ECC_STATUS`, `Ecc_Irq` with `ECC_ENABLE`; error injection through `ECC_INJECT` (parity mode non-destructive, data mode corrupts data with a double error, section 5.6) |
 | Clock domain crossings and reset synchronisers | The core has none (one clock domain); an `olo_ft_fifo_async` placed at a port by the integrator uses triplicated synchronisers (`SyncTmr_g` = true) | none |
 | State machines | Recovery state through the `when others` branch and the reset | none |
 | All other logic: registers of the control and data paths, counters, pointers, pipeline registers | TMR of the synthesis tool (for example `syn_radhardlevel` = `tmr` with Synplify, or the equivalent setting of the tool chain). The core adds no protection of its own for this logic; without TMR, an upset in it is not covered | synthesis report |
@@ -170,6 +236,12 @@ bursts (`S2mmBurstBeats_g` 64 or more gives at least 0.9 beats per clock cycle) 
 takes at least four clock cycles in the AXI master for its command, and the register accesses of DR mode add the
 time of the processor for every transfer.
 
+In SG mode the engine processes at most one descriptor per fetch time: about 22 clock cycles per descriptor for one
+channel and 40 per channel when both work, with a descriptor memory without latency; a latency of L clock cycles
+adds about L per descriptor for one channel and 2 x L per channel for two (verification report of `odma_sg`). Buffers
+that take longer to transfer than a fetch follow each other without a gap on the stream; a chain of many short
+buffers runs at the descriptor rate.
+
 ## 8. Integration constraints
 
 | Constraint | Reason |
@@ -178,33 +250,43 @@ time of the processor for every transfer.
 | The memory answers every burst in order (no ID signals) | The masters use one ID for all transactions |
 | The stream peers are reset by `Mm2s_RstOut` and `S2mm_RstOut` | A soft reset ends the packets in progress; a peer that continues a packet sends its rest as a new packet |
 | One clock for all ports | Synchronous configuration; asynchronous stream or memory clocks need FIFOs at the ports (section 3) |
-| Phase a: `IncludeSg_g`, `StsCntrlStrm_g`, `UseRxLength_g` and `MicroDma_g` false | Scatter/Gather Mode, the control and status streams and the micro DMA follow in phases b and c |
+| `StsCntrlStrm_g`, `UseRxLength_g` and `MicroDma_g` false | The control and status streams and the micro DMA follow in phase c |
+| SG mode: every packet in one descriptor (MM2S `TXSOF` and `TXEOF` in every descriptor, S2MM packets not longer than a buffer) | Packets of several buffers need the stream join and split of Open Logic (gap G10) |
+| `DMACR.Keyhole` = 0 | The bit is stored and read back, but the transfers use incrementing bursts until Open Logic provides FIXED bursts (gap G1) |
+| SG mode: the descriptor memory answers in order (no ID signals) and holds descriptors aligned to 64 bytes | The descriptor port uses one ID; bits 5 to 0 of the descriptor pointers are ignored |
 
 ## 9. Conformance
 
-Implemented in phase a (\[PG021\] references in the compliance matrix, [docs/compliance.md](compliance.md)):
+Implemented (\[PG021\] references in the compliance matrix, [docs/compliance.md](compliance.md)):
 
 - Register map and fields of DR mode, the programming sequences of DR mode for both channels, the halt, the soft
   reset, the interrupt outputs and their enables, the reset outputs.
 - Transfers at any byte address and of any length up to 2**`LengthWidth_g` - 1 bytes in every width configuration
   (the function of the data realignment engine, also for streams wider than 512 bits), 4 KB and burst splitting.
 - The configuration generics of Table 44 listed in section 2, with the ranges of \[PG021\].
+- Scatter/Gather Mode: the register map with `CURDESC` and `TAILDESC`, the descriptors without user application
+  fields, the tail pointer mode, cyclic mode, interrupt coalescing with the threshold and the delay timer, the
+  errors of the engine, for packets of one descriptor each.
 
 Partly implemented:
 
 - `DMADecErr` for a DECERR response of the memory: Open Logic 4.7.0-ft.6 reports a failed AXI command without its
   response code, so a DECERR response sets `DMASlvErr` (S2MM with `DMAIntErr`) instead of `DMADecErr`. A buffer
-  beyond the top of the address space sets `DMADecErr`. The distinction follows with the Open Logic release that
+  beyond the top of the address space sets `DMADecErr`. In SG mode a DECERR response to a descriptor access sets
+  `SGSlvErr` instead of `SGDecErr` for the same reason. The distinction follows with the Open Logic release that
   reports the response code.
+- Packets in SG mode: one descriptor per packet. MM2S packets of several descriptors and S2MM packets over several
+  buffers follow with the stream join and split of Open Logic (gap G10).
 
-Not implemented in phase a: Scatter/Gather Mode, cyclic mode, interrupt coalescing and delay, keyhole transfers
-(phase b); control and status streams, the receive length in the status stream, micro DMA (phase c). Not in scope:
-multichannel mode and the asynchronous clock configuration.
+Not implemented: keyhole transfers (`DMACR.Keyhole`, waiting for the FIXED bursts of Open Logic, gap G1); control
+and status streams with the user application fields, the receive length in the status stream, micro DMA (phase c).
+Not in scope: multichannel mode and the asynchronous clock configuration.
 
 ## 10. Verification and tools
 
 Each module has a specification, an architecture, a verification plan and a verification report in
 `hdl/<module>/docs/`. The core tests (`odma_core`) execute the programming sequences of a model written from
-\[PG021\] against the assembled core in seven configurations. `python run.py` runs the full regression with GHDL,
-`python lint/synth_check.py` the synthesis check of the generics, `python tools/compliance.py --check` the
-traceability to \[PG021\]. The technology readiness level is stated in the README and the roadmap.
+\[PG021\] against the assembled core in seven DR and five SG configurations. `python run.py` runs the full
+regression with GHDL, `python lint/synth_check.py` the synthesis check of the generics,
+`python tools/compliance.py --check` the traceability to \[PG021\]. The technology readiness level is stated in the
+README and the roadmap.

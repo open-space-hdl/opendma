@@ -11,9 +11,10 @@ implementation written from the published product guide; it contains no code, te
 
 ## Status
 
-**In development.** Phase a, Direct Register Mode, is implemented and verified in simulation with GHDL; the
-QuestaSim runs with code coverage are open. Scatter/Gather Mode and the control and status streams follow. The
-[roadmap](docs/roadmap.md) lists the development phases and the state of every module.
+**In development.** Direct Register Mode (phase a) and Scatter/Gather Mode with packets of one descriptor each
+(phase b) are implemented and verified in simulation with GHDL; the QuestaSim runs with code coverage are open.
+Packets of several buffers and keyhole transfers wait for additions to Open Logic; the control and status streams
+follow in phase c. The [roadmap](docs/roadmap.md) lists the development phases and the state of every module.
 
 ## Documentation
 

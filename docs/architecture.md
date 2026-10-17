@@ -317,6 +317,7 @@ built from and the items of the published interface it owns (P1).
 | Channel control | RG-1, RG-3 to the channels | Run, halt, drain request; idle and drained state | Levels |
 | Descriptor engine control (phase b) | RG-1 to SG-1, SG-1 and SG-2 to RG-1 | Run, drain, `CURDESC`, tail pointer and its triggering write, `CyclicBD`, `Keyhole`; current descriptor pointer, idle, stopped, packet and error events | Levels and events |
 | Interrupt events | RG-1, SG-2 to RG-2 | Packet complete, error | Events |
+| Packet start (phase b) | CO-1 to RG-2 | The first beat of a packet at each stream port, for the delay timer | Events |
 | ECC events | FT buffers to RG-4 | SEC and DED per buffer | Events |
 | Register bus | RG-1 to RG-4 and the user | Registers of section 6 | AXI4-Lite (`olo_axi_lite_slave`) |
 

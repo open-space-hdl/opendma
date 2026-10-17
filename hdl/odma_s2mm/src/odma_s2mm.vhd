@@ -105,26 +105,6 @@ architecture rtl of odma_s2mm is
     -- 2**size bits (gap G14), which no command reaches with one more size bit
     constant SizeBits_c    : positive := LengthWidth_g + 1;
 
-    -- Flip pattern of an injected error in a codeword of olo_ft_pkg_ecc. Parity mode (data '0'):
-    -- the overall parity (bit 0) and, for a double error, the Hamming parity p0 (bit 1), so the
-    -- data never changes. Data mode: data bit 0 (codeword bit 3) and, for a double error, data
-    -- bit 1 (codeword bit 5); a double error then corrupts the word
-    function flipPattern (
-        width  : positive;
-        double : std_logic;
-        data   : std_logic) return std_logic_vector is
-        variable Flip_v : std_logic_vector(width - 1 downto 0) := (others => '0');
-    begin
-        if data = '1' then
-            Flip_v(3) := '1';
-            Flip_v(5) := double;
-        else
-            Flip_v(0) := '1';
-            Flip_v(1) := double;
-        end if;
-        return Flip_v;
-    end function;
-
     -- Chunk former to the buffers
     signal Data_InData  : std_logic_vector(StreamWidth_g - 1 downto 0);
     signal Data_InValid : std_logic;

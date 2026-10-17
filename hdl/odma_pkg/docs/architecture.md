@@ -4,7 +4,7 @@
 
 | File | Content |
 | --- | --- |
-| `src/odma_pkg.vhd` | Error codes of a transfer result `Err*_c`, functions `lastKeep`, `keepBytes`, `beyondTop`, `coreConfigError` |
+| `src/odma_pkg.vhd` | Error codes of a transfer result `Err*_c`, functions `lastKeep`, `keepBytes`, `beyondTop`, `coreConfigError`, `flipPattern` |
 | `tb/odma_pkg_tb.vhd`, `tb/odma_pkg_th.vhd` | Testbench of the package and of the shared verification components |
 | `../../tb/` | Shared verification components (section 3) |
 | `../../tb/model/` | Model of the programming sequences (section 4) |
@@ -19,6 +19,7 @@
 | `keepBytes(keep)` | Number of valid bytes of a last beat: the index of the lowest '0' of `keep`, or its length when all bits are set (PKG-02) |
 | `beyondTop(addr, bytes)` | True when the buffer from `addr` with `bytes` bytes does not fit below the top of the address space of `addr'length` bits: `addr + bytes - 1` overflows `addr'length` bits; false for `bytes` = 0, since an empty buffer touches no byte (PKG-03) |
 | `coreConfigError(...)` | Empty string for a consistent set of core generics, otherwise a message naming the first inconsistent generic (PKG-04); called by an assertion of `odma_core` |
+| `flipPattern(width, double, data)` | The `ErrInj_BitFlip` pattern of a codeword of `olo_ft_pkg_ecc` with `width` bits (PKG-11): parity mode the overall parity bit 0 and for a double error the Hamming parity bit 1, so the data never changes; data mode data bit 0 (codeword bit 3) and for a double error data bit 1 (codeword bit 5). Used by the FT buffers of `odma_mm2s`, `odma_s2mm` and `odma_sg` |
 
 The functions are pure and synthesisable; `lastKeep` and `keepBytes` unroll to one comparison per lane, `beyondTop`
 to one adder.

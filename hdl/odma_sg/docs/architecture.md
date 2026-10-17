@@ -68,15 +68,18 @@ event, `Cmd_Valid` '0', `Res_Ready` '0'), and its buffer counts nothing.
 | `TailPtr` | `AddrWidth_g` - 6 | Tail pointer of the engine, taken from `Tail` at every `TailWr` |
 | `Started` | 1 | A tail pointer write has been taken since the start: fetching is enabled |
 | `AtTail` | 1 | The last fetched descriptor is the tail: no further fetch |
-| `Count` | 2 | Descriptors in the window: a fetch in progress, the entries of the descriptor buffer and the issued commands without result |
+| `BufCnt`, `IssCnt` | 2, 2 | Entries of the descriptor buffer and issued commands without result; with a fetch in progress they form `Count`, the descriptors in the window |
 | `Issued` | 2 entries of `AddrWidth_g` - 6 | Queue of the descriptors whose command was accepted by the channel and whose result is outstanding, oldest first |
 | `Update` | 1 entry | The result being written back: descriptor address, status word, end of packet, transfer error |
 | `ErrStop`, `ErrPtr` | 1, `AddrWidth_g` - 6 | An error occurred: no further fetch or command; the descriptor of the first error |
+| `StaleHold` | 1 | A stale descriptor was fetched: no further fetch (section 4.3) |
 | `Halted` | 1 | `Run` is '0' and no access, command or status update of the channel is outstanding: `CurPtr` is held, the descriptor buffer is emptied |
 
 Descriptor pointers are held without their bits 5 to 0, which are ignored (SG-FE-01), and without the bits at or above
 `AddrWidth_g` (SG-IF-03). The descriptors of a channel are processed strictly in order: they are fetched, issued,
-completed and updated in the order of the chain.
+completed and updated in the order of the chain. At every clock edge `Count` is at most 2: the buffer count
+follows the push and pop of the buffer, the issued count the command handshakes and the results, one result per
+accepted command.
 
 ### 4.2 Start and tail pointer
 
@@ -115,7 +118,9 @@ passes them to the engine in order. The engine keeps the words it needs:
 At the end of a fetch without error the engine writes the entry of section 6 into the descriptor buffer, `LastPtr`
 := the fetched address, `NextPtr` := `NXTDESC`, and `AtTail` := (fetched address = `TailPtr`) and not `Cyclic`
 (SG-FE-03, SG-CY-01). A tail pointer write in the same clock cycle is taken first, so the comparison uses the new
-`TailPtr`.
+`TailPtr`. A fetched stale descriptor (`Cmplt` = 1 outside cyclic mode) stops further fetch requests at once
+(`StaleHold`); its error follows when it reaches the head of the buffer (section 4.4), so no descriptor behind it is
+fetched.
 
 A fetch that ends with an error writes nothing into the buffer; the engine sets `ErrStop`, `ErrPtr` := the fetched
 address and reports the engine error of the access (SG-ER-02, section 4.7).
@@ -199,7 +204,7 @@ status written (SG-FE-03). In cyclic mode `AtTail` stays '0', so `Idle` stays '0
 | Error (stale descriptor, fetch error, transfer error, write error) | `ErrStop`: no further fetch request and no further command; the issued commands complete, their results are taken and written back (SG-ER-03, interpretation SGI-08); the register interface sets the flags, clears `DMACR.RS` and so lowers `Run` |
 | `Run` falls (halt or after an error) | No further fetch request, no command (`Cmd_Valid` qualified with `Run`); a fetch already granted completes and its entry is written into the buffer; the issued commands complete as the channel ends them, and their results are written back (SG-HA-01) |
 | `Run` = '0', `Issued` and the `Update` stage empty, no access of the channel outstanding at the port | `Halted` := '1': `CurPtr` keeps its value, the first descriptor that was not started; the descriptor buffer is emptied (one entry per clock cycle, without commands), the entries keep their status in memory |
-| `Drain` = '1' | No fetch request, no command, no status write requested; a fetch or a write that the port has already given to the master completes, read data is discarded; the channels return no result during a drain, so `Issued` keeps its entries until the core reset (SG-HA-02) |
+| `Drain` = '1' | No fetch request, no command, no status write requested; a fetch or a write that the port has already granted completes, read data is discarded; the channels return no result during a drain, so `Issued` keeps its entries until the core reset (SG-HA-02) |
 
 The engine error of a descriptor access is the code of the port (section 5): `SGSlvErr` for SLVERR and `SGDecErr` for
 DECERR (SG-ER-04). Every descriptor pointer is aligned to 64 bytes and a descriptor has at most 52 bytes (with the user
@@ -213,11 +218,12 @@ read and write channels of the master.
 
 | Side | Arbiter | Sequence |
 | --- | --- | --- |
-| Fetch | `olo_base_arb_rr` over the fetch requests of the MM2S engine (bit 1) and the S2MM engine (bit 0) | The grant is registered with its owner; read command of 8 beats at the descriptor address (`CmdRd_LowLat` = '0'); the 8 read words go to the owner (`Rd_Ready` = '1'); after the word with `Rd_Last` and the response (`Rd_Done` or `Rd_Error`, which can come before or after the last word), an end pulse with the error code goes to the owner and the arbiter takes the next request |
+| Fetch | `olo_base_arb_rr` over the fetch requests of the MM2S engine (bit 1) and the S2MM engine (bit 0) | The grant is registered with its owner; read command of 8 beats at the descriptor address (`CmdRd_LowLat` = '0'); the 8 read words go to the owner (`Rd_Ready` = '1'); after the word with `Rd_Last` and the response (`Rd_Done` or `Rd_Error`, which can come before or after the last word), an end pulse with the error code goes to the owner, at least one clock cycle after the last word, and the arbiter takes the next request |
 | Status write | `olo_base_arb_rr` over the write requests of both engines, same order | Write command of 1 beat at the descriptor address + 0x1C (`CmdWr_LowLat` = '0'), the status word with all write strobes; after `Wr_Done` or `Wr_Error` an end pulse with the error code goes to the owner |
 
 The round-robin arbiters give both channels the same share when both request (SG-IF-01); a channel that requests
-alone is served at once. A drain withdraws a request that has not been given to the master.
+alone is served at once. During a drain the arbiters grant nothing and the engines withdraw their requests; an access
+granted before the drain completes.
 
 `olo_ft_axi_master_simple` generics: `AxiAddrWidth_g` = `AddrWidth_g`, `AxiDataWidth_g` = 32, `AxiMaxBeats_g` = 16,
 `AxiMaxOpenTransactions_g` = 2, `UserTransactionSizeBits_g` = 5 (commands of up to 31 beats: 8 beats for a fetch and
@@ -282,7 +288,8 @@ their own (the descriptor buffer, `Issued` and the `Update` stage hold the state
 - Fetch: the request is granted in the next clock cycle when the read side is free; the read command reaches the
   master one clock cycle later, and the first AR handshake follows after the command time of the master. The 8 words
   follow the memory latency L at one word per clock cycle; the entry is in the descriptor buffer one clock cycle
-  after the end pulse. A fetch takes about 14 + L clock cycles.
+  after the end pulse. A fetch takes about 22 + L clock cycles from the request to the command (verification
+  report).
 - Issue: `Cmd_Valid` rises in the clock cycle after the entry is written (fall-through of the buffer).
 - Update: the write request follows the result handshake by one clock cycle; the status write takes about 6 clock
   cycles plus the latency of the write response. `Pkt` and `ErrValid` are pulses in the clock cycle after the end

@@ -2,7 +2,7 @@
 
 ## 1. Test results
 
-Run on 2026-10-16 with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20: `python run.py "*odma_pkg*"`.
+Run on 2026-10-17 with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20: `python run.py "*odma_pkg*"`.
 
 | Test ID | Test case | Status |
 | --- | --- | --- |
@@ -11,6 +11,7 @@ Run on 2026-10-16 with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
 | `test_beyond_top` | TC-PKG-03 | PASS |
 | `test_config` | TC-PKG-04 | PASS |
 | `test_err_codes` | TC-PKG-05 | PASS |
+| `test_flip_pattern` | TC-PKG-13 | PASS |
 | `test_mem_bursts` | TC-PKG-06 | PASS |
 | `test_mem_errors` | TC-PKG-07 | PASS |
 | `test_mem_checks` | TC-PKG-08 | PASS |
@@ -23,7 +24,7 @@ QuestaSim runs with the next batch of features (module workflow of the repositor
 
 ## 2. Summary
 
-All 12 test cases pass; every requirement of the specification is covered (see the verification plan). VSG reports no
+All 13 test cases pass; every requirement of the specification is covered (see the verification plan). VSG reports no
 errors and no warnings.
 
 - The functions agree with the independent computations of the bench for every tested width and length, and the

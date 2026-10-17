@@ -3,4 +3,5 @@ hdl/odma_pkg
 hdl/odma_registers
 hdl/odma_mm2s
 hdl/odma_s2mm
+hdl/odma_sg
 hdl/odma_core

@@ -218,6 +218,7 @@ architecture rtl of odma_registers is
         Run          : std_logic;
         CmdValid     : std_logic;
         CmdAddr      : std_logic_vector(AddrWidth_g - 1 downto 0);
+        CmdKeyhole   : std_logic;                                  -- DMACR.Keyhole at the length write
     end record;
 
     type Channel_a is array (0 to 1) of Channel_r;
@@ -555,10 +556,11 @@ begin
                                 v.Ch(ch).State := Stopping_s;
                             elsif LenWr_v then
                                 -- One transfer command with the address registers of this cycle
-                                v.Ch(ch).Length   := Len_v;
-                                v.Ch(ch).CmdAddr  := r.Ch(ch).Addr;
-                                v.Ch(ch).CmdValid := '1';
-                                v.Ch(ch).State    := Busy_s;
+                                v.Ch(ch).Length     := Len_v;
+                                v.Ch(ch).CmdAddr    := r.Ch(ch).Addr;
+                                v.Ch(ch).CmdKeyhole := r.Ch(ch).Keyhole;
+                                v.Ch(ch).CmdValid   := '1';
+                                v.Ch(ch).State      := Busy_s;
                             end if;
 
                         when Busy_s =>
@@ -725,7 +727,7 @@ begin
     S2mmCmd_Valid   <= r.Ch(S2mm_c).CmdValid;
     S2mmCmd_Addr    <= r.Ch(S2mm_c).CmdAddr;
     S2mmCmd_Length  <= r.Ch(S2mm_c).Length;
-    S2mmCmd_Keyhole <= '0';               -- The S2MM keyhole of Direct Register Mode follows with gap G1 (S2-SG-04)
+    S2mmCmd_Keyhole <= r.Ch(S2mm_c).CmdKeyhole; -- DMACR.Keyhole at the length write (RG-SG-11)
     S2mmRes_Ready   <= '1';
     S2mm_Run        <= r.Ch(S2mm_c).Run;
     S2mm_Drain      <= SoftBusy and Included(S2mm_c);
@@ -780,6 +782,7 @@ begin
                     r.Ch(ch).HaltPend     <= '0';
                     r.Ch(ch).Run          <= '0';
                     r.Ch(ch).CmdValid     <= '0';
+                    r.Ch(ch).CmdKeyhole   <= '0';
                 end loop;
 
             end if;

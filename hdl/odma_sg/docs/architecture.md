@@ -127,7 +127,7 @@ The head entry of the descriptor buffer is checked when it is at the output whil
 
 | Head entry | Action |
 | --- | --- |
-| `Stale` = '1' (`Cmplt` = 1 outside cyclic mode) | Not issued and not written: `ErrStop`, `ErrPtr` := its address, engine error `SGIntErr` (SG-FE-05) |
+| `Stale` = '1' (`Cmplt` = 1 outside cyclic mode) | Not issued and not written: `ErrStop`, `ErrPtr` := its address, engine error `SGIntErr` (SG-FE-05, interpretation SGI-09) |
 | Otherwise | `Cmd_Valid` = '1' while `Run` = '1', `Drain` = '0' and `ErrStop` = '0', with the buffer address, the buffer length, `Sof`, `Eof` (MM2S) and `Keyhole` of the entry; at the handshake the entry is popped and its address enters `Issued` |
 
 A buffer length of 0 is issued like any other descriptor: both channels return the internal error without
@@ -146,7 +146,7 @@ result is classified:
 
 | Result | Action |
 | --- | --- |
-| 0 bytes, no end of packet, no error, `Run` = '0' (an S2MM transfer halted before any byte arrived, `odma_s2mm` S2-HA-01) | Not started: no status write; `CurPtr` is held at this descriptor until the stop, like the descriptors not issued (SG-HA-01) |
+| 0 bytes, no end of packet, no error, `Run` = '0' (an S2MM transfer halted before any byte arrived, `odma_s2mm` S2-HA-01) | Not started: no status write; `CurPtr` is held at this descriptor until the stop, like the descriptors not issued (SG-HA-01, interpretation SGI-10) |
 | Any other | Into the `Update` stage with the status word below; a write of one word at offset 0x1C of the descriptor is requested |
 
 | Status bits | Content |
@@ -158,7 +158,8 @@ result is classified:
 | 30 | `DMADecErr`: `ErrDec_c` |
 | 31 | `Cmplt`: '1' when the error code is `ErrNone_c` (interpretation SGI-02) |
 
-An S2MM transfer that a halt ended inside a packet gets the bytes written and `Cmplt` = '1' without `RXEOF`. A result
+An S2MM transfer that a halt ended inside a packet gets the bytes written and `Cmplt` = '1' without `RXEOF`
+(interpretation SGI-11). A result
 with an error sets `ErrStop` at the handshake, so that no further command is issued, and `ErrPtr` := its descriptor
 unless an earlier error is stored.
 
@@ -172,8 +173,8 @@ When the write of the status ends, the engine raises at most one event in the sa
 | Transfer error or write error | `ErrValid` with `ErrXfer` = the transfer error and `ErrSg` = the engine error of the write (SG-ER-01, SG-ER-02); a write error also sets `ErrStop` and `ErrPtr` |
 
 So the register interface sets an error flag of a transfer only when software can already read the status of its
-descriptor. The end of packet is `Res_Eof`: for MM2S the `TXEOF` of the command, for S2MM the end of the packet in the
-buffer.
+descriptor (interpretation SGI-12). The end of packet is `Res_Eof`: for MM2S the `TXEOF` of the command, for S2MM
+the end of the packet in the buffer.
 
 ### 4.6 Current descriptor pointer and idle
 
@@ -195,7 +196,7 @@ status written (SG-FE-03). In cyclic mode `AtTail` stays '0', so `Idle` stays '0
 
 | Situation | Behaviour |
 | --- | --- |
-| Error (stale descriptor, fetch error, transfer error, write error) | `ErrStop`: no further fetch request and no further command; the issued commands complete, their results are taken and written back (SG-ER-03); the register interface sets the flags, clears `DMACR.RS` and so lowers `Run` |
+| Error (stale descriptor, fetch error, transfer error, write error) | `ErrStop`: no further fetch request and no further command; the issued commands complete, their results are taken and written back (SG-ER-03, interpretation SGI-08); the register interface sets the flags, clears `DMACR.RS` and so lowers `Run` |
 | `Run` falls (halt or after an error) | No further fetch request, no command (`Cmd_Valid` qualified with `Run`); a fetch already granted completes and its entry is written into the buffer; the issued commands complete as the channel ends them, and their results are written back (SG-HA-01) |
 | `Run` = '0', `Issued` and the `Update` stage empty, no access of the channel outstanding at the port | `Halted` := '1': `CurPtr` keeps its value, the first descriptor that was not started; the descriptor buffer is emptied (one entry per clock cycle, without commands), the entries keep their status in memory |
 | `Drain` = '1' | No fetch request, no command, no status write requested; a fetch or a write that the port has already given to the master completes, read data is discarded; the channels return no result during a drain, so `Issued` keeps its entries until the core reset (SG-HA-02) |

@@ -24,6 +24,10 @@ implemented yet: both are listed as planned, never count as verified and need no
 docs/roadmap.md or while none of its owner modules has a testbench yet. With --check the file is not written; the exit
 code is 1 when an item that is not planned has no test case, when a requirement of a module with a testbench has no
 test case or when a test case of such a module is not run by its testbench.
+
+The interpretations of the published interface (the tables under a heading with "Interpretations" in
+docs/architecture.md and in the module specifications) are listed in section 3 of docs/compliance.md, each once
+with the documents that state it. Rows of these tables are never read as requirements.
 """
 
 import re
@@ -87,6 +91,24 @@ def expand_ids(cell):
 WAITING_RE = re.compile(r"^(#+) .*(waiting for Open Logic|requirements of phase [b-z]\b)", re.I)
 
 
+INTERP_RE = re.compile(r"^(#+) .*Interpretations", re.I)
+
+
+def split_interpretations(text):
+    """Splits a document into its text outside and inside the sections with the interpretations."""
+    normal, interp = [], []
+    level = 0
+    for line in text.splitlines():
+        heading = re.match(r"^(#+) ", line)
+        if heading and level and len(heading.group(1)) <= level:
+            level = 0
+        m = INTERP_RE.match(line)
+        if m:
+            level = len(m.group(1))
+        (interp if level else normal).append(line)
+    return "\n".join(normal), "\n".join(interp)
+
+
 def split_waiting(text):
     """Splits a document into its text outside and inside the sections that wait for Open Logic."""
     normal, waiting = [], []
@@ -108,7 +130,7 @@ def load_requirements():
     waiting = set()
     for spec in sorted(ROOT.glob("hdl/*/docs/specification.md")):
         module = spec.parent.parent.name
-        normal, later = split_waiting(spec.read_text(encoding="utf-8"))
+        normal, later = split_waiting(split_interpretations(spec.read_text(encoding="utf-8"))[0])
         for text, is_waiting in ((normal, False), (later, True)):
             for row in table_rows(text):
                 if len(row) >= 3 and REQ_ID_RE.match(row[0]):
@@ -192,6 +214,25 @@ def matches(req_keys, item):
 def test_key(tid):
     parts = tid.split("-")
     return (parts[1], int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0)
+
+
+def load_interpretations():
+    """Interpretations: list of (ID, item, PG021, OpenDMA, documents), the architecture first, then the module
+    specifications; an ID repeated by a module adds the module to the documents of the first row."""
+    rows = {}
+    sources = [("architecture", ROOT / "docs" / "architecture.md")]
+    sources += [(spec.parent.parent.name, spec) for spec in sorted(ROOT.glob("hdl/*/docs/specification.md"))]
+    for name, path in sources:
+        for row in table_rows(split_interpretations(path.read_text(encoding="utf-8"))[1]):
+            if row[0] in ("ID", "") or set(row[0]) <= set("-"):
+                continue
+            item, pg021, odma = (row[1], row[2], row[3]) if len(row) >= 4 else ("", row[1], row[2])
+            for rid in [r.strip() for r in row[0].split(",")]:
+                if rid in rows:
+                    rows[rid][4].append(name)
+                else:
+                    rows[rid] = [rid, item, pg021, odma, [name]]
+    return list(rows.values())
 
 
 def main():
@@ -279,7 +320,19 @@ def main():
         f"Requirements: {len(reqs)}; without a test case: {len(untested)}; test cases of the plans not run by a "
         f"testbench: {len(not_run)}.",
         "",
+        "## 3. Interpretations of the published interface",
+        "",
+        "Where \\[PG021\\] is open or inconsistent, OpenDMA behaves as listed below. Each row names the PG021",
+        "section it interprets and the behaviour that software written for PG021 observes, and the documents that",
+        "state it (the architecture, section 6, and the module specifications, section 4).",
+        "",
+        "| ID | Item | PG021 | OpenDMA | Documents |",
+        "| --- | --- | --- | --- | --- |",
     ]
+    interps = load_interpretations()
+    for rid, item, pg021, odma, docs in interps:
+        lines.append(f"| {rid} | {item or '-'} | {pg021} | {odma} | {', '.join(docs)} |")
+    lines += ["", f"Interpretations: {len(interps)}.", ""]
     if "--check" not in sys.argv:
         OUT.write_text("\n".join(lines), encoding="utf-8", newline="\n")
         print(f"written {OUT.relative_to(ROOT)}")

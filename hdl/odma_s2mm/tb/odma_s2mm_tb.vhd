@@ -63,6 +63,17 @@ architecture sim of odma_s2mm_tb is
     -- Bytes around a buffer that must keep their pre-fill
     constant Guard_c       : positive := 256;
 
+    -- Beats that the stream split holds between the stream port and the chunk former: its carry and its output
+    function splitLag return natural is
+    begin
+        if Split_g then
+            return 2;
+        end if;
+        return 0;
+    end function;
+
+    constant SplitLag_c : natural := splitLag;
+
     -- Longest FIXED burst: 16 beats, at most the bursts of the write master (S2-SG-04)
     constant FixedBeats_c : positive := minimum(16, minimum(BurstBeats_g, 4096 / MemBytes_c));
     -- Expected results of the split tests, checked while the commands are sent
@@ -618,19 +629,22 @@ begin
                 -- Inside the packet: the complete chunks written, the rest discarded, Stopped before the TLast
                 ChRun       <= '1';
                 Gen.Percent <= 30;
-                Len_v       := minimum(10 * ChunkBytes_c, MaxLen_c);
+                -- At least 64 beats, so that the rest of the packet still arrives when the channel has stopped
+                Len_v := minimum(maximum(10 * ChunkBytes_c, 64 * StreamBytes_c), MaxLen_c);
                 -- Complete chunks before the halt: three, or fewer when the buffer is shorter
                 Cnt2_v := maximum(0, minimum(3, MaxLen_c / ChunkBytes_c - 1));
                 prefill(region(2), Len_v);
                 clearStream;
                 send(source(2), Len_v);
                 sendCmd(region(2), Len_v);
-                wait until Obs.Beats >= Cnt2_v * ChunkBeats_c + ChunkBeats_c / 2 for 10 ms;
-                ChRun  <= '0';
+                -- The halt half a chunk after those chunks; the beats are counted at the stream port, so the beats that
+                -- the split still holds come on top
+                wait until Obs.Beats >= Cnt2_v * ChunkBeats_c + ChunkBeats_c / 2 + SplitLag_c for 10 ms;
+                ChRun <= '0';
                 waitRes(2);
                 check_value(Obs.Results(1).Eof, '0', ERROR, "no end of packet after the halt");
                 check_value(Obs.Results(1).Err, ErrNone_c, ERROR, "no error after the halt");
-                Cnt_v  := Obs.Results(1).Bytes;
+                Cnt_v := Obs.Results(1).Bytes;
                 check_value(Cnt_v mod ChunkBytes_c = 0 and Cnt_v >= Cnt2_v * ChunkBytes_c, ERROR,
                             "complete chunks written: " & to_string(Cnt_v) & " bytes");
                 wait until Stopped = '1' for 1 ms;
@@ -638,7 +652,8 @@ begin
                 waitPackets(1);
                 checkMem(region(2), Len_v, Cnt_v, source(2), "packet interrupted by the halt");
                 -- After the packet: a halt in the clock cycle after its last beat, when its descriptor is stored but
-                -- not yet at the output of the chunk buffer, gives the normal result
+                -- not yet at the output of the chunk buffer (with the split: while the end of the packet is still in
+                -- the split), gives the normal result
                 ChRun       <= '1';
                 Gen.Percent <= 100;
                 Len_v       := minimum(2 * StreamBytes_c + 3, MaxLen_c);
@@ -653,15 +668,37 @@ begin
                 checkRes(2, Len_v, '1', ErrNone_c, "halt in the clock cycle after the end of the packet");
                 checkMem(region(4), Len_v, Len_v, source(6), "halt in the clock cycle after the end of the packet");
                 -- Data of later packets received before the halt is discarded, the next packet after the restart
-                -- is written completely
+                -- is written completely. With the split no beat enters without a command (S2-SG-03): the later
+                -- packets wait at the stream port through the halt, and after the restart each one fills the buffer
+                -- of its command
                 ChRun <= '1';
                 send(source(3), 3 * StreamBytes_c);
                 send(source(4), 5 * StreamBytes_c);
-                waitPackets(3);
-                cycles(50);
-                ChRun <= '0';
-                cycles(200);
-                ChRun <= '1';
+                if Split_g then
+                    cycles(50);
+                    Cnt_v := Obs.Beats;
+                    ChRun <= '0';
+                    cycles(200);
+                    check_value(Obs.Beats, Cnt_v, ERROR, "no beat of the later packets without a command");
+                    ChRun <= '1';
+                    Res_v := Obs.ResCount;
+
+                    for k in 0 to 1 loop
+                        Len_v := (3 + 2 * k) * StreamBytes_c;
+                        prefill(region(5 + k), Len_v);
+                        sendCmd(region(5 + k), Len_v);
+                        waitRes(Res_v + k + 1);
+                        checkRes(Res_v + k, Len_v, '1', ErrNone_c, "later packet " & to_string(k));
+                        checkMem(region(5 + k), Len_v, Len_v, source(3 + k), "later packet " & to_string(k));
+                    end loop;
+
+                else
+                    waitPackets(3);
+                    cycles(50);
+                    ChRun <= '0';
+                    cycles(200);
+                    ChRun <= '1';
+                end if;
                 Len_v := minimum(2 * ChunkBytes_c + 9, MaxLen_c);
                 transfer(region(3), Len_v, source(5), Len_v, "packet after the restart");
 
@@ -715,7 +752,9 @@ begin
                         EccInjValid(b) <= '1';
                         wait until rising_edge(Clk);
                         EccInjValid    <= (others => '0');
-                        -- The packet waits in the buffers for the command, its first words at their outputs
+                        -- The injection applies to the next word written into the buffer. Without the split the packet
+                        -- waits in the buffers for the command, its first words at their outputs; with the split it
+                        -- waits at the stream port (S2-SG-03), and its first words pass the buffers after the command
                         prefill(Dst_v, Len_v);
                         send(Src_v, Len_v);
                         cycles(200);
@@ -760,9 +799,15 @@ begin
                 Len_v := minimum(minimum(4 * ChunkBytes_c, MaxLen_c), 16384);
                 Res_v := Obs.ResCount;
 
-                -- SLVERR, DECERR, EXOKAY in the second chunk; SLVERR first and DECERR last; DECERR first and SLVERR last
+                -- SLVERR, DECERR, EXOKAY in the second chunk; SLVERR first and DECERR last; DECERR first and SLVERR last.
+                -- A write burst has one response: the buffers of the cases with two errors start one memory word before
+                -- a 4 KB boundary, which no burst crosses, so that the two errors are in different bursts also when the
+                -- buffer fits into one burst (1024-bit memory with a length width of 8 or 12)
                 for i in 0 to 4 loop
                     Dst_v := region(1 + i);
+                    if i >= 3 then
+                        Dst_v := Dst_v + 4096 - MemBytes_c;
+                    end if;
                     prefill(Dst_v, Len_v);
                     Mem_v.clearErrors(0);
 
@@ -1063,6 +1108,38 @@ begin
                 check_value(Obs.Results((Res_v + 1) mod MaxResults_c).Sof, '1', ERROR, "start of packet");
                 checkMem(region(9), Len_v, 0, source(9), "buffer of the discarded packet untouched");
                 checkMem(region(10), Len_v, Len_v / 2, source(10), "packet after the discarded one, complete");
+                waitPackets(Pkts_v + 2);
+
+                -- A halt in the clock cycle after the TLast of a packet that ends one byte beyond its buffer: the split
+                -- ends the segment with the beat that fills the buffer and holds the last byte with the end of the
+                -- packet for the next buffer. The packet is not complete in its buffer, so the halt cuts it: the buffer
+                -- holds complete chunks or is full, the byte is discarded, and the next packet arrives complete and alone
+                Res_v       := Obs.ResCount;
+                Pkts_v      := Obs.Packets;
+                Gen.Percent <= 100;
+                Mem_v.fill(0, region(11) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
+                Mem_v.fill(0, region(12) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
+                Mem_v.setWindow(0, region(11) - Guard_c, region(13));
+                sendCmd(region(11), Len_v);
+                cycles(10);
+                send(source(11), Len_v + 1);
+                wait until Obs.Packets > Pkts_v for 1 ms;
+                ChRun       <= '0';
+                waitRes(Res_v + 1);
+                Wr_v        := Obs.Results(Res_v mod MaxResults_c).Bytes;
+                check_value((Wr_v = Len_v or Wr_v mod ChunkBytes_c = 0) and Wr_v <= Len_v, ERROR,
+                            "buffer before the halt: complete chunks or full, " & to_string(Wr_v) & " bytes");
+                check_value(Obs.Results(Res_v mod MaxResults_c).Eof, '0', ERROR, "buffer before the halt: no end of packet");
+                checkMem(region(11), Len_v, Wr_v, source(11), "buffer before the halt");
+                wait until Stopped = '1' for 1 ms;
+                ChRun       <= '1';
+                send(source(12), Len_v / 2);
+                sendCmd(region(12), Len_v);
+                waitRes(Res_v + 2);
+                checkRes(Res_v + 1, Len_v / 2, '1', ErrNone_c, "packet after the cut one");
+                check_value(Obs.Results((Res_v + 1) mod MaxResults_c).Sof, '1', ERROR,
+                            "packet after the cut one: start of packet");
+                checkMem(region(12), Len_v, Len_v / 2, source(12), "packet after the cut one, complete and alone");
                 waitPackets(Pkts_v + 2);
 
                 -- Drain inside a packet of several buffers: no further write, no result, Stopped

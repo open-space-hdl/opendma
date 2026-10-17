@@ -62,7 +62,7 @@ entity odma_s2mm_chunker is
         Desc_Data    : out   std_logic_vector(DescWidth_c - 1 downto 0);
         Desc_Valid   : out   std_logic;
         Desc_Ready   : in    std_logic;
-        -- A packet started and its TLast not yet taken
+        -- A packet started and its end not yet taken by the chunk logic
         PacketOpen   : out   std_logic
     );
 end entity;
@@ -99,6 +99,7 @@ architecture rtl of odma_s2mm_chunker is
         Beats    : natural range 0 to ChunkBeats_g - 1;     -- Beats of the chunk in progress in the data buffer
         InPacket : std_logic;                               -- A packet passed the chunk logic without its end
         StrmOpen : std_logic;                               -- Split_g: a packet entered the split without its end
+        EndPend  : std_logic;                               -- Split_g: the end of a packet is in the split
         NeedSeg  : std_logic;                               -- Split_g: a segment ended inside the packet, none active
     end record;
 
@@ -109,6 +110,8 @@ architecture rtl of odma_s2mm_chunker is
     signal Ready_i   : std_logic;
     signal S2mmReady : std_logic;
     signal Open_i    : std_logic;
+    signal Complete  : std_logic; -- Split_g: the rest of the packet in the split belongs to the active segment
+    signal Cut       : std_logic; -- A halt cuts the open packet
     signal SegTaken  : std_logic; -- Split_g: the split takes a segment
 
     -- Input of the chunk logic: the stream, or the output of the split
@@ -121,17 +124,25 @@ architecture rtl of odma_s2mm_chunker is
 begin
 
     -- *** Input ***
+    -- Split_g: the end of the packet has entered the split and no segment ended inside the packet since, so the rest
+    -- of the packet in the split belongs to the active segment: the packet is complete at the stream port and is
+    -- taken in whole, also when Run falls (S2-HA-01). A segment that ends inside the packet sets NeedSeg; the rest then
+    -- waits for the next buffer, and a halt cuts the packet
+    Complete <= r.EndPend and not r.NeedSeg;
     -- Normal operation: the beat goes into the data buffer, a chunk end also writes its descriptor; the
-    -- input waits while the channel is halted or drains, and while a buffer is full
-    Take <= '1' when r.State = Normal_s and Run = '1' and Drain = '0' and Data_Ready = '1' and Desc_Ready = '1' else
+    -- input waits while the channel is halted (except for a complete packet) or drains, and while a buffer is full
+    Take <= '1' when r.State = Normal_s and (Run = '1' or Complete = '1') and Drain = '0' and Data_Ready = '1' and
+                     Desc_Ready = '1' else
             '0';
     -- Discard of the rest of an interrupted packet
     Drop <= '1' when r.State = Discard_s and Drain = '0' else '0';
 
     Ready_i <= Take or Drop;
 
-    -- A packet is open: it passed the chunk logic, or with Split_g its beats are still in the split
-    Open_i <= r.InPacket or r.StrmOpen;
+    -- A packet is open: it passed the chunk logic, or with Split_g its beats or its end are still in the split
+    Open_i <= r.InPacket or r.StrmOpen or r.EndPend;
+    -- A halt cuts an open packet that is not complete
+    Cut <= Open_i and not Complete;
 
     -- *** Combinatorial Process ***
     p_comb : process (all) is
@@ -159,9 +170,18 @@ begin
             v.NeedSeg := '0';
         end if;
 
+        -- Split_g: the end of a packet is in the split from the beat with TLast at the stream port to the beat with
+        -- Out_InLast at the output; the split takes no beat of the next packet before that end has left its carry,
+        -- so at most one packet end is in the split, and a new end in the same clock cycle wins
+        if Split_g and Ready_i = '1' and In_Valid = '1' and In_PktEnd = '1' then
+            v.EndPend := '0';
+        end if;
         -- Split_g: a packet is open at the stream port from its first beat to the beat with TLast
         if Split_g and S_S2mm_Valid = '1' and S2mmReady = '1' then
             v.StrmOpen := not S_S2mm_Last;
+            if S_S2mm_Last = '1' then
+                v.EndPend := '1';
+            end if;
         end if;
 
         case r.State is
@@ -188,10 +208,10 @@ begin
                     else
                         v.Beats := r.Beats + 1;
                     end if;
-                elsif (Run = '0' or (Split_g and FlushReq = '1')) and Drain = '0' and Open_i = '1' and
+                elsif ((Run = '0' and Cut = '1') or (Split_g and FlushReq = '1' and Open_i = '1')) and Drain = '0' and
                       Desc_Ready = '1' then
-                    -- A halt inside a packet, or with Split_g the flush after a write error: the stored part of the
-                    -- packet is not written, the rest is discarded
+                    -- A halt inside a packet that is not complete, or with Split_g the flush after a write error: the
+                    -- stored part of the packet is not written, the rest is discarded
                     Desc_v.Beats   := to_unsigned(r.Beats, 16);
                     Desc_v.Pend    := '1';
                     Desc_v.Discard := '1';
@@ -233,6 +253,7 @@ begin
                 r.Beats    <= 0;
                 r.InPacket <= '0';
                 r.StrmOpen <= '0';
+                r.EndPend  <= '0';
                 r.NeedSeg  <= '0';
             end if;
         end if;

@@ -97,14 +97,14 @@ end entity;
 ---------------------------------------------------------------------------------------------------
 architecture rtl of odma_s2mm is
 
-    -- Longest burst of the write master (no AXI burst crosses 4 KB; olo_axi_master_simple of Open Logic
-    -- 4.7.0-ft.6 does not elaborate with more beats than 4 KB holds) and stream beats of a chunk
+    -- Longest burst of the write master (no AXI burst crosses 4 KB, G13) and stream beats of a chunk, which is
+    -- one burst (S2-ST-03)
     constant MasterBeats_c : positive := masterBeats(BurstBeats_g, MemWidth_g);
     constant ChunkBeats_c  : positive := MasterBeats_c * MemWidth_g / StreamWidth_g;
     constant DescDepth_c   : positive := 32;
-    -- Size bits of the write master: one more than the length; olo_axi_master_full of Open Logic 4.7.0-ft.6 counts
-    -- the user words of a command at the width of the size field, and the count wraps in the last user word below
-    -- 2**size bits (gap G14), which no command reaches with one more size bit
+    -- Size bits of the write master: one more than the length, so that no command reaches the last user word
+    -- below 2**size bits, where the word count of olo_axi_master_full wrapped up to Open Logic 4.7.0-ft.6 (gap G14,
+    -- corrected in 4.7.0-ft.8)
     constant SizeBits_c    : positive := LengthWidth_g + 1;
 
     -- Chunk former to the buffers

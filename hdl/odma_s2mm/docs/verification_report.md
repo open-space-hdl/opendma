@@ -44,14 +44,18 @@ Findings:
 | Four safeguards of the first implementation with the split were equivalent: a flag that limited the discard to one per flush, the drop of a segment that the split had not taken at the result, the clearing of `NeedSeg` at a halt and the gating of `StrmOpen` during the discard; a mutant that disabled each one passed every test | They are removed; the architecture states why each case cannot occur (sections 4.2 and 4.3) |
 | A result without bytes and without the end of packet (buffer length 0, buffer beyond the top of the address space) carried the start of packet; found by the core scenario `sg_errors` (`RXSOF` in the status of a descriptor of length 0) | Such a result belongs to no packet and has `Res_Sof` '0' (S2-SG-02, interpretation SGI-14); TC-S2-10 checks it |
 | TC-S2-10 expected the packet after the rejected commands in the data buffer; with `Split_g` it waits at the stream port, because the split takes no beat without a segment (S2-SG-03). The test had not run in the configurations with the split | TC-S2-10 checks that no beat is taken with `Split_g` and runs in every configuration |
+| With the split, a packet that the stream port had accepted completely was lost or cut when `Run` fell while its end was still in the split (up to two beats): S2-1 took no beat while halted; a packet of one or two beats did not count as open, so the split was reset and no result had its bytes, and a longer one was discarded with a result of 0 bytes (S2-HA-01) | The register `EndPend` records the end of a packet in the split. A packet whose end is in the split and belongs to the active segment is complete: S2-1 takes its rest also while halted, and it counts as open (architecture section 4.2). TC-S2-11 halts in the clock cycle after the end of a packet in every configuration; TC-S2-19 halts after the end of a packet that ends one byte beyond its buffer, whose rest waits for the next buffer, and is cut |
+| TC-S2-11 also failed with the split for reasons of the testbench: it set the halt inside a packet by beats counted at the stream port, but the split holds up to two of them, so with chunks of two beats (`s_w512_s512`) only two chunks were in the data buffer at the halt; and it expected the data of later packets in the data buffer before their commands | With the split the halt comes two beats later, and the later packets wait at the stream port through the halt and fill the buffers of their commands after the restart |
+| TC-S2-15 placed the two errors of a transfer on its first and its last byte. With a 1024-bit memory and a length width of 8 or 12 the buffer fits into one burst, whose single response carries the worse code, so the case "the first error decides" was not tested there (`w1024_s8`, `s_w1024_s8`, `w1024_s1024`) | The buffers of these cases start one memory word before a 4 KB boundary, which no burst crosses, so the errors are in two bursts in every configuration |
+| TC-S2-13 ran only without the split, so the injection into the three buffers was not tested with it | TC-S2-13 runs in every configuration: the injection applies to the next word written, also when the packet waits at the stream port for its command |
 
 ## 3. Response codes
 
 The write master reports the response code of a failed command (`Wr_ErrorResp`, gap G5 of the architecture). The
 channel maps DECERR to the decode error and SLVERR and EXOKAY to the slave error (interpretation I14); the first
-failing response of a transfer decides. TC-S2-15 checks every response type and both orders within one transfer. The
-decode error of a buffer beyond the top of the address space (S2-WR-04) comes from the channel itself, without a
-write.
+failing response of a transfer decides. TC-S2-15 checks every response type and both orders within one transfer, in
+two bursts. The decode error of a buffer beyond the top of the address space (S2-WR-04) comes from the channel
+itself, without a write.
 
 ## 4. Generic ranges
 

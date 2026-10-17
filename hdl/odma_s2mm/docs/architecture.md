@@ -89,11 +89,22 @@ discard segment only when one is missing. The split takes no stream beat
 while no segment is active, so a packet waits at the stream input until its command is accepted, and the rest of a
 packet until the next command (S2-SG-03, `odma_sg` SG-TR-04).
 
-The stream enters the split only while `Run` = '1' or S2-1 discards (S2-ST-01). The split holds the first beat of a
-packet until the next beat shows whether the packet continues, so the chunk former sees a packet later than the
-stream port: S2-1 keeps `StrmOpen` (a packet entered the split and its `TLast` has not), and a packet counts as open
-while `InPacket` or `StrmOpen` is set. That open state decides the discard after a halt or a flush and gives
-`PacketOpen` to S2-2.
+The stream enters the split only while `Run` = '1' or S2-1 discards (S2-ST-01). The split holds up to two beats (its
+carry and its output register), so the chunk former sees a packet later than the stream port. S2-1 keeps two flags:
+
+- `StrmOpen`: a packet entered the split, and its `TLast` has not.
+- `EndPend`: the `TLast` of a packet entered the split, and its `Out_InLast` beat has not left it. The split takes no
+  beat of the next packet before the end of a packet has left its carry, so at most one packet end is in the split.
+  When a new end enters in the clock cycle in which the old one leaves, the new one sets the flag.
+
+A packet counts as open while `InPacket`, `StrmOpen` or `EndPend` is set. That open state gives `PacketOpen` to S2-2
+and keeps the split out of its reset.
+
+A packet whose end is in the split is complete when no segment has ended inside the packet since (`EndPend` set,
+`NeedSeg` clear). Its rest then belongs to the active segment, and S2-1 takes it even when `Run` falls, so a packet
+that the stream port accepted completely before a halt is written completely (S2-HA-01). A halt cuts an open packet
+that is not complete: either `StrmOpen` is set, or its end waits in the split for the next buffer (`NeedSeg` set).
+A flush cuts every open packet.
 
 Reset of the split: `Rst`, `Drain`, and `Run` = '0' while no packet is open and S2-1 does not discard. The last case
 clears the segment of a transfer that ended before its packet arrived (a command accepted just before a halt): the
@@ -107,12 +118,12 @@ packet, or the reset has cleared it) and takes the segment in the next clock cyc
 | Situation | Behaviour |
 | --- | --- |
 | `Run` falls between packets | The input is not ready until `Run` rises again (S2-ST-01) |
-| `Run` falls inside a packet | The block writes the descriptor {`Bytes` 0, `Beats` of the incomplete chunk, `Pend` '1', `Discard` '1', `PktEnd` '1'}, then accepts and drops input beats up to the `TLast` of the packet (`S_S2mm_Ready` = '1' in this phase; with `Split_g` the split output up to `Out_InLast`, with the segments of section 4.2), then behaves as between packets |
+| `Run` falls inside a packet | The block writes the descriptor {`Bytes` 0, `Beats` of the incomplete chunk, `Pend` '1', `Discard` '1', `PktEnd` '1'}, then accepts and drops input beats up to the `TLast` of the packet (`S_S2mm_Ready` = '1' in this phase; with `Split_g` the split output up to `Out_InLast`, with the segments of section 4.2), then behaves as between packets. With `Split_g` this applies to a packet that is not complete (section 4.2); the rest of a complete packet is taken from the split up to its end first |
 | `FlushReq` of S2-2 inside a packet (`Split_g`) | The same as for the fall of `Run`: S2-2 flushes the rest of a packet after a write error, and with the split that rest passes only with the segments of `Discard_s`. The next packet cannot be caught by the same flush: S2-2 accepts no command until the flush is done, and `NeedSeg` offers no discard segment after the end of the discarded packet, so its beats wait at the stream port |
 | `Drain` = '1' | The input is not ready; no further descriptor is written |
 
-The block reports `PacketOpen` (a packet started and its `TLast` not yet taken, also while the rest is discarded) to
-S2-2.
+The block reports `PacketOpen` (a packet started and its end not yet taken by the chunk former, also while the rest
+is discarded) to S2-2.
 
 ## 5. Write command (S2-2, `odma_s2mm_write`)
 
@@ -182,12 +193,12 @@ and returns no result (S2-HA-02). The core reset after the drain clears the buff
 
 ### 5.5 Write master
 
-`UserTransactionSizeBits_g` = `LengthWidth_g` + 1 (gap G14 of the architecture: `olo_axi_master_full` of Open
-Logic 4.7.0-ft.6 counts the user data words of a write command at the width of the size field without its low bits,
-so the count wraps for the sizes in the last user data word below 2**`UserTransactionSizeBits_g`, and the master
-issues no further burst; with one more size bit every command stays below 2**(`UserTransactionSizeBits_g` - 1)),
-`AxiMaxBeats_g` = B (section 3; no AXI burst crosses 4 KB, and
-`olo_axi_master_simple` of Open Logic 4.7.0-ft.6 does not elaborate with more beats than 4 KB holds),
+`UserTransactionSizeBits_g` = `LengthWidth_g` + 1 (gap G14 of the architecture: up to Open Logic 4.7.0-ft.6,
+`olo_axi_master_full` counted the user data words of a write command at the width of the size field without its
+low bits, so the count wrapped for the sizes in the last user data word below 2**`UserTransactionSizeBits_g`, and
+the master issued no further burst; 4.7.0-ft.8 corrects the count, and with one more size bit every command stays
+below 2**(`UserTransactionSizeBits_g` - 1) in any case), `AxiMaxBeats_g` = B (section 3; no AXI burst crosses
+4 KB, gap G13),
 `AxiMaxOpenTransactions_g` = 8, `DataFifoDepth_g` = 2 x `ChunkBeats_c` (the ECC-protected write data buffer in
 words of `UserDataWidth_g` bits), `UserDataWidth_g` = `StreamWidth_g`, `AxiDataWidth_g` = `MemWidth_g`,
 `ImplRead_g` = false. The master sets the write strobes of the bytes of each command (S2-WR-02), splits at 4 KB and

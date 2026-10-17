@@ -28,11 +28,16 @@ SPLIT = ("w64_s8", "w256_s16", "w32_s32", "w128_s64", "w256_s128", "w512_s256", 
 SG_TESTS = ("test_split", "test_split_wait", "test_split_halt")
 # Tests that need a packet in the data buffer before its command or a packet longer than its buffer: only without
 # the split, which excludes both by design (verification plan, section 2)
-DR_TESTS = ("test_early_data", "test_overflow", "test_ecc")
+DR_TESTS = ("test_early_data", "test_overflow")
 
 
 def configure(lib):
     tb = lib.test_bench("odma_s2mm_tb")
+    # Every test runs in the configurations below; the names of the lists must be tests and configurations
+    names = {test.name for test in tb.get_tests()}
+    unknown = (set(SG_TESTS) | set(DR_TESTS)) - names
+    assert not unknown, f"odma_s2mm_tb: unknown tests {sorted(unknown)}"
+    assert set(SPLIT) <= set(CONFIGS), f"odma_s2mm_tb: unknown configurations {sorted(set(SPLIT) - set(CONFIGS))}"
     for test in tb.get_tests():
         for name, (mem, stream, burst, addr, length) in CONFIGS.items():
             generics = {

@@ -173,7 +173,8 @@ after an error or a halt, whose packet rest is discarded. Without `Split_g` ever
   write command is issued for the transfer; the remaining descriptors of the packet, up to the one with `PktEnd`, are
   flushed after the result (S2-RS-03). With `Split_g` the block raises `FlushReq` during the flush, so that S2-1
   drops the rest of the packet that has not passed the split yet (section 4.3).
-- Overflow records `ErrInt_c` and flushes the rest of the packet (S2-RS-02).
+- Overflow records `ErrInt_c` and the end of packet of the overflowing chunk: when that chunk ends the packet, its
+  beats beyond the buffer are dropped and nothing is flushed; otherwise the rest of the packet is flushed (S2-RS-02).
 - `Run` = '0' during a transfer: the descriptors of the packet of the transfer are written up to the descriptor with
   `Pend` or `Discard`. When no descriptor is in the chunk buffer, none is stored for its output and S2-1 has no
   packet open, the transfer ends without the end of packet, with 0 bytes if no byte was received (S2-HA-01). A

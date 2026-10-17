@@ -230,10 +230,11 @@ begin
                         v.State   := Issue_s;
                     else
                         -- Overflow (without Split_g): the bytes that fit are written, the rest of the packet is
-                        -- discarded (S2-RS-02)
-                        Fit_v       := r.Length - r.Written;
-                        v.Err       := ErrInt_c;
-                        v.FlushPend := not Desc_v.PktEnd;
+                        -- discarded (S2-RS-02); the end of packet of the chunk decides whether a flush follows (Wait_s),
+                        -- the result has none with the error
+                        Fit_v := r.Length - r.Written;
+                        v.Err := ErrInt_c;
+                        v.Eof := Desc_v.PktEnd;
                         if Fit_v /= 0 then
                             Feed_v    := resize((Fit_v + StreamBytes_c - 1) / StreamBytes_c, CntWidth_c);
                             v.CmdAddr := r.Addr when r.Keyhole = '1' else r.Addr + r.Written;

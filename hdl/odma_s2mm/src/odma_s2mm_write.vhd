@@ -506,8 +506,8 @@ begin
     Res_Err   <= r.QErr when r.QValid = '1' else r.Err;
     -- Idle: no write outstanding, and drained, or in Idle_s without a queued result, with the chunk buffer empty and
     -- no descriptor of S2-1 to come, so that after a halt no data received before it is left for the next transfer
-    -- (S2-HA-01, S2-HA-03); the discard of the rest of an interrupted packet in S2-1 does not hold it. A flush asked
-    -- for in Idle_s (an error of the queued transfer) starts in the next clock cycle, while the result is still queued
+    -- (S2-HA-01, S2-HA-03); the discard of the rest of an interrupted packet in S2-1 does not hold it
+    -- Idle_s with FlushPend = 1 and QValid = 0 cannot occur, because Idle_s leaves for Flush_s at the next edge
     NoData <= '1' when Desc_Valid = '0' and Desc_Stored = '0' and DescPend = '0' else '0';
     NoWork <= '1' when r.State = Idle_s and r.QValid = '0' and NoData = '1' else '0';
     Idle   <= '1' when r.Outstanding = 0 and r.QOutst = 0 and (r.State = Drained_s or NoWork = '1') else '0';

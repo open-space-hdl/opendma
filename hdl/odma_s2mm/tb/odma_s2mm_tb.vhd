@@ -1856,6 +1856,7 @@ begin
                     Cmd_Length <= Len_v;
                     Cmd_Valid  <= '1';
                     wait until rising_edge(Clk) and Cmd_Ready = '1' for 1 ms;
+                    check_value(Cmd_Ready, '1', ERROR, "next command accepted");
                     Cmd_Valid  <= '0';
                     check_value(Obs.ResCount, Res_v + 1, ERROR, "next command accepted only after the error result");
                     send(source(9), Len_v / 2);

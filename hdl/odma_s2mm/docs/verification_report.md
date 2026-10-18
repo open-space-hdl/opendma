@@ -2,13 +2,13 @@
 
 ## 1. Test results
 
-Run on 2026-10-17 in the GHDL CI of the repository, GitHub Actions run 39076889615 on commit 5e49ffb (its
+Run on 2026-10-18 in the GHDL CI of the repository, GitHub Actions run 39096149208 on commit 831a6e3 (its
 `results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
 `python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_s2mm_tb`.
 
 | Testbench | Tests | Passed |
 | --- | --- | --- |
-| `odma_s2mm_tb` | 318 (21 test cases: 15 in all 18 configurations, TC-S2-07 and TC-S2-08 in the ten without the split, TC-S2-17 to TC-S2-19 in the eight `s_` configurations, TC-S2-21 in four) | 318 |
+| `odma_s2mm_tb` | 354 (23 test cases: 17 in all 18 configurations, TC-S2-07 and TC-S2-08 in the ten without the split, TC-S2-17 to TC-S2-19 in the eight `s_` configurations, TC-S2-21 in four) | 354 |
 
 ## 2. Summary
 
@@ -53,6 +53,9 @@ Findings:
 | After an overflow in the chunk that ends the packet, the channel flushed once more: the flush after an error (S2-RS-03) looked at the end of packet of the transfer, which the overflow did not record, so the next packet was dropped as the rest of the overflowing one (TC-S2-08 in every configuration without the split), and without a next packet the channel did not stop (TC-CO-04 in `aw40` and `aw64`, whose chunks hold the whole packet) | The overflow records the end of packet of the overflowing chunk; the result still carries none with the error. The flush follows only when the packet goes on |
 | `Stopped` rose as soon as S2-2 was idle, before it had flushed the data received before a halt: with the split, a halt in the clock cycle after the `TLast` of a packet that needs a further buffer left the discard descriptor of its rest in the chunk buffer after the result of the full buffer, and a restart at `Stopped` gave that descriptor to the next transfer (a result of 0 bytes, TC-S2-19); the next buffer also kept the continuation of the cut packet instead of a start of packet | `Stopped` waits, after a halt, until the chunk buffer is empty and S2-1 writes no further descriptor (S2-HA-03, architecture section 6); a flush that ends a packet sets the start of packet for the next buffer |
 | A transfer accepted while S2-1 discarded the rest of an earlier packet did not end at the next halt: its halt exit waited until no packet was open, and the packet stays open in the discard until the stream peer sends the `TLast` of the rest, so `Stopped` (and `DMASR.Halted`) did not come while the peer stalled | The halt exit waits only for the descriptors of S2-1 still to come (`DescPend`), which the discard does not write, and withdraws the segment of the transfer that the split has not taken, so that it cannot be taken when the discard ends; `PacketOpen` is removed. TC-S2-11 halts such a transfer and restarts with the rest arriving while no command is pending |
+| A halt right after a full buffer was queued, with its write responses late, let the halted block flush the rest of its packet; a write error of that buffer arriving after the flush asked for a second flush, which waited for an end of packet that no longer came, so `Stopped` did not rise. The new step of TC-S2-23 reproduced it in the eight configurations with the split | `QCont` records whether the rest of the packet of the queued transfer is still to come and is cleared when a descriptor with its end is taken, by the next transfer or by a flush; the error asks for the flush only while it is set. TC-S2-23 halts right after the queuing and expects `Stopped` within 1000 clock cycles after the error result, and not before it |
+| After an error of a queued transfer that ended its packet, the next transfer went on with the next packet: when that packet ended before the halt, its result had the end of packet, and in Scatter/Gather Mode its interrupt followed the error interrupt, depending on the timing of the halt | Every error of the queued transfer stops the next transfer: no further write, its result after the halt without the end of packet, the start of packet as received (S2-RS-03, S2-RS-04, SGI-15). TC-S2-23 halts 600 clock cycles after the error result and expects the next result after the halt, without the end of packet |
+| The step of TC-S2-23 that presents a command while a failed result waits checked that the result came first, not that the command was taken with `Cmd_Ready`: a channel that took the command without the handshake passed (a fault of section 5) | TC-S2-23 checks the handshake of that command |
 
 ## 3. Response codes
 
@@ -118,5 +121,20 @@ at least one test case; the RTL of the repository passes all of them:
 | A halt cuts a complete packet (`Cut` without `Complete`) | TC-S2-19 |
 | `DescPend` also during the discard of a rest, so the halt exit of a transfer waits for its `TLast` | TC-S2-11 |
 | The segment of a transfer ended by the halt not withdrawn | TC-S2-11 (configurations with the split) |
+| Write responses counted against the current transfer before the queued one | TC-S2-23 |
+| The current result while a result is queued | TC-S2-17 |
+| The queued result before its write responses | TC-S2-17, TC-S2-19, TC-S2-22, TC-S2-23 |
+| A second result queued over the first | TC-S2-17, TC-S2-19, TC-S2-22, TC-S2-23 |
+| No stop of the next transfer at an error of the queued one | TC-S2-23 |
+| The next transfer stopped only when it continues the packet of the queued one | TC-S2-23 |
+| No flush of the rest of the packet at an error of the queued transfer | TC-S2-19 |
+| The end of the packet of the queued transfer not recorded (`QCont` kept) | TC-S2-23 (configurations with the split) |
+| `Stopped` while a result is queued | TC-S2-23 (configurations with the split) |
+| `Stopped` while writes of the queued result are outstanding | TC-S2-22 |
+| A command taken without `Cmd_Ready` while the queued result has an error | TC-S2-23 (the 14 configurations with two chunks within the longest length; verification plan, TC-S2-23) |
+| A command accepted, with `Cmd_Ready`, while the queued result has an error | TC-S2-23 (the 14 configurations with two chunks within the longest length) |
+| The stopped transfer returns its result before the halt | TC-S2-23 |
+| The end of packet of a stopped transfer reported | TC-S2-23 |
+| The next buffer of a continued packet starts a packet | TC-S2-17, TC-S2-22, TC-S2-23 (configurations with the split) |
 
 The recovery branches of the state machines (`when others`) cannot be reached through the ports.

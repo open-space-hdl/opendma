@@ -169,10 +169,12 @@ of them. `DMASR.Halted` is set when the channel and the engine have both stopped
 Errors: each halts its channel with `Err_Irq`, and `CURDESC` points to the descriptor of the error. The descriptors
 before it are completed with their status; the descriptor after it may also be completed, because it was already
 issued (interpretation SGI-08 of `odma_sg`). For S2MM this happens when the write error of a buffer arrives after the
-channel has accepted the next buffer: when the packet continues there, that buffer can already hold bytes of the
-packet, and its status has those bytes, `RXSOF` and `RXEOF` 0 and `Cmplt` 1, the form of a buffer whose packet a halt
-cut off; when the failed buffer ended its packet, the next buffer can hold the start of the next packet
-(interpretation SGI-15). Software that recovers from the error discards both descriptors.
+channel has accepted the next buffer: the channel writes nothing more into it, and its status has the form of a
+buffer whose packet a halt cut off, the bytes written, `RXSOF` as received, `RXEOF` 0 and `Cmplt` 1 (no status write
+when it received no byte), also when its packet ended in it, so no `IOC_Irq` follows `Err_Irq`. When the packet of
+the failed buffer continues there, the buffer can hold bytes of that packet; when the failed buffer ended its packet,
+it can hold the start of the next packet (interpretation SGI-15). Software that recovers from the error discards
+both descriptors.
 
 | Error | Flags |
 | --- | --- |

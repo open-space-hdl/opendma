@@ -1680,17 +1680,38 @@ begin
                 waitRes(Res_v + Sent_v);
                 checkSplit;
                 Mem_v.setStall(0, 0);
-                Mem_v.setLatency(0, 0);
+
+                -- A drain while a result is queued, its write responses 400 clock cycles late: Stopped only once every
+                -- write is answered, and no result (S2-HA-02)
+                Len_v  := minimum(2 * ChunkBytes_c, MaxLen_c);
+                Cnt_v  := (Len_v + ChunkBytes_c - 1) / ChunkBytes_c;
+                Res_v  := Obs.ResCount;
+                Mem_v.setLatency(0, 400);
+                Mem_v.fill(0, region(12) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
+                Mem_v.setWindow(0, region(12), region(12) + Len_v - 1);
+                Cnt2_v := Obs.AwCount;
+                send(source(12), Len_v);
+                sendCmd(region(12), Len_v);
+                -- Every burst of the buffer on the bus: its result is queued
+                wait until Obs.AwCount >= Cnt2_v + Cnt_v for 1 ms;
+                ChDrain <= '1';
+                wait until Stopped = '1' for 1 ms;
+                check_value(Stopped, '1', ERROR, "Stopped after the drain with a queued result");
+                check_value(Obs.BCount, Obs.AwCount, ERROR, "every write answered before Stopped");
+                cycles(100);
+                check_value(Obs.ResCount, Res_v, ERROR, "no result of the queued buffer after the drain");
 
             elsif run("test_overlap_error") then
                 log(ID_LOG_HDR, "TC-S2-23 write error of a transfer whose result waits for its write responses");
                 if Split_g then
                     -- A packet of three buffers, SLVERR on the last chunk of the first buffer, the write responses late
-                    -- enough that the second buffer has written chunks when the error arrives: with several chunks per
-                    -- buffer about half the stream time of a buffer, with one chunk twice it
-                    Len_v       := minimum(8 * ChunkBytes_c, MaxLen_c);
+                    -- enough that the second buffer has written chunks when the error arrives. With several chunks per
+                    -- buffer, buffers of 16 chunks and the time of four chunks (each its beats and six clock cycles of
+                    -- the write master): the second buffer then holds about a third to a half of its chunks, whose
+                    -- write commands follow the stream; with one chunk twice the stream time of the buffer
+                    Len_v       := minimum(16 * ChunkBytes_c, MaxLen_c);
                     Cnt_v       := (Len_v + ChunkBytes_c - 1) / ChunkBytes_c;
-                    Cnt2_v      := (Len_v / StreamBytes_c) / 2 when Cnt_v > 1 else 2 * (Len_v / StreamBytes_c) + 100;
+                    Cnt2_v      := 4 * (ChunkBeats_c + 6) when Cnt_v > 1 else 2 * (Len_v / StreamBytes_c) + 100;
                     Res_v       := Obs.ResCount;
                     Pkts_v      := Obs.Packets;
                     Gen.Percent <= 100;
@@ -1713,10 +1734,12 @@ begin
                     Cmd_Length <= Len_v;
                     Cmd_Valid  <= '1';
                     Took_v     := 0;
+                    Lp_v       := Obs.Cycle;
 
-                    while Obs.ResCount = Res_v loop
+                    -- The handshakes of the clock edges before the one that counts the result
+                    while Obs.ResCount = Res_v and Obs.Cycle < Lp_v + 200000 loop
                         wait until rising_edge(Clk);
-                        if Cmd_Ready = '1' then
+                        if Cmd_Ready = '1' and Obs.ResCount = Res_v then
                             Took_v := Took_v + 1;
                         end if;
                     end loop;
@@ -1734,6 +1757,8 @@ begin
                     check_value(Obs.Results((Res_v + 1) mod MaxResults_c).Cycle > Halt0_v, ERROR,
                                 "second result after the halt");
                     Wr_v    := Obs.Results((Res_v + 1) mod MaxResults_c).Bytes;
+                    log(ID_SEQUENCER, "second buffer: " & to_string(Wr_v) & " of " & to_string(Len_v) &
+                        " bytes written before the error, response latency " & to_string(Cnt2_v));
                     checkRes(Res_v + 1, Wr_v, '0', ErrNone_c, "second buffer");
                     check_value(Obs.Results((Res_v + 1) mod MaxResults_c).Sof, '0', ERROR,
                                 "second buffer: no start of packet");
@@ -1764,11 +1789,12 @@ begin
                 end if;
 
                 -- SLVERR on the last chunk of a packet that ends in its buffer, the next packet at once: the next
-                -- command is accepted before the error arrives, and the halt after the error result cuts the next
-                -- packet (S2-HA-01)
-                Len_v  := minimum(4 * ChunkBytes_c, MaxLen_c);
-                Res_v  := Obs.ResCount;
-                Pkts_v := Obs.Packets;
+                -- command is accepted before the error arrives; that transfer writes nothing after the error and ends
+                -- with the halt, which comes 600 clock cycles after the error result, without the end of packet even
+                -- when the next packet has arrived completely (S2-RS-03, SGI-15)
+                Len_v   := minimum(4 * ChunkBytes_c, MaxLen_c);
+                Res_v   := Obs.ResCount;
+                Pkts_v  := Obs.Packets;
                 Mem_v.fill(0, region(5) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
                 Mem_v.fill(0, region(6) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
                 Mem_v.setWindow(0, region(5), region(6) + Len_v - 1);
@@ -1782,18 +1808,24 @@ begin
                 waitRes(Res_v + 1);
                 check_value(Obs.Results(Res_v mod MaxResults_c).Err, ErrSlv_c, ERROR, "packet with the write error");
                 check_value(Obs.Results(Res_v mod MaxResults_c).Eof, '0', ERROR, "packet with the write error: no end");
-                ChRun  <= '0';
+                cycles(600);
+                check_value(Obs.ResCount, Res_v + 1, ERROR, "next packet: its result only after the halt");
+                ChRun   <= '0';
+                Halt0_v := Obs.Cycle;
                 waitRes(Res_v + 2);
-                Wr_v   := Obs.Results((Res_v + 1) mod MaxResults_c).Bytes;
-                EofB_v := Obs.Results((Res_v + 1) mod MaxResults_c).Eof;
-                -- The form of a packet cut by the halt: complete chunks, or the whole packet with its end
-                check_value((EofB_v = '1' and Wr_v = Len_v) or (EofB_v = '0' and Wr_v mod ChunkBytes_c = 0), ERROR,
-                            "next packet cut by the halt: " & to_string(Wr_v) & " bytes, end of packet " &
-                            to_string(EofB_v));
-                check_value(Obs.Results((Res_v + 1) mod MaxResults_c).Err, ErrNone_c, ERROR, "next packet: no error");
-                SofB_v := '1' when Wr_v > 0 or EofB_v = '1' else '0';
+                check_value(Obs.Results((Res_v + 1) mod MaxResults_c).Cycle > Halt0_v, ERROR,
+                            "next packet: its result after the halt");
+                Wr_v    := Obs.Results((Res_v + 1) mod MaxResults_c).Bytes;
+                log(ID_SEQUENCER, "next packet: " & to_string(Wr_v) & " of " & to_string(Len_v) &
+                    " bytes written before the error");
+                -- The form of a packet cut by the halt: complete chunks or the whole packet, no end of packet, the
+                -- start of packet as received
+                check_value(Wr_v mod ChunkBytes_c = 0 or Wr_v = Len_v, ERROR,
+                            "next packet cut: " & to_string(Wr_v) & " bytes, complete chunks");
+                checkRes(Res_v + 1, Wr_v, '0', ErrNone_c, "next packet cut after the error");
+                SofB_v := '1' when Wr_v > 0 else '0';
                 check_value(Obs.Results((Res_v + 1) mod MaxResults_c).Sof, SofB_v, ERROR, "next packet: start of packet");
-                checkMem(region(6), Len_v, Wr_v, source(6), "next packet cut by the halt");
+                checkMem(region(6), Len_v, Wr_v, source(6), "next packet cut after the error");
                 if Stopped = '0' then
                     wait until Stopped = '1' for 1 ms;
                 end if;
@@ -1836,6 +1868,60 @@ begin
                     waitPackets(Pkts_v + 2);
                     Mem_v.clearErrors(0);
                     Mem_v.setLatency(0, 0);
+                end if;
+
+                -- With the split: a full buffer of a packet that continues is queued, its write responses 400 clock
+                -- cycles late, and Run falls right after it is queued, without a next command: the halt discards the
+                -- rest of the packet, and the error of the last chunk that arrives after that must not ask for a
+                -- second flush: Stopped within 1000 clock cycles after the error result
+                if Split_g then
+                    Len_v  := minimum(4 * ChunkBytes_c, MaxLen_c);
+                    Cnt_v  := (Len_v + ChunkBytes_c - 1) / ChunkBytes_c;
+                    Res_v  := Obs.ResCount;
+                    Pkts_v := Obs.Packets;
+                    Mem_v.fill(0, region(10) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
+                    Mem_v.fill(0, region(11) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
+                    Mem_v.setWindow(0, region(10), region(10) + Len_v - 1);
+                    Mem_v.setLatency(0, 400);
+                    Mem_v.setError(0, 0, region(10) + Len_v - 1, region(10) + Len_v - 1, ErrSlv_c, TbDirWrite);
+                    Cnt2_v := Obs.AwCount;
+                    send(source(10), 2 * Len_v);
+                    sendCmd(region(10), Len_v);
+                    -- Every burst of the buffer on the bus: its write commands are issued and its result is queued
+                    wait until Obs.AwCount >= Cnt2_v + Cnt_v for 1 ms;
+                    ChRun <= '0';
+                    -- Not stopped while the result waits for its write responses (S2-HA-03)
+                    Took_v := 0;
+                    Lp_v   := Obs.Cycle;
+
+                    while Obs.ResCount = Res_v and Obs.Cycle < Lp_v + 200000 loop
+                        wait until rising_edge(Clk);
+                        if Stopped = '1' and Obs.ResCount = Res_v then
+                            Took_v := Took_v + 1;
+                        end if;
+                    end loop;
+
+                    check_value(Took_v, 0, ERROR, "queued buffer: not stopped before its result");
+                    waitRes(Res_v + 1);
+                    check_value(Obs.Results(Res_v mod MaxResults_c).Err, ErrSlv_c, ERROR, "queued buffer: write error");
+                    check_value(Obs.Results(Res_v mod MaxResults_c).Eof, '0', ERROR, "queued buffer: no end of packet");
+                    if Stopped = '0' then
+                        wait until Stopped = '1' for 1000 * ClkPeriod_c;
+                    end if;
+                    check_value(Stopped, '1', ERROR, "Stopped within 1000 clock cycles after the error of the queued buffer");
+                    waitPackets(Pkts_v + 1);
+                    Mem_v.clearErrors(0);
+                    Mem_v.setLatency(0, 0);
+                    ChRun <= '1';
+                    Mem_v.setWindow(0, region(11), region(11) + Len_v - 1);
+                    send(source(11), Len_v / 2);
+                    sendCmd(region(11), Len_v);
+                    waitRes(Res_v + 2);
+                    checkRes(Res_v + 1, Len_v / 2, '1', ErrNone_c, "packet after the halted queued buffer");
+                    check_value(Obs.Results((Res_v + 1) mod MaxResults_c).Sof, '1', ERROR,
+                                "packet after the halted queued buffer: start of packet");
+                    checkMem(region(11), Len_v, Len_v / 2, source(11), "packet after the halted queued buffer, alone");
+                    waitPackets(Pkts_v + 2);
                 end if;
 
             elsif run("test_long_packet") then

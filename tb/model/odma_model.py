@@ -1004,9 +1004,11 @@ def sg_multi_buffer(addr_width=32, length_width=14, channels=("MM2S", "S2MM"), s
 
 
 def sg_write_overlap(addr_width=32, length_width=14, s2mm_chunk=64, seed=21):
-    """An S2MM write error of a buffer whose result waits for its write responses while the next buffer of its packet
-    is written (odma_s2mm S2-RS-06, interpretation SGI-15). The first buffer is one chunk in the SLVERR range
-    ERR_WRITE_BASE; the bench holds the write responses back for 400 clock cycles, so the second buffer, two chunks,
+    """An S2MM write error of a buffer whose result waits for its write responses while the next buffer is accepted
+    (odma_s2mm S2-RS-06, interpretation SGI-15); the bench holds the write responses back for 400 clock cycles. First
+    a buffer of one chunk in the SLVERR range ERR_WRITE_BASE that ends its packet, and no further packet before the
+    halt: the next descriptor received no byte, gets no status write, and CURDESC stays at the failed one (SGI-10).
+    Then a packet over three buffers whose first buffer is one chunk in that range, so the second buffer, two chunks,
     is written completely before the error arrives, and the packet goes on into the third buffer. The first
     descriptor gets the error status, the second the status of a buffer whose packet the halt after the error cut off
     (its bytes, RXSOF and RXEOF 0, Cmplt), the third is not issued and keeps its status, and its buffer is not written:
@@ -1020,8 +1022,24 @@ def sg_write_overlap(addr_width=32, length_width=14, s2mm_chunk=64, seed=21):
     n0 = min(s2mm_chunk, limit)
     n1 = min(2 * s2mm_chunk, limit)
     n2 = min(rng.randint(64, 256), limit)
+    only = random_bytes(n0, rng)
     first = random_bytes(n0 + n1 + rng.randint(1, n2), rng)
     nxt = random_bytes(rng.randint(1, min(limit, 256)), rng)
+    s.reset()
+    s.comment("S2MM: write error in a buffer that ends its packet, the next buffer accepted, no packet before the halt")
+    descs = [SgBuffer(ERR_WRITE_BASE + 0x80, n0, only, sof=True, eof=False),
+             SgBuffer(buffers.take(n1), n1, b""), SgBuffer(buffers.take(n2), n2, b"")]
+    c = SgChain("S2MM", DESC_BASE["S2MM"] + 0x2000, descs)
+    s.desc_memory += c.image()
+    # The next descriptor received no byte: no status write, CURDESC at the failed one (SGI-10, SGI-15)
+    s.desc_expected += c.expected([0], {0: ST_DMA_SLV_ERR | ST_DMA_INT_ERR})
+    for b in descs[1:]:
+        s.expected.append((b.addr - s.guard, bytes(b.length + 2 * s.guard)))
+    p0 = s.packet("S", only)
+    s.sg_start("S2MM", c.addrs[0])
+    s.sg_tail("S2MM", c.addrs[2])
+    s.sg_failed("S2MM", Regs.DMA_SLV_ERR | Regs.DMA_INT_ERR, c.addrs[0])
+    s.await_sent(p0)
     s.reset()
     s.comment("S2MM: write error in the first buffer while the second buffer of the packet is written")
     descs = [SgBuffer(ERR_WRITE_BASE + 0x80, n0, first[:n0], sof=True, eof=False),

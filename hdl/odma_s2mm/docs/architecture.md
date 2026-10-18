@@ -177,7 +177,7 @@ burst of the queued transfer ends, instead of after its response, its result and
   an error that a later response reports would need the flush of the rest of the packet while the next transfer
   already takes it.
 - In DR mode the register block issues the next command only after the result, so the queue only moves the return
-  of the result from `Result_s` to `Idle_s`, at the same clock cycle.
+  of the result from `Result_s` to `Idle_s`, one clock cycle earlier.
 
 Start of packet (S2-SG-02): the register `SofNext` (reset '1') gives `Res_Sof` of a result with bytes or with the
 end of packet (a packet without bytes, SGI-13). A result without bytes and without the end of packet (a buffer length
@@ -194,15 +194,20 @@ transfer ends its packet, so `SofNext` is always '1'.
   write command is issued for the transfer; the remaining descriptors of the packet, up to the one with `PktEnd`, are
   flushed after the result (S2-RS-03). With `Split_g` the block raises `FlushReq` during the flush, so that S2-1
   drops the rest of the packet that has not passed the split yet (section 4.3).
-- An error of the queued transfer records its first error code in `QErr`. When its packet continues in the next
-  buffer (`QCont`), the rest of the packet must not be written: the current transfer, accepted before the error
-  arrived or in the same clock cycle, gets `Stop`, issues no further write command (a command already presented is
-  completed), leaves `Take_s` as for an error of its own, and the rest of the packet is flushed after its result,
-  unless the packet ended or was discarded in that transfer. Its result waits until `Run` has fallen, which the
-  command source does after every result with an error (architecture D7), so that it has the form of a transfer cut
-  by a halt: the bytes written, no end of packet, no error, and `Res_Sof` '0', since it continues the packet
-  (SGI-15). Without a current transfer the block goes from `Idle_s` to `Flush_s` at once. While the queued result
-  has an error, `Idle_s` accepts no command, so that only the commands accepted before the error start.
+- An error of the queued transfer records its first error code in `QErr`. The current transfer, accepted before the
+  error arrived or in the same clock cycle, gets `Stop`: it issues no further write command (a command already
+  presented is completed) and leaves `Take_s`. Its result waits until `Run` has fallen, which the command source does
+  after every result with an error (architecture D7), so that it has the form of a transfer cut by a halt: the bytes
+  written, `Res_Sof` as for any result, no end of packet, also when its packet ended in it, and no error (SGI-15).
+- `QCont` tells whether the rest of the packet of the queued transfer is still to come: it is set when a full buffer
+  is queued and cleared when a descriptor with `PktEnd` is taken, by the current transfer or by a flush. While it is
+  set, the error of the queued transfer asks for the flush of that rest (`FlushPend`): after the result of the current
+  transfer, or at once from `Idle_s` without one. A halt that has flushed the rest before the error arrives has
+  cleared `QCont`, so the error asks for no second flush, which would wait for an end of packet that does not come. A
+  packet of the current transfer that the queued one did not start is discarded with the halt: after the result,
+  `Idle_s` drops the data received before the halt (below).
+- While the queued result has an error, `Idle_s` accepts no command, so that only the commands accepted before the
+  error start.
 - Overflow records `ErrInt_c` and the end of packet of the overflowing chunk: when that chunk ends the packet, its
   beats beyond the buffer are dropped and nothing is flushed; otherwise the rest of the packet is flushed (S2-RS-02).
 - `Run` = '0' during a transfer: the descriptors of the packet of the transfer are written up to the descriptor with

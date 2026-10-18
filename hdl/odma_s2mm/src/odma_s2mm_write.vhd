@@ -119,13 +119,13 @@ architecture rtl of odma_s2mm_write is
         CmdSize     : unsigned(LengthWidth_g - 1 downto 0);
         CmdLast     : std_logic;                           -- The write command ends the transfer
         Outstanding : natural range 0 to MaxOutstanding_c;
-        Stop        : std_logic;                           -- The queued transfer of the packet failed: no further write
+        Stop        : std_logic;                           -- The queued transfer failed: no further write
         -- Queued result: a transfer with all writes issued, waiting for their responses (S2-RS-06)
         QValid      : std_logic;
         QBytes      : std_logic_vector(LengthWidth_g - 1 downto 0);
         QEof        : std_logic;
         QErr        : XferErr_t;
-        QCont       : std_logic;                           -- Its packet continues in the next transfer
+        QCont       : std_logic;                           -- The rest of its packet is still to come
         QSof        : std_logic;
         QOutst      : natural range 0 to MaxOutstanding_c;
         -- Feeder
@@ -184,7 +184,7 @@ begin
             -- SLVERR and EXOKAY give the slave error, DECERR the decode error (S2-RS-05, interpretation I14)
             if Wr_Error = '1' and r.QErr = ErrNone_c then
                 v.QErr  := respErr(Wr_ErrorResp);
-                QFail_v := r.QCont = '1';
+                QFail_v := true;
             end if;
         elsif Resp_v and r.Outstanding /= 0 then
             v.Outstanding := r.Outstanding - 1;
@@ -250,11 +250,15 @@ begin
             when Take_s =>
                 if Drain = '1' then
                     v.State := Drained_s;
-                elsif r.Err /= ErrNone_c or r.Stop = '1' then
-                    -- A write error, also of the queued transfer of the packet: no further write; the rest of the
-                    -- packet is flushed after the result
+                elsif r.Err /= ErrNone_c then
+                    -- A write error: no further write; the rest of the packet is flushed after the result
                     v.FlushPend := '1';
                     v.State     := Wait_s;
+                elsif r.Stop = '1' then
+                    -- The queued transfer failed: no further write. The rest of its packet is flushed when it
+                    -- continues here (FlushPend set with Stop), the rest of a packet of this transfer is discarded
+                    -- with the halt that follows the error
+                    v.State := Wait_s;
                 elsif Desc_Valid = '1' and Job_InReady = '1' then
                     Desc_Ready <= '1';
                     Job_v      := true;
@@ -403,12 +407,19 @@ begin
             v.Outstanding := v.Outstanding + 1;
         end if;
 
-        -- The queued transfer failed and its packet continues: the transfer of the rest of the packet (accepted
-        -- before or in this clock cycle) issues no further write, and the rest is flushed unless the packet ended
-        -- or was discarded in that transfer (S2-RS-03, SGI-15); without such a transfer the flush comes first
+        -- The packet of the queued transfer continues until a descriptor with its end is taken, by the next
+        -- transfer or by a flush
+        if Job_v and Desc_v.PktEnd = '1' then
+            v.QCont := '0';
+        end if;
+
+        -- The queued transfer failed: the next transfer (accepted before or in this clock cycle) issues no further
+        -- write and ends with the halt that follows the error (S2-RS-03, SGI-15). The rest of the packet of the
+        -- queued transfer, while it is still to come, is flushed: by that transfer after its result, or at once
+        -- without one
         if QFail_v then
             v.Stop := '1';
-            if v.Eof = '0' and v.Disc = '0' then
+            if v.QCont = '1' then
                 v.FlushPend := '1';
             end if;
         end if;
@@ -493,11 +504,12 @@ begin
                  r.Eof when r.Err = ErrNone_c and r.Stop = '0' else
                  '0';
     Res_Err   <= r.QErr when r.QValid = '1' else r.Err;
-    -- Idle: no write outstanding, and drained, or in Idle_s without a queued result or a flush to come, with the chunk
-    -- buffer empty and no descriptor of S2-1 to come, so that after a halt no data received before it is left for
-    -- the next transfer (S2-HA-01, S2-HA-03); the discard of the rest of an interrupted packet in S2-1 does not hold it
+    -- Idle: no write outstanding, and drained, or in Idle_s without a queued result, with the chunk buffer empty and
+    -- no descriptor of S2-1 to come, so that after a halt no data received before it is left for the next transfer
+    -- (S2-HA-01, S2-HA-03); the discard of the rest of an interrupted packet in S2-1 does not hold it. A flush asked
+    -- for in Idle_s (an error of the queued transfer) starts in the next clock cycle, while the result is still queued
     NoData <= '1' when Desc_Valid = '0' and Desc_Stored = '0' and DescPend = '0' else '0';
-    NoWork <= '1' when r.State = Idle_s and r.QValid = '0' and r.FlushPend = '0' and NoData = '1' else '0';
+    NoWork <= '1' when r.State = Idle_s and r.QValid = '0' and NoData = '1' else '0';
     Idle   <= '1' when r.Outstanding = 0 and r.QOutst = 0 and (r.State = Drained_s or NoWork = '1') else '0';
 
     -- *** Sequential Process ***

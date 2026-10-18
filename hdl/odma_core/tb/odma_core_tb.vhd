@@ -906,9 +906,7 @@ begin
 
             elsif run("test_sg_multi_buffer") then
                 log(ID_LOG_HDR, "TC-CO-18 packets of several buffers");
-                Mem_v.setError(MemWr_c, 0, ErrWriteBase_c, ErrWriteBase_c + ErrSize_c - 1, "10", TbDirWrite);
                 scenario("multi/", "sg_multi_buffer");
-                Mem_v.clearErrors(MemWr_c);
                 if IncludeS2mm_g then
                     -- A packet without bytes from the stream peer (odma_sg interpretation SGI-13)
                     PeerEmpty <= '1';
@@ -979,6 +977,15 @@ begin
                 end loop;
 
                 Mem_v.setLatency(MemWr_c, 0);
+
+            elsif run("test_sg_write_overlap") then
+                log(ID_LOG_HDR, "TC-CO-21 S2MM write error while the next buffer of the packet is written");
+                Mem_v.setError(MemWr_c, 0, ErrWriteBase_c, ErrWriteBase_c + ErrSize_c - 1, "10", TbDirWrite);
+                -- The write responses 400 clock cycles late: the second buffer is written before the error arrives
+                Mem_v.setLatency(MemWr_c, 400);
+                scenario("", "sg_write_overlap");
+                Mem_v.setLatency(MemWr_c, 0);
+                Mem_v.clearErrors(MemWr_c);
 
             elsif run("test_sg_ecc_index") then
                 log(ID_LOG_HDR, "TC-CO-15 FT buffers 6 to 9 of the Scatter/Gather engine");

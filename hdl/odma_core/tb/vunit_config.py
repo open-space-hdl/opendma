@@ -131,10 +131,13 @@ def keyhole_configs(g):
 
 
 def files_sg_multi(g, path):
-    odma_model.sg_multi_buffer(g["AddrWidth_g"], g["LengthWidth_g"], channels(g), chunk_bytes(g, "S2mm")).write(
-        Path(path) / "multi")
+    odma_model.sg_multi_buffer(g["AddrWidth_g"], g["LengthWidth_g"], channels(g)).write(Path(path) / "multi")
     if g["IncludeS2mm_g"]:
         odma_model.sg_empty(g["AddrWidth_g"], g["LengthWidth_g"]).write(Path(path) / "empty")
+
+
+def files_sg_overlap(g, path):
+    odma_model.sg_write_overlap(g["AddrWidth_g"], g["LengthWidth_g"], chunk_bytes(g, "S2mm")).write(path)
 
 
 def files_keyhole(g, path):
@@ -178,6 +181,7 @@ TESTS = {
     "test_sg_multi_buffer": (sg, files_sg_multi),
     "test_keyhole": (keyhole_configs, files_keyhole),
     "test_sg_boundary_rate": (lambda g: sg(g) and g["IncludeS2mm_g"], files_sg_rate),
+    "test_sg_write_overlap": (lambda g: sg(g) and g["IncludeS2mm_g"], files_sg_overlap),
 }
 
 

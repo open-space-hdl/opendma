@@ -2,14 +2,14 @@
 
 ## 1. Test results
 
-Run on 2026-10-17 in the GHDL CI of the repository, GitHub Actions run 39076889615 on commit 5e49ffb (its
+Run on 2026-10-18 in the GHDL CI of the repository, GitHub Actions run 39096149208 on commit 831a6e3 (its
 `results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
 `python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_core_tb`, and
 `python lint/synth_check.py -j 4` in the same run.
 
 | Testbench or check | Tests | Passed |
 | --- | --- | --- |
-| `odma_core_tb` | 100 (19 test cases in the configurations of verification plan section 2: 9 in the DR, 9 in the SG configurations, TC-CO-19 in both) | 100 |
+| `odma_core_tb` | 104 (20 test cases in the configurations of verification plan section 2: 9 in the DR, 10 in the SG configurations, TC-CO-19 in both) | 104 |
 | `lint/synth_check.py` (TC-CO-09) | 31 (23 configurations synthesised, 7 of them in SG mode; 8 inconsistent ones rejected) | 31 |
 
 Pause per S2MM buffer boundary and rate (TC-CO-20, two packets of 16 KB, a stream without gaps, write response
@@ -17,15 +17,14 @@ latency 0 / 50 clock cycles, buffers at multiples of 64 bytes unless stated):
 
 | Configuration | Pause per buffer boundary | Beats per clock cycle, 1 KB buffers | Beats per clock cycle, 4 KB buffers | Beats per clock cycle, 4 KB buffers at unaligned addresses | Cycles per KB added by unaligned buffers |
 | --- | --- | --- | --- | --- | --- |
-| `sg`, `sg_s2mm_only` (32 / 32 bits, 16 beats) | 43 / 93 | 0.63 / 0.56 | 0.69 / 0.67 | 0.59 / 0.57 | 62 / 62 |
-| `sg_aw64` (512 / 256 bits, 4 beats) | 25 / 75 | 0.36 / 0.23 | 0.46 / 0.39 | 0.38 / 0.34 | 14 / 14 |
-| `sg_lw8` (64 / 8 bits, 2 beats; buffers of at most 255 bytes, so no boundary figure) | - | 0.60 / 0.53 | 0.60 / 0.53 | 0.52 / 0.47 | 240 / 240 |
+| `sg`, `sg_s2mm_only` (32 / 32 bits, 16 beats) | 0 / 0 | 0.70 / 0.70 | 0.70 / 0.70 | 0.60 / 0.60 | 63 / 63 |
+| `sg_aw64` (512 / 256 bits, 4 beats) | 1 / 19 | 0.48 / 0.40 | 0.49 / 0.49 | 0.40 / 0.40 | 14 / 14 |
+| `sg_lw8` (64 / 8 bits, 2 beats; buffers of at most 255 bytes, so no boundary figure) | - | 0.64 / 0.64 | 0.64 / 0.64 | 0.56 / 0.56 | 240 / 240 |
 
-A probe of the stages at a buffer boundary (user guide, section 7) shows the write master idle for 50 + L clock cycles
-(36 + L with 512 / 256 bits) from the last write beat of a full buffer to the first one of the next, against 7 (11)
-between two bursts inside a buffer: the write response, the result, the next command (the engine holds the next
-descriptor; its status write and the next fetch are not on the path), the first chunk of the next buffer and the start
-of the burst in the write master, which waits until all data of the burst is buffered.
+The S2MM channel accepts the next buffer once the last write command of the full buffer is issued, while the
+result of the full buffer waits for its write responses (`odma_s2mm` S2-RS-06), so a boundary costs no time with
+the defaults at either latency. With 512 / 256 bits a buffer of 1 KB fills in about 66 clock cycles, and with a
+response latency of 50 it waits at its end for the responses of the buffer before (one result waits at a time).
 
 ## 2. Summary
 
@@ -44,7 +43,8 @@ Findings of the verification:
 | A mutation check found the channel reset and the S2MM drain of the soft reset not observed: with the transfers drained the channels reached the same state without them | TC-CO-05 sends the S2MM packet from a stream peer that is still sending at the reset and counts the beats taken during the reset; TC-CO-06 shows that the soft reset cancels an injection pending in each buffer |
 | The first S2MM error scenario failed the fetch of the second descriptor: the halt then came while the packet of the first descriptor was still arriving, which ended that packet early (interpretation I8 of `odma_registers`), so no `IOC_Irq` came. The behaviour is correct; the scenario did not match it | `sg_errors` lets the S2MM fetch error and the stale descriptor hit the first descriptor, before any packet; MM2S keeps them at the second descriptor, whose predecessor completes first (the model documents why) |
 | The S2MM channel gave a descriptor of length 0 the start of packet (`RXSOF` in its status, scenario `sg_errors`) | A result without bytes and without the end of packet belongs to no packet (`odma_s2mm` S2-SG-02, interpretation SGI-14) |
-| TC-CO-18 hung after the S2MM write error: `Halted` is set while the channel still discards the rest of the failed packet (documented behaviour), so the soft reset came while the stream VVC was still sending it. The VVC does not follow `S2mm_RstOut`, and the rest of the packet filled the first buffer of the new chain | The sequence command `T` waits until one stream packet is sent while the next one stays queued (`odma_pkg` architecture, section 3.3); the scenario waits for the failed packet before the soft reset, so the next packet still follows it directly |
+| TC-CO-18 hung after the S2MM write error: `Halted` is set while the channel still discards the rest of the failed packet (documented behaviour), so the soft reset came while the stream VVC was still sending it. The VVC does not follow `S2mm_RstOut`, and the rest of the packet filled the first buffer of the new chain | The sequence command `T` waits until one stream packet is sent while the next one stays queued (`odma_pkg` architecture, section 3.3); the scenario waits for the failed packet before the soft reset, so the next packet still follows it directly. The step is now TC-CO-21, with the next buffer of the failed packet written before the error arrives |
+| With the next S2MM buffer accepted while the write responses of the full buffer arrive (`odma_s2mm` S2-RS-06), the write-error step of TC-CO-18 failed in the four configurations with S2MM: its failing buffer was one chunk with responses without latency, and the next buffer of the packet now took a number of bytes before the error arrived that depends on the timing of the stream and the memory, while the scenario expected it unwritten | The step moves to TC-CO-21, whose write responses come 400 clock cycles late, so that the next buffer is written completely before the error: the scenario expects its bytes and its status (interpretation SGI-15), the third descriptor unchanged, and the next packet sent directly after the failed one complete after the soft reset |
 | The first TC-CO-20 figures (69 clock cycles per boundary) mixed in a second effect: a chunk at an address that is not a multiple of the memory word covers one word more than a burst and is written as two bursts, and the runs with 1 KB and 4 KB buffers had different shares of such buffers. The buffers of the two runs also overlapped | TC-CO-20 places its buffers at multiples of 64 bytes in a region per buffer length and measures unaligned 4 KB buffers separately; the user guide (section 7) gives both effects. Shorter boundary pauses and burst-aligned chunks are planned (roadmap) |
 | A mutation check of the Scatter/Gather integration found three faults that passed: every stream beat taken as a packet start, `Stopped` of the S2MM channel without its engine (and without the channel), and the indices 6 to 9 rotated. The first is visible only when a packet starts before the completion of the one before; the second only when a soft reset meets an outstanding descriptor access or data burst of the channel alone; the third not at all while every index is injected at once | TC-CO-16 runs two packets back to back so that the delay timer must run during the second (interpretation R10), TC-CO-17 resets once with a descriptor access and once with only data bursts outstanding, TC-CO-15 injects one index at a time |
 | TC-CO-19 did not check that the S2MM keyhole writes nothing outside the backing range of the FIFO window | The scenario `keyhole` expects the window word and 16 bytes on each side of it, 16 bytes before and after the backing range and the rest of the last word of each transfer unwritten |

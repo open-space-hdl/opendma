@@ -121,17 +121,19 @@ architecture sim of odma_registers_tb is
 
     -- Scatter/Gather Mode: fields and the reset value of DMASR (Halted, SGIncld, IRQThresholdSts 1)
     constant Keyhole_c      : Word_t := x"00000008";
-    constant CyclicBd_c     : Word_t := x"00000010";
-    constant DlyIrqEn_c     : Word_t := x"00002000";
-    constant SgIncld_c      : Word_t := x"00000008";
-    constant SgIntErr_c     : Word_t := x"00000100";
-    constant SgSlvErr_c     : Word_t := x"00000200";
-    constant SgDecErr_c     : Word_t := x"00000400";
-    constant DlyIrq_c       : Word_t := x"00002000";
-    constant ThrMask_c      : Word_t := x"00FF0000";
-    constant DlyMask_c      : Word_t := x"FF000000";
-    constant DmasrSgReset_c : Word_t := x"00010009";
-    constant PtrMask_c      : Word_t := x"FFFFFFC0";
+    -- Keyhole of the DR command per channel: MM2S never (interpretation I1), S2MM from DMACR (RG-SG-11)
+    constant DrKeyhole_c    : std_logic_vector(0 to 1) := (Mm2s_c => '0', S2mm_c => '1');
+    constant CyclicBd_c     : Word_t                   := x"00000010";
+    constant DlyIrqEn_c     : Word_t                   := x"00002000";
+    constant SgIncld_c      : Word_t                   := x"00000008";
+    constant SgIntErr_c     : Word_t                   := x"00000100";
+    constant SgSlvErr_c     : Word_t                   := x"00000200";
+    constant SgDecErr_c     : Word_t                   := x"00000400";
+    constant DlyIrq_c       : Word_t                   := x"00002000";
+    constant ThrMask_c      : Word_t                   := x"00FF0000";
+    constant DlyMask_c      : Word_t                   := x"FF000000";
+    constant DmasrSgReset_c : Word_t                   := x"00010009";
+    constant PtrMask_c      : Word_t                   := x"FFFFFFC0";
 
     -- The tail pointer write that starts the engine (interpretation SGI-01)
     function tailTrigger return Nat_a is
@@ -604,18 +606,50 @@ begin
                     chk(EccInject_c, Zero_c, "ECC_INJECT reads 0");
                 end if;
 
-                -- The stored DR-mode fields have no function: Keyhole, CyclicBD, Dly_IrqEn, IRQDelay
+                -- The stored DR-mode fields have no function: CyclicBD, Dly_IrqEn, IRQDelay and the MM2S
+                -- keyhole (interpretation I1); the S2MM keyhole goes with the command (RG-SG-11, TC-RG-24)
                 for ch in 0 to 1 loop
                     if Incl_c(ch) then
                         wr(Dmacr_c(ch), x"FF002019");
                         chk(Dmacr_c(ch), x"FF05201B", "DMACR with the stored fields");
                         wr(Length_c(ch), x"00000010");
                         waitRes(ch, 1);
-                        check_value(Obs.CmdKeyhole(ch), '0', ERROR, "command without keyhole");
+                        check_value(Obs.CmdKeyhole(ch), DrKeyhole_c(ch), ERROR,
+                                    "command keyhole (MM2S without function in DR mode)");
                         chkMask(Dmasr_c(ch), IocIrq_c, x"00003000", "IOC_Irq set, Dly_Irq 0");
                         cycles(4);
                         check_value(ChIrq(ch), '0', ERROR, "no interrupt from Dly_IrqEn");
                     end if;
+                end loop;
+
+            elsif run("test_dr_keyhole") then
+                log(ID_LOG_HDR, "TC-RG-24 keyhole in Direct Register Mode");
+                -- The command waits 100 clock cycles for Cmd_Ready, so that a DMACR write after the length
+                -- write meets the pending command
+                Cfg(Mm2s_c).CmdDelay <= 100;
+                Cfg(S2mm_c).CmdDelay <= 100;
+
+                for ch in 0 to 1 loop
+                    -- Keyhole set at the length write, cleared while the command waits: the command keeps it
+                    wr(Dmacr_c(ch), Rs_c or Keyhole_c);
+                    wr(Length_c(ch), x"00000020");
+                    wr(Dmacr_c(ch), Rs_c);
+                    waitCmd(ch, 1);
+                    check_value(Obs.CmdKeyhole(ch), DrKeyhole_c(ch), ERROR,
+                                "keyhole at the length write (MM2S never, interpretation I1)");
+                    waitRes(ch, 1);
+                    -- Keyhole cleared at the length write, set while the command waits: the command has none
+                    wr(Length_c(ch), x"00000020");
+                    wr(Dmacr_c(ch), Rs_c or Keyhole_c);
+                    waitCmd(ch, 2);
+                    check_value(Obs.CmdKeyhole(ch), '0', ERROR, "no keyhole at the length write");
+                    waitRes(ch, 2);
+                    -- The next transfer takes the keyhole again
+                    wr(Length_c(ch), x"00000020");
+                    waitCmd(ch, 3);
+                    check_value(Obs.CmdKeyhole(ch), DrKeyhole_c(ch), ERROR,
+                                "keyhole of the next transfer");
+                    waitRes(ch, 3);
                 end loop;
 
             elsif run("test_start_halt") then

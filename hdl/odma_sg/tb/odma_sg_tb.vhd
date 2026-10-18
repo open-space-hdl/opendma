@@ -226,6 +226,7 @@ begin
         variable Rand_v    : real;
         variable SecBase_v : natural;
         variable DedBase_v : natural;
+        variable ExpErr_v  : std_logic_vector(1 downto 0);
 
         -- Random test: descriptors prepared and checked, packets, expected status words
         type Status_a is array (0 to Total_c - 1) of Word_t;
@@ -993,6 +994,46 @@ begin
                                 C_TB_SCOPE_DEFAULT, HEX);
                 end if;
 
+            elsif run("test_error_codes") then
+                log(ID_LOG_HDR, "TC-SG-18 error codes of descriptor accesses");
+
+                for ch in 0 to 1 loop
+                    if Incl_c(ch) then
+
+                        -- EXOKAY ("01", not the internal error code; interpretation I14), SLVERR, DECERR
+                        for e in 1 to 3 loop
+                            ExpErr_v := ErrSlv_c;
+                            if e = 3 then
+                                ExpErr_v := ErrDec_c;
+                            end if;
+                            -- The fetch of D1
+                            resetAll;
+                            chain(ch, 4);
+                            Mem_v.setError(MemSg_c, 0, unsigned(descAddr(ch, 1)), unsigned(descAddr(ch, 1)) + 31,
+                                           std_logic_vector(to_unsigned(e, 2)), TbDirRead);
+                            start(ch, descAddr(ch, 0));
+                            tail(ch, descAddr(ch, 3));
+                            waitErrs(ch, 1, "fetch error");
+                            halt(ch, "fetch error");
+                            check_value(Obs.Errs(ch)(ErrBase_v(ch)).Sg, ExpErr_v, ERROR, "engine error of the fetch");
+                            check_value(Obs.Errs(ch)(ErrBase_v(ch)).Xfer, ErrNone_c, ERROR, "no transfer error");
+                            -- The status write of D0
+                            resetAll;
+                            chain(ch, 4);
+                            Mem_v.setError(MemSg_c, 0, unsigned(descAddr(ch, 0)) + 28, unsigned(descAddr(ch, 0)) + 31,
+                                           std_logic_vector(to_unsigned(e, 2)), TbDirWrite);
+                            start(ch, descAddr(ch, 0));
+                            tail(ch, descAddr(ch, 3));
+                            waitErrs(ch, 1, "status write error");
+                            halt(ch, "status write error");
+                            check_value(Obs.Errs(ch)(ErrBase_v(ch)).Sg, ExpErr_v, ERROR,
+                                        "engine error of the status write");
+                            check_value(Obs.Errs(ch)(ErrBase_v(ch)).Xfer, ErrNone_c, ERROR, "no transfer error");
+                        end loop;
+
+                    end if;
+                end loop;
+
             elsif run("test_descriptor_errors") then
                 log(ID_LOG_HDR, "TC-SG-09 errors of descriptor accesses");
 
@@ -1009,8 +1050,9 @@ begin
                             tail(ch, descAddr(ch, 3));
                             waitErrs(ch, 1, "fetch error");
                             halt(ch, "fetch error");
-                            -- Gap G5: the slave error code until Open Logic reports the response code
-                            check_value(Obs.Errs(ch)(ErrBase_v(ch)).Sg, ErrSlv_c, ERROR, "engine error of the fetch");
+                            -- SLVERR gives the slave, DECERR the decode error (SG-ER-04)
+                            check_value(Obs.Errs(ch)(ErrBase_v(ch)).Sg, std_logic_vector(to_unsigned(e, 2)), ERROR,
+                                        "engine error of the fetch");
                             check_value(Obs.Errs(ch)(ErrBase_v(ch)).Xfer, ErrNone_c, ERROR, "no transfer error");
                             check_value(Obs.CmdCount(ch) - CmdBase_v(ch), 1, ERROR, "nothing issued from the failed fetch");
                             checkDesc(ch, 0, true, statusExp(ch, D_v(ch)(0).Len, '1', '1', ErrNone_c), "fetch error");

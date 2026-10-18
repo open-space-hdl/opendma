@@ -34,7 +34,8 @@ entity odma_mm2s is
         MemWidth_g    : positive                := 32;
         StreamWidth_g : positive                := 32;
         BurstBeats_g  : positive                := 16;
-        BufferBeats_g : positive                := 64
+        BufferBeats_g : positive                := 64;
+        Join_g        : boolean                 := false
     );
     port (
         -- Control Signals
@@ -93,11 +94,9 @@ end entity;
 ---------------------------------------------------------------------------------------------------
 architecture rtl of odma_mm2s is
 
-    -- Longest burst of the read master: no AXI burst crosses 4 KB, so longer bursts never occur, and
-    -- olo_axi_master_simple of Open Logic 4.7.0-ft.6 does not elaborate with more beats than 4 KB holds
+    -- Longest burst of the read master: no AXI burst crosses 4 KB, so longer bursts never occur (G13)
     constant MasterBeats_c : positive := minimum(BurstBeats_g, 4096 / (MemWidth_g / 8));
-    -- Size bits of the read master: one more than the length, as for the write master of odma_s2mm, where the
-    -- word count of olo_axi_master_full of Open Logic 4.7.0-ft.6 wraps in the last user word below 2**size bits (G14)
+    -- Size bits of the read master: one more than the length, as for the write master of odma_s2mm (G14)
     constant SizeBits_c    : positive := LengthWidth_g + 1;
 
     -- Transfer buffer {code, end of packet, length} and response buffer {code}
@@ -115,6 +114,8 @@ architecture rtl of odma_mm2s is
     signal Resp_InValid  : std_logic;
     signal Resp_InCode   : XferErr_t;
     signal CmdIdle       : std_logic;
+    signal NoEntry       : std_logic;
+    signal StreamClosed  : std_logic;
 
     -- Transfer and response buffers to the stream block
     signal Xfer_OutData  : std_logic_vector(XferWidth_c - 1 downto 0);
@@ -131,22 +132,24 @@ architecture rtl of odma_mm2s is
     signal Resp_Empty    : std_logic;
 
     -- Read master
-    signal CmdRd_Addr  : std_logic_vector(AddrWidth_g - 1 downto 0);
-    signal CmdRd_Size  : std_logic_vector(LengthWidth_g - 1 downto 0);
-    signal MasterSize  : std_logic_vector(SizeBits_c - 1 downto 0);
-    signal CmdRd_Valid : std_logic;
-    signal CmdRd_Ready : std_logic;
-    signal Rd_Data     : std_logic_vector(StreamWidth_g - 1 downto 0);
-    signal Rd_Last     : std_logic;
-    signal Rd_Valid    : std_logic;
-    signal Rd_Ready    : std_logic;
-    signal Rd_EccSec   : std_logic;
-    signal Rd_EccDed   : std_logic;
-    signal Rd_Done     : std_logic;
-    signal Rd_Error    : std_logic;
-    signal RdInjFlip   : std_logic_vector(eccCodewordWidth(StreamWidth_g + 1) - 1 downto 0);
-    signal XferInjFlip : std_logic_vector(eccCodewordWidth(XferWidth_c) - 1 downto 0);
-    signal RespInjFlip : std_logic_vector(eccCodewordWidth(RespWidth_c) - 1 downto 0);
+    signal CmdRd_Addr   : std_logic_vector(AddrWidth_g - 1 downto 0);
+    signal CmdRd_Size   : std_logic_vector(LengthWidth_g - 1 downto 0);
+    signal CmdRd_Fixed  : std_logic;
+    signal MasterSize   : std_logic_vector(SizeBits_c - 1 downto 0);
+    signal CmdRd_Valid  : std_logic;
+    signal CmdRd_Ready  : std_logic;
+    signal Rd_Data      : std_logic_vector(StreamWidth_g - 1 downto 0);
+    signal Rd_Last      : std_logic;
+    signal Rd_Valid     : std_logic;
+    signal Rd_Ready     : std_logic;
+    signal Rd_EccSec    : std_logic;
+    signal Rd_EccDed    : std_logic;
+    signal Rd_Done      : std_logic;
+    signal Rd_Error     : std_logic;
+    signal Rd_ErrorResp : std_logic_vector(1 downto 0);
+    signal RdInjFlip    : std_logic_vector(eccCodewordWidth(StreamWidth_g + 1) - 1 downto 0);
+    signal XferInjFlip  : std_logic_vector(eccCodewordWidth(XferWidth_c) - 1 downto 0);
+    signal RespInjFlip  : std_logic_vector(eccCodewordWidth(RespWidth_c) - 1 downto 0);
 
 begin
 
@@ -165,29 +168,32 @@ begin
             LengthWidth_g => LengthWidth_g
         )
         port map (
-            Clk         => Clk,
-            Rst         => Rst,
-            Cmd_Valid   => Cmd_Valid,
-            Cmd_Ready   => Cmd_Ready,
-            Cmd_Addr    => Cmd_Addr,
-            Cmd_Length  => Cmd_Length,
-            Cmd_Eof     => Cmd_Eof,
-            Run         => Run,
-            Drain       => Drain,
-            CmdRd_Addr  => CmdRd_Addr,
-            CmdRd_Size  => CmdRd_Size,
-            CmdRd_Valid => CmdRd_Valid,
-            CmdRd_Ready => CmdRd_Ready,
-            Rd_Done     => Rd_Done,
-            Rd_Error    => Rd_Error,
-            Xfer_Valid  => Xfer_InValid,
-            Xfer_Ready  => Xfer_InReady,
-            Xfer_Length => Xfer_InLength,
-            Xfer_Eof    => Xfer_InEof,
-            Xfer_Code   => Xfer_InCode,
-            Resp_Valid  => Resp_InValid,
-            Resp_Code   => Resp_InCode,
-            Idle        => CmdIdle
+            Clk          => Clk,
+            Rst          => Rst,
+            Cmd_Valid    => Cmd_Valid,
+            Cmd_Ready    => Cmd_Ready,
+            Cmd_Addr     => Cmd_Addr,
+            Cmd_Length   => Cmd_Length,
+            Cmd_Eof      => Cmd_Eof,
+            Cmd_Keyhole  => Cmd_Keyhole,
+            Run          => Run,
+            Drain        => Drain,
+            CmdRd_Addr   => CmdRd_Addr,
+            CmdRd_Size   => CmdRd_Size,
+            CmdRd_Fixed  => CmdRd_Fixed,
+            CmdRd_Valid  => CmdRd_Valid,
+            CmdRd_Ready  => CmdRd_Ready,
+            Rd_Done      => Rd_Done,
+            Rd_Error     => Rd_Error,
+            Rd_ErrorResp => Rd_ErrorResp,
+            Xfer_Valid   => Xfer_InValid,
+            Xfer_Ready   => Xfer_InReady,
+            Xfer_Length  => Xfer_InLength,
+            Xfer_Eof     => Xfer_InEof,
+            Xfer_Code    => Xfer_InCode,
+            Resp_Valid   => Resp_InValid,
+            Resp_Code    => Resp_InCode,
+            Idle         => CmdIdle
         );
 
     -- *** AXI4 read master with the read data buffer ***
@@ -212,6 +218,7 @@ begin
             CmdRd_Addr        => CmdRd_Addr,
             CmdRd_Size        => MasterSize,
             CmdRd_LowLat      => '0',
+            CmdRd_Fixed       => CmdRd_Fixed,
             CmdRd_Valid       => CmdRd_Valid,
             CmdRd_Ready       => CmdRd_Ready,
             Rd_Data           => Rd_Data,
@@ -222,6 +229,7 @@ begin
             Rd_EccDed         => Rd_EccDed,
             Rd_Done           => Rd_Done,
             Rd_Error          => Rd_Error,
+            Rd_ErrorResp      => Rd_ErrorResp,
             Rd_ErrInj_BitFlip => RdInjFlip,
             Rd_ErrInj_Valid   => EccInj_Valid(0),
             M_Axi_ArAddr      => M_Axi_ArAddr,
@@ -292,12 +300,15 @@ begin
     i_stream : entity work.odma_mm2s_stream
         generic map (
             LengthWidth_g => LengthWidth_g,
-            StreamWidth_g => StreamWidth_g
+            StreamWidth_g => StreamWidth_g,
+            Join_g        => Join_g
         )
         port map (
             Clk          => Clk,
             Rst          => Rst,
+            Run          => Run,
             Drain        => Drain,
+            NoEntry      => NoEntry,
             Xfer_Valid   => Xfer_OutValid,
             Xfer_Ready   => Xfer_OutReady,
             Xfer_Length  => Xfer_OutData(LengthWidth_g - 1 downto 0),
@@ -315,6 +326,7 @@ begin
             Res_Bytes    => Res_Bytes,
             Res_Eof      => Res_Eof,
             Res_Err      => Res_Err,
+            Closed       => StreamClosed,
             M_Mm2s_Data  => M_Mm2s_Data,
             M_Mm2s_Keep  => M_Mm2s_Keep,
             M_Mm2s_Last  => M_Mm2s_Last,
@@ -331,7 +343,9 @@ begin
     Ecc_Ded(2) <= Resp_OutDed and Resp_OutValid and Resp_OutReady;
 
     -- *** Stopped: no command in progress, both buffers empty. A transfer entry with a read is popped only after
-    -- the response of the read, so an empty transfer buffer also means that no read is outstanding ***
-    Stopped <= CmdIdle and Xfer_Empty and Resp_Empty;
+    -- the response of the read, so an empty transfer buffer also means that no read is outstanding. With Join_g
+    -- also no packet open in the join (MM-SG-04) ***
+    NoEntry <= CmdIdle and Xfer_Empty;
+    Stopped <= CmdIdle and Xfer_Empty and Resp_Empty and StreamClosed;
 
 end architecture;

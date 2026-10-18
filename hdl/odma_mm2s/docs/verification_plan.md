@@ -6,7 +6,8 @@ The channel is verified through its ports: transfer commands and the channel con
 collected by a monitor of the harness, the memory port on the AXI memory model of `tb/` (with its protocol checks,
 error ranges, backpressure and statistics) and the stream port on a stream checker of the harness. The bench fills
 the memory with the fill pattern of the memory model, which depends on every address bit (`odmaMemByte`), and queues
-the packets it expects (address, length); the checker compares every byte with the memory contents at its address,
+the packets it expects (one or more buffers of address and length each; for a keyhole buffer the backing range of
+the FIFO window of the memory model, PKG-12); the checker compares every byte with the memory contents at its address,
 checks `TKeep` and `TLast` and raises an alert on a difference or a beat without an expected packet. A read from a
 wrong address, also one shifted by a whole burst, by 256 bytes or by 4 KB, therefore delivers other bytes. The
 checker drives `TReady`: always high, high in a given percentage of the clock cycles, held low, or low for a number
@@ -18,7 +19,7 @@ memory contents, never by the RTL. The AXI4-Stream VVC of UVVM is not used: its 
 
 | Testbench | Harness | DUT and environment |
 | --- | --- | --- |
-| `odma_mm2s_tb` | `odma_mm2s_th` | `odma_mm2s`; AXI memory model instance 0 on `M_Axi_*` with the maximum burst set to `BurstBeats_g`; the stream checker on `M_Mm2s_*`; monitors of the result port, of the AR channel (bursts, attributes), of the R channel (cycles with `RValid` and not `RReady`, bursts completed) and of the ECC events |
+| `odma_mm2s_tb` | `odma_mm2s_th` | `odma_mm2s`; AXI memory model instance 0 on `M_Axi_*` with the maximum burst set to `BurstBeats_g`; the stream checker on `M_Mm2s_*`; monitors of the result port (with the clock cycle of every result), of the AR channel (bursts, attributes, burst type, the addresses of FIXED bursts), of the R channel (cycles with `RValid` and not `RReady`, bursts completed) and of the ECC events |
 
 | VUnit configuration | `MemWidth_g`, `StreamWidth_g`, `BurstBeats_g`, `AddrWidth_g`, `LengthWidth_g` | Purpose |
 | --- | --- | --- |
@@ -32,12 +33,15 @@ memory contents, never by the RTL. The AXI4-Stream VVC of UVVM is not used: its 
 | `w512_s512` | 512, 512, 2, 32, 14 | Equal widths, shortest burst |
 | `w1024_s8` | 1024, 8, 2, 32, 8 | Widest ratio, shortest length width |
 | `w1024_s1024` | 1024, 1024, 256, 64, 12 | Widest stream and memory, bursts limited by 4 KB (32 beats) |
+| `j_w64_s8`, `j_w256_s16`, `j_w32_s32`, `j_w128_s64`, `j_w256_s128`, `j_w512_s256`, `j_w512_s512`, `j_w1024_s1024` | as the configuration without `j_`, `Join_g` true | The stream join with every stream width (1 to 128 byte lanes) |
 
 Every configuration has a data buffer of four bursts (`BufferBeats_g` = 4 x `BurstBeats_g` x `MemWidth_g` /
-`StreamWidth_g`); together the configurations simulate every memory width and every stream width. Every test runs in
-every configuration; lengths are limited to 2**`LengthWidth_g` - 1.
+`StreamWidth_g`); together the configurations simulate every memory width and every stream width, and every stream
+width with the join. The tests of phase a run in every configuration (with `Join_g` they show that the join passes
+packets of one command unchanged); the tests of Scatter/Gather Mode (TC-MM-16 to TC-MM-18) run in the `j_`
+configurations; lengths are limited to 2**`LengthWidth_g` - 1.
 
-Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the batch of phase a.
+Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the batches of phases a and b.
 
 ## 3. Test cases
 
@@ -57,23 +61,19 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | `test_drain` (TC-MM-12) | `Drain` rises during a transfer with a stalled stream peer: no further beat, all read bursts complete (statistics), no result, `Stopped` rises; with `Drain` before any command: no command accepted | MM-HA-02 |
 | `test_ecc` (TC-MM-13) | For each of the three buffers: an error is injected into the data, the entry or the response of a transfer that waits at the output of the buffer while the transfer before it completes at a stalled stream peer; a single error gives correct data and results and one pulse on the bit of the buffer in `Ecc_Sec`, a double error one pulse in `Ecc_Ded`; a single error on a data bit (data mode) gives correct data and results and one pulse in `Ecc_Sec` | MM-FT-01 |
 | `test_long_transfer` (TC-MM-14) | A transfer of at least 64 KB and 16384 stream beats (at most the longest length), with backpressure of the stream peer and of the memory | MM-RD-01, MM-ST-01 |
-
-### 3.1 Test cases waiting for Open Logic
-
-The test case below takes effect with the release of Open Logic that reports the response code of a failed read
-command (specification section 3.7).
-
-| Test ID | Description | Requirements |
-| --- | --- | --- |
-| `test_error_codes` (TC-MM-15) | SLVERR only, DECERR only, SLVERR before DECERR and DECERR before SLVERR within one transfer: the result carries the slave error, the decode error, the slave error and the decode error | MM-ER-03 |
+| `test_error_codes` (TC-MM-15) | SLVERR only, DECERR only, EXOKAY only, SLVERR before DECERR and DECERR before SLVERR within one transfer: the result carries the slave error, the decode error, the slave error (interpretation I14), the slave error and the decode error | MM-ER-03 |
+| `test_join` (TC-MM-16) | 40 packets of 1 to 5 commands each, every buffer at a random address (every offset within a memory word) and of a random length (among them 1 byte, one stream beat, lengths that end on every lane), the start of packet on the first and the end of packet on the last command; 50 % random backpressure of the stream peer, 30 % stall and a latency of 20 cycles in the memory model: every packet is the concatenation of its buffers, every beat full except the last of the packet, `TLast` only there; one result per command with its length and end of packet | MM-SG-01, MM-IF-03 |
+| `test_join_results` (TC-MM-17) | A packet of two commands, the first of at most one stream beat: the stream peer holds `TReady` low after the first beat; the result of the first command comes while the peer holds it (its bytes are in the join), the result of the second only after the peer has taken the beat with `TLast` | MM-SG-02, MM-ST-03 |
+| `test_join_halt` (TC-MM-18) | Packets of three commands; `Run` falls after the first command was accepted, with lengths that leave 1, B - 1 and B bytes (B the bytes of a stream beat) in the join: no further command accepted, the packet ends with `TLast` on its last byte, `Stopped` rises only after the stream peer (40 clock cycles late) has taken that beat; then `Run` rises and the next packet is complete. A read error on the first command of a packet, followed by the fall of `Run`: the packet ends the same way. `Drain` with a packet open: no further beat, `Stopped` rises, and after the core reset the next packet is complete | MM-SG-04, MM-HA-01, MM-HA-02 |
+| `test_keyhole` (TC-MM-19) | Keyhole commands of 1 byte, one memory word, 16 and 17 memory words and 3.5 bursts at aligned and unaligned addresses, also next to a 4 KB boundary: every AR burst FIXED with at most 16 beats at the address with the bits below the memory width cleared; the address is the FIFO window of the memory model, which returns a different word per beat (the consecutive words of its backing range, PKG-12), so the stream carries those words in order, packed from lane 0, the last beat with the remaining bytes, and an incrementing read would give other bytes; an incrementing command after a keyhole command and the reverse are both correct; a keyhole command at the top of the address space is read | MM-SG-03, MM-IF-01 |
 
 ## 4. Requirement coverage
 
 | Requirement | Test cases |
 | --- | --- |
-| MM-IF-01 | TC-MM-03 |
+| MM-IF-01 | TC-MM-03, TC-MM-19 |
 | MM-IF-02 | TC-MM-01 |
-| MM-IF-03 | TC-MM-07, TC-MM-11 |
+| MM-IF-03 | TC-MM-07, TC-MM-11, TC-MM-16 |
 | MM-RD-01 | TC-MM-01, TC-MM-02, TC-MM-14 |
 | MM-RD-02 | TC-MM-03 |
 | MM-RD-03 | TC-MM-06 |
@@ -82,11 +82,16 @@ command (specification section 3.7).
 | MM-RD-06 | TC-MM-10 |
 | MM-ST-01 | TC-MM-01, TC-MM-02, TC-MM-04, TC-MM-14 |
 | MM-ST-02 | TC-MM-01, TC-MM-04 |
-| MM-ST-03 | TC-MM-01, TC-MM-07, TC-MM-08 |
+| MM-ST-03 | TC-MM-01, TC-MM-07, TC-MM-08, TC-MM-17 |
 | MM-ER-01, MM-ER-02 | TC-MM-09 |
-| MM-HA-01 | TC-MM-11 |
-| MM-HA-02 | TC-MM-12 |
+| MM-ER-03 | TC-MM-15 |
+| MM-HA-01 | TC-MM-11, TC-MM-18 |
+| MM-HA-02 | TC-MM-12, TC-MM-18 |
 | MM-FT-01 | TC-MM-13 |
+| MM-SG-01 | TC-MM-16 |
+| MM-SG-02 | TC-MM-17 |
+| MM-SG-03 | TC-MM-19 |
+| MM-SG-04 | TC-MM-18 |
 
 The recovery of the state machines from an illegal state (`when others`, architecture D15) cannot be reached through
 the ports; it is reviewed in the code and listed in the coverage report.
@@ -96,6 +101,8 @@ the ports; it is reviewed in the code and listed in the coverage report.
 | Check or error path | Test |
 | --- | --- |
 | Read error responses SLVERR and DECERR | TC-MM-09 |
+| The error code of each response type, EXOKAY, the first error of a transfer deciding | TC-MM-15 |
+| A packet left open by a halt, an error or a drain | TC-MM-18 |
 | Buffer beyond the top of the address space, command of length 0 | TC-MM-10 |
 | Commands while halted or draining | TC-MM-11, TC-MM-12 |
 | ECC single and double errors | TC-MM-13 |

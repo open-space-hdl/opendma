@@ -59,7 +59,11 @@ entity odma_core_th is
         EccIrq     : out   std_logic;
         Mm2sRstOut : out   std_logic;
         S2mmRstOut : out   std_logic;
-        PeerBytes  : in    natural := 0; -- A change from 0 starts a packet of the stream peer
+        PeerBytes  : in    natural                       := 0; -- A change from 0 starts a packet of the stream peer
+        PeerEmpty  : in    std_logic                     := '0'; -- '1': the stream peer sends a packet without bytes
+        FixedRd    : in    std_logic_vector(63 downto 0) := (others => '0'); -- Address of FIXED bursts, MM2S
+        FixedWr    : in    std_logic_vector(63 downto 0) := (others => '0'); -- Address of FIXED bursts, S2MM
+        ObsClear   : in    std_logic                     := '0'; -- A change restarts the S2MM stream counters
         Obs        : out   CoreObs_r
     );
 end entity;
@@ -149,7 +153,7 @@ architecture sim of odma_core_th is
 
     signal Mm2sIrq_i : std_logic;
     signal S2mmIrq_i : std_logic;
-    signal Obs_i     : CoreObs_r := (0, 0, 0, 0, false, 0, false, 0, 0, 0, 0);
+    signal Obs_i     : CoreObs_r := (0, 0, 0, 0, false, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
     -- Descriptor port
     signal Sg_ArAddr  : std_logic_vector(AddrWidth_g - 1 downto 0);
@@ -474,11 +478,23 @@ begin
         constant Bytes_c : positive := S2mmStreamWidth_g / 8;
         variable Sent_v  : natural;
     begin
-        wait until PeerBytes /= 0;
+        wait until PeerBytes /= 0 or PeerEmpty = '1';
         wait until rising_edge(Clk);
         PeerSel        <= '1';
         Obs_i.PeerDone <= false;
         Sent_v         := 0;
+        if PeerEmpty = '1' then
+            -- A packet without bytes: one beat with TKeep all '0' and TLast (odma_sg interpretation SGI-13)
+            P_Keep         <= (others => '0');
+            P_Last         <= '1';
+            P_Valid        <= '1';
+            wait until rising_edge(Clk) and P_Valid = '1' and S2mm_Ready = '1';
+            P_Valid        <= '0';
+            P_Last         <= '0';
+            PeerSel        <= '0';
+            Obs_i.PeerDone <= true;
+            wait until PeerEmpty = '0';
+        end if;
 
         while Sent_v < PeerBytes and S2mmRstOut_i = '0' loop
 
@@ -520,10 +536,36 @@ begin
     -- Monitor of the AXI4 transactions
     -----------------------------------------------------------------------------------------------
     p_obs : process (Clk) is
-        variable RBeat_v : boolean;
-        variable WBeat_v : boolean;
+        variable RBeat_v    : boolean;
+        variable WBeat_v    : boolean;
+        variable ClearOld_v : std_logic := '0';
     begin
         if rising_edge(Clk) then
+            Obs_i.Cycle <= Obs_i.Cycle + 1;
+            -- S2MM stream counters (TC-CO-20)
+            if ObsClear /= ClearOld_v then
+                ClearOld_v    := ObsClear;
+                Obs_i.S2Beats <= 0;
+            elsif S2mm_Valid = '1' and S2mm_Ready = '1' then
+                if Obs_i.S2Beats = 0 then
+                    Obs_i.S2First <= Obs_i.Cycle;
+                end if;
+                Obs_i.S2Beats <= Obs_i.S2Beats + 1;
+                Obs_i.S2Last  <= Obs_i.Cycle;
+            end if;
+            -- FIXED bursts of keyhole transfers: at most 16 beats at the window word
+            if Rd_ArValid = '1' and Rd_ArReady = '1' and Rd_ArBurst = "00" then
+                Obs_i.ArFixed <= Obs_i.ArFixed + 1;
+                if unsigned(Rd_ArLen) > 15 or Rd_ArAddr /= FixedRd(AddrWidth_g - 1 downto 0) then
+                    Obs_i.FixBad <= Obs_i.FixBad + 1;
+                end if;
+            end if;
+            if Wr_AwValid = '1' and Wr_AwReady = '1' and Wr_AwBurst = "00" then
+                Obs_i.AwFixed <= Obs_i.AwFixed + 1;
+                if unsigned(Wr_AwLen) > 15 or Wr_AwAddr /= FixedWr(AddrWidth_g - 1 downto 0) then
+                    Obs_i.FixBad <= Obs_i.FixBad + 1;
+                end if;
+            end if;
             if Rd_ArValid = '1' and Rd_ArReady = '1' then
                 Obs_i.ArBursts <= Obs_i.ArBursts + 1;
             end if;

@@ -59,7 +59,7 @@ package odma_tb_mem_pkg is
             seed : natural);
 
         -- Error range n: accesses to the bytes from first to last respond with resp ("10" SLVERR,
-        -- "11" DECERR) in direction dir; resp "00" disables the range
+        -- "11" DECERR, "01" EXOKAY) in direction dir; resp "00" disables the range
         procedure setError (
             idx   : natural;
             n     : natural;
@@ -140,6 +140,22 @@ package odma_tb_mem_pkg is
             idx   : natural;
             write : boolean) return natural;
 
+        -- FIFO window (PKG-12): the k-th read beat and the k-th write beat at the memory word that
+        -- contains window access the word at backing + k x the data width; both counters start at 0
+        procedure setFifo (
+            idx     : natural;
+            window  : unsigned;
+            backing : unsigned);
+
+        -- Address of a beat at base (aligned to bytes, the data width of the instance) after the FIFO
+        -- window; counts the beat when it is at the window
+        procedure fifoMap (
+            idx    : natural;
+            base   : in    unsigned(63 downto 0);
+            bytes  : positive;
+            write  : boolean;
+            mapped : out   unsigned(63 downto 0));
+
     end protected;
 
 end package;
@@ -208,6 +224,11 @@ package body odma_tb_mem_pkg is
         variable Bursts_v   : NatArray_t   := (others => 0);
         variable WrOut_v    : NatArray_t   := (others => 0);
         variable RdOut_v    : NatArray_t   := (others => 0);
+        variable FifoOn_v   : NatArray_t   := (others => 0);
+        variable FifoWin_v  : AddrArray_t  := (others => (others => '0'));
+        variable FifoBack_v : AddrArray_t  := (others => (others => '0'));
+        variable FifoRd_v   : NatArray_t   := (others => 0);
+        variable FifoWr_v   : NatArray_t   := (others => 0);
 
         -- Index of the page of addr, -1 when it is not allocated; with create, a missing page is allocated
         impure function page (
@@ -449,6 +470,42 @@ package body odma_tb_mem_pkg is
             end if;
             return RdOut_v(idx);
         end function;
+
+        procedure setFifo (
+            idx     : natural;
+            window  : unsigned;
+            backing : unsigned) is
+        begin
+            FifoOn_v(idx)   := 1;
+            FifoWin_v(idx)  := resize(window, 64);
+            FifoBack_v(idx) := resize(backing, 64);
+            FifoRd_v(idx)   := 0;
+            FifoWr_v(idx)   := 0;
+        end procedure;
+
+        procedure fifoMap (
+            idx    : natural;
+            base   : in    unsigned(63 downto 0);
+            bytes  : positive;
+            write  : boolean;
+            mapped : out   unsigned(63 downto 0)) is
+            constant Bytes_c : Addr_t := to_unsigned(bytes, 64);
+            variable Win_v   : Addr_t;
+        begin
+            mapped := base;
+            if FifoOn_v(idx) = 1 then
+                Win_v := FifoWin_v(idx) - (FifoWin_v(idx) mod Bytes_c);
+                if base = Win_v then
+                    if write then
+                        mapped        := FifoBack_v(idx) + to_unsigned(FifoWr_v(idx) * bytes, 64);
+                        FifoWr_v(idx) := FifoWr_v(idx) + 1;
+                    else
+                        mapped        := FifoBack_v(idx) + to_unsigned(FifoRd_v(idx) * bytes, 64);
+                        FifoRd_v(idx) := FifoRd_v(idx) + 1;
+                    end if;
+                end if;
+            end if;
+        end procedure;
 
     end protected body;
 

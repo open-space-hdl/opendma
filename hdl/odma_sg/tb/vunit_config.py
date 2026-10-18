@@ -17,8 +17,8 @@ CONFIGS = {
 }
 
 TESTS = ["test_fetch", "test_status", "test_tail", "test_prefetch", "test_curdesc", "test_packet_events",
-         "test_stale", "test_transfer_errors", "test_descriptor_errors", "test_channels", "test_halt", "test_drain",
-         "test_cyclic", "test_keyhole", "test_ecc", "test_random", "test_rate"]
+         "test_stale", "test_transfer_errors", "test_error_codes", "test_descriptor_errors", "test_channels",
+         "test_halt", "test_drain", "test_cyclic", "test_keyhole", "test_ecc", "test_random", "test_rate"]
 
 # Tests that need both channels, tests that run in one configuration only
 BOTH = {"test_channels"}
@@ -27,6 +27,12 @@ ONLY = {"test_rate": ("default",)}
 
 def configure(lib):
     tb = lib.test_bench("odma_sg_tb")
+    # Every test of the testbench is in the list and every name of the lists a test: a test missing from the list
+    # would run once with the generic defaults only
+    names = {test.name for test in tb.get_tests()}
+    assert names == set(TESTS), (f"odma_sg_tb: tests not listed {sorted(names - set(TESTS))}, "
+                                 f"listed without a test {sorted(set(TESTS) - names)}")
+    assert BOTH | set(ONLY) <= names, f"odma_sg_tb: unknown tests {sorted((BOTH | set(ONLY)) - names)}"
     for test in TESTS:
         for name, (addr, length, mm2s, s2mm) in CONFIGS.items():
             if test in BOTH and not (mm2s and s2mm):

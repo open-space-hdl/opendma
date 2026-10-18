@@ -28,24 +28,30 @@ package odma_mm2s_tb_pkg is
     -- Results kept by the harness: result n is element n mod MaxResults_c
     constant MaxResults_c : positive := 64;
 
-    -- Packets the stream checker expects, in order: the bytes of the memory model from the address of the
-    -- packet; the packet ends with TLast on the beat of its last byte.
-    constant MaxPackets_c : positive := 16;
+    -- Buffers the stream checker expects, in order: the bytes of the memory model from the address of the
+    -- buffer; the buffers up to one with last form a packet, which ends with TLast on the beat of its
+    -- last byte.
+    constant MaxPackets_c : positive := 128;
 
     type PktQueue_t is protected
 
         procedure push (
             addr  : unsigned(63 downto 0);
-            bytes : positive);
+            bytes : positive;
+            last  : boolean := true);
 
         impure function count return natural;
 
-        -- Address and length of the oldest packet
+        -- Address, length and end of packet of the oldest buffer
         impure function headAddr return unsigned;
 
         impure function headBytes return natural;
 
+        impure function headLast return boolean;
+
         procedure pop;
+
+        procedure clear;
 
     end protected;
 
@@ -87,6 +93,9 @@ package odma_mm2s_tb_pkg is
         ArCount    : natural; -- AR handshakes
         RLastCount : natural; -- R handshakes with RLast
         ArBadAttr  : natural; -- AR handshakes with ArSize, ArBurst, ArLock, ArCache or ArProt not as specified
+        ArFixed    : natural; -- AR handshakes of FIXED bursts
+        ArFixLong  : natural; -- FIXED bursts of more than 16 beats
+        ArFixAddr  : natural; -- FIXED bursts at another address than FixedAddr of the harness
         EccSec     : Nat3_a;  -- Pulses per buffer
         EccDed     : Nat3_a;
     end record;
@@ -103,23 +112,26 @@ package body odma_mm2s_tb_pkg is
         type Pkt_r is record
             Addr  : unsigned(63 downto 0);
             Bytes : natural;
+            Last  : boolean;
         end record;
 
         type Pkts_t is array (0 to MaxPackets_c - 1) of Pkt_r;
 
-        variable Pkts_v  : Pkts_t  := (others => (Addr => (others => '0'), Bytes => 0));
+        variable Pkts_v  : Pkts_t  := (others => (Addr => (others => '0'), Bytes => 0, Last => true));
         variable Head_v  : natural := 0;
         variable Count_v : natural := 0;
 
         procedure push (
             addr  : unsigned(63 downto 0);
-            bytes : positive) is
+            bytes : positive;
+            last  : boolean := true) is
         begin
             assert Count_v < MaxPackets_c
                 report "odma_mm2s_tb_pkg: packet queue full"
                 severity failure;
             Pkts_v((Head_v + Count_v) mod MaxPackets_c) := (Addr => addr,
-                                                            Bytes => bytes);
+                                                            Bytes => bytes,
+                                                            Last => last);
             Count_v                                     := Count_v + 1;
         end procedure;
 
@@ -138,12 +150,22 @@ package body odma_mm2s_tb_pkg is
             return Pkts_v(Head_v).Bytes;
         end function;
 
+        impure function headLast return boolean is
+        begin
+            return Pkts_v(Head_v).Last;
+        end function;
+
         procedure pop is
         begin
             if Count_v > 0 then
                 Head_v  := (Head_v + 1) mod MaxPackets_c;
                 Count_v := Count_v - 1;
             end if;
+        end procedure;
+
+        procedure clear is
+        begin
+            Count_v := 0;
         end procedure;
 
     end protected body;

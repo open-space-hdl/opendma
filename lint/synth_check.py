@@ -54,6 +54,9 @@ def configs():
             ({"IncludeSg_g": "true", "AddrWidth_g": "64", "LengthWidth_g": "26"}, None),
             ({"IncludeSg_g": "true", "IncludeMm2s_g": "false"}, None),
             ({"IncludeSg_g": "true", "IncludeS2mm_g": "false"}, None)]
+    # Scatter/Gather Mode with the stream join and split at the widest and at the narrowest stream
+    cfg += [({"IncludeSg_g": "true", **both(1024, 1024, 256)}, None),
+            ({"IncludeSg_g": "true", **both(32, 8, 2)}, None)]
     # Inconsistent configurations
     cfg += [({"IncludeMm2s_g": "false", "IncludeS2mm_g": "false"}, "IncludeMm2s_g or IncludeS2mm_g must be true"),
             ({"StsCntrlStrm_g": "true"}, "StsCntrlStrm_g and UseRxLength_g must be false"),

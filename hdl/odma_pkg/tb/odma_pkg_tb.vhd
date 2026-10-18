@@ -379,6 +379,12 @@ begin
                 check_value(ErrSlv_c, AxiResp_SlvErr_c, ERROR, "ErrSlv_c equals SLVERR");
                 check_value(ErrDec_c, AxiResp_DecErr_c, ERROR, "ErrDec_c equals DECERR");
 
+            elsif run("test_resp_err") then
+                log(ID_LOG_HDR, "TC-PKG-15 error code of a failed AXI response");
+                check_value(respErr("10"), ErrSlv_c, ERROR, "SLVERR gives the slave error");
+                check_value(respErr("11"), ErrDec_c, ERROR, "DECERR gives the decode error");
+                check_value(respErr("01"), ErrSlv_c, ERROR, "EXOKAY gives the slave error, not the internal error");
+
             elsif run("test_flip_pattern") then
                 log(ID_LOG_HDR, "TC-PKG-13 flip pattern of the error injection");
                 check_value(flipPattern(8, '0', '0'), x"01", ERROR, "parity mode, single error");
@@ -468,7 +474,35 @@ begin
                 memCheck(x"0002_8000", Zero_v, "read of the DECERR range for both directions", INCR, (DECERR, DECERR));
                 checkZero(x"0002_8000", 8, "write to the DECERR range");
                 checkBytes(x"0002_7000", 8, 5, "write to the read error range");
+                -- EXOKAY in both directions (interpretation I14 of the core)
+                Mem_v.setError(0, 3, x"0002_9000", x"0002_9007", "01", TbDirBoth);
+                memWrite(x"0002_9000", countWords(1, 6), "write to the EXOKAY range", INCR, C_EMPTY_SLV_ARRAY, EXOKAY);
+                memCheck(x"0002_9000", Zero_v, "read of the EXOKAY range", INCR, (EXOKAY, OKAY));
+                checkZero(x"0002_9000", 8, "write to the EXOKAY range");
                 Mem_v.clearErrors(0);
+
+            elsif run("test_mem_fifo") then
+                log(ID_LOG_HDR, "TC-PKG-14 FIFO window");
+                -- Window: the word 0x50000 (given by an address inside it), backing range from 0x51000
+                Mem_v.setFifo(0, x"0005_0004", x"0005_1000");
+                -- FIXED writes: every beat in the next backing word, the window word itself unchanged
+                memWrite(x"0005_0000", countWords(16, 16#10#), "FIXED write of 16 beats at the window", FIXED);
+                memWrite(x"0005_0000", countWords(3, 16#90#), "FIXED write of 3 beats, the last partial", FIXED,
+                         (x"FF", x"FF", x"0F"));
+                checkBytes(x"0005_1000", 128, 16#10#, "16 beats in consecutive backing words");
+                checkBytes(x"0005_1080", 20, 16#90#, "3 beats, the last with 4 bytes");
+                checkZero(x"0005_1094", 4, "the bytes without strobe of the last beat");
+                checkZero(x"0005_0000", 8, "the window word itself");
+                -- FIXED reads: the read counter starts at 0, consecutive bursts continue
+                memCheck(x"0005_0000", countWords(1, 16#10#), "FIXED read of 1 beat", FIXED);
+                memCheck(x"0005_0000", countWords(16, 16#18#), "FIXED read of 16 beats", FIXED);
+                -- INCR next to the window: not affected
+                memWrite(x"0005_0008", countWords(2, 16#A0#), "INCR next to the window");
+                checkBytes(x"0005_0008", 16, 16#A0#, "INCR next to the window");
+                checkBytes(x"0005_1000", 8, 16#10#, "backing range unchanged by the INCR burst");
+                -- A new setting restarts both counters
+                Mem_v.setFifo(0, x"0005_0000", x"0005_1000");
+                memCheck(x"0005_0000", countWords(2, 16#10#), "FIXED read after a new setting", FIXED);
 
             elsif run("test_mem_checks") then
                 log(ID_LOG_HDR, "TC-PKG-08 memory model protocol checks");
@@ -512,6 +546,9 @@ begin
                              0, 1, Mm2sIrq, S2mmIrq, ClkPeriod_c);
                 increment_expected_alerts_and_stop_limit(ERROR, 1);
                 odmaSequence(tb_path(runner_cfg) & "sequences/error_stream.txt", AXILITE_VVCT, 0, AXISTREAM_VVCT,
+                             0, 1, Mm2sIrq, S2mmIrq, ClkPeriod_c);
+                increment_expected_alerts_and_stop_limit(TB_ERROR, 1);
+                odmaSequence(tb_path(runner_cfg) & "sequences/error_wait.txt", AXILITE_VVCT, 0, AXISTREAM_VVCT,
                              0, 1, Mm2sIrq, S2mmIrq, ClkPeriod_c);
 
             elsif run("test_mem_fill") then

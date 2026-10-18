@@ -485,9 +485,6 @@ begin
         -- A channel has stopped when the channel and its engine have (odma_registers RG-SG-10)
         RegMm2s_Stopped <= Mm2s_Stopped and Mm2sSg_Stopped;
         RegS2mm_Stopped <= S2mm_Stopped and S2mmSg_Stopped;
-        -- Until packets continue over several buffers (gap G10), every S2MM buffer that receives a byte holds the
-        -- first byte of its packet (odma_sg architecture, section 11)
-        S2mmRes_Sof <= '1' when unsigned(S2mmRes_Bytes) /= 0 else '0';
 
         i_sg : entity work.odma_sg
             generic map (
@@ -628,7 +625,9 @@ begin
                 MemWidth_g    => Mm2sMemWidth_g,
                 StreamWidth_g => Mm2sStreamWidth_g,
                 BurstBeats_g  => Mm2sBurstBeats_g,
-                BufferBeats_g => Mm2sBufferBeats_g
+                BufferBeats_g => Mm2sBufferBeats_g,
+                -- Scatter/Gather Mode joins the buffers of a packet (architecture section 5)
+                Join_g        => IncludeSg_g
             )
             port map (
                 Clk           => Clk,
@@ -711,7 +710,9 @@ begin
                 MemWidth_g    => S2mmMemWidth_g,
                 StreamWidth_g => S2mmStreamWidth_g,
                 BurstBeats_g  => S2mmBurstBeats_g,
-                BufferBeats_g => S2mmBufferBeats_g
+                BufferBeats_g => S2mmBufferBeats_g,
+                -- Scatter/Gather Mode splits a packet at the end of every buffer (architecture section 5)
+                Split_g       => IncludeSg_g
             )
             port map (
                 Clk           => Clk,
@@ -726,6 +727,7 @@ begin
                 Res_Bytes     => S2mmRes_Bytes,
                 Res_Eof       => S2mmRes_Eof,
                 Res_Err       => S2mmRes_Err,
+                Res_Sof       => S2mmRes_Sof,
                 Run           => S2mm_Run,
                 Drain         => S2mm_Drain,
                 Stopped       => S2mm_Stopped,
@@ -767,6 +769,7 @@ begin
         S2mmRes_Bytes     <= (others => '0');
         S2mmRes_Eof       <= '0';
         S2mmRes_Err       <= ErrNone_c;
+        S2mmRes_Sof       <= '0';
         S2mm_Stopped      <= '1';
         S2mmEcc_Sec       <= (others => '0');
         S2mmEcc_Ded       <= (others => '0');

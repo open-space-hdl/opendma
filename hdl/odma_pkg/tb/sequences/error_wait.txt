@@ -1,0 +1,5 @@
+# A wait for a stream packet that no S command before the line has sent
+S 31 32 33
+E 31 32 33
+T 1
+A 1000

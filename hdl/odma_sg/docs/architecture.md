@@ -47,7 +47,7 @@ and 9.
 | `S2mm_*` | as MM2S | | The same control interface for the S2MM channel |
 | `S2mmCmd_Valid`, `S2mmCmd_Ready`, `S2mmCmd_Addr`, `S2mmCmd_Length`, `S2mmCmd_Keyhole` | as MM2S | | Transfer command to `odma_s2mm`, without start and end of packet |
 | `S2mmRes_Valid`, `S2mmRes_Ready`, `S2mmRes_Bytes`, `S2mmRes_Eof`, `S2mmRes_Err` | as MM2S | | Transfer result of `odma_s2mm`: bytes written, the packet ended in the buffer, error code |
-| `S2mmRes_Sof` | 1 | in | The buffer holds the first byte of a packet (`odma_s2mm` S2-SG-02) |
+| `S2mmRes_Sof` | 1 | in | The buffer is the first buffer of a packet (`odma_s2mm` S2-SG-02, interpretation SGI-13) |
 | `M_Axi_Ar*`, `M_Axi_R*`, `M_Axi_Aw*`, `M_Axi_W*`, `M_Axi_B*` | `AddrWidth_g` address, 32 data bits | out/in | Descriptor port: AXI4 master without ID signals (`ArAddr`, `ArLen`, `ArSize`, `ArBurst`, `ArLock`, `ArCache`, `ArProt`, `ArValid`, `ArReady`, `RData`, `RResp`, `RLast`, `RValid`, `RReady`, `AwAddr`, `AwLen`, `AwSize`, `AwBurst`, `AwLock`, `AwCache`, `AwProt`, `AwValid`, `AwReady`, `WData`, `WStrb`, `WLast`, `WValid`, `WReady`, `BResp`, `BValid`, `BReady`) |
 | `Ecc_Sec`, `Ecc_Ded` | 4 | out | ECC events of the MM2S descriptor buffer (bit 0, index 6 of the extension window), the S2MM descriptor buffer (bit 1, index 7), the read data buffer (bit 2, index 8) and the write data buffer (bit 3, index 9) of the descriptor port; one pulse per word read from the buffer |
 | `EccInj_Valid` | 4 | in | Error injection per buffer, same order |
@@ -233,9 +233,9 @@ crosses a 4 KB boundary and never exceeds `AxiMaxBeats_g`, so each access is one
 `AxCache` 0011, `AxProt` 000, the fixed values of the master (SG-IF-01). With `CmdWr_LowLat` = '0' the master issues
 the burst only when its data is in its write buffer.
 
-The error code of a failed access: `Rd_Error` and `Wr_Error` of Open Logic 4.7.0-ft.6 carry no response code, so the
-port reports the constant `SgErrCode_c` = `ErrSlv_c` until Open Logic provides the code (gap G5, as `RdErrCode_c` and
-`WrErrCode_c` of the channels); then SLVERR gives `ErrSlv_c` and DECERR `ErrDec_c`.
+The error code of a failed access comes from the response code of the master (`Rd_ErrorResp` with `Rd_Error`,
+`Wr_ErrorResp` with `Wr_Error`): DECERR ("11") gives `ErrDec_c`, SLVERR and EXOKAY give `ErrSlv_c` (SG-ER-04,
+interpretation I14). The end pulse carries the code of its access.
 
 ## 6. Descriptor buffer
 
@@ -307,9 +307,7 @@ The engine is integrated with three neighbouring modules:
   `CURDESC` following `CurPtr` while the channel is not halted, `TailWr` per interpretation SGI-01, `Idle` from
   the engine, the engine errors, the interrupt threshold counter and delay timer driven by `Pkt`, `CyclicBD` and
   `Keyhole`), and the FT buffer indices 6 to 9 of section 3.
-- `odma_s2mm`: the result flag `Res_Sof` (S2-SG-02). Until packets continue over several buffers (S2-SG-01, gap G10),
-  every buffer that receives a byte holds the first byte of its packet, so `Res_Sof` is '1' when `Res_Bytes` is not
-  0.
+- `odma_s2mm`: the result flag `Res_Sof` (S2-SG-02) of its stream split, '1' for the first buffer of a packet.
 - `odma_core`: with `IncludeSg_g` the engine between the register interface and the channels, the descriptor port
   `M_AxiSg_*`, `Stopped` of each channel combined with `Stopped` of its engine, the indices 6 to 9 in the ECC index
   map.

@@ -116,6 +116,8 @@ architecture sim of odma_tb_axi_ram is
             return "11";
         elsif a = "10" or b = "10" then
             return "10";
+        elsif a = "01" or b = "01" then
+            return "01";
         end if;
         return "00";
     end function;
@@ -210,10 +212,12 @@ begin
             -- W handshake: a beat with a strobed byte in an error range writes none of its bytes
             if WValid = '1' and WReady_i = '1' then
                 if AwF_v(AwHead_v) then
-                    Base_v := aligned(AwQ_v(AwHead_v));
+                    A_v := aligned(AwQ_v(AwHead_v));
                 else
-                    Base_v := aligned(AwQ_v(AwHead_v)) + to_unsigned(Beat_v * Bytes_c, 64);
+                    A_v := aligned(AwQ_v(AwHead_v)) + to_unsigned(Beat_v * Bytes_c, 64);
                 end if;
+                -- A beat at the FIFO window goes to the next word of its backing range (PKG-12)
+                Mem_v.fifoMap(Index_g, A_v, Bytes_c, true, Base_v);
                 BeatR_v   := "00";
                 Outside_v := false;
 
@@ -351,10 +355,12 @@ begin
                     RValid_i <= '0';
                 else
                     if ArF_v(ArHead_v) then
-                        Base_v := aligned(ArQ_v(ArHead_v));
+                        A_v := aligned(ArQ_v(ArHead_v));
                     else
-                        Base_v := aligned(ArQ_v(ArHead_v)) + to_unsigned(Beat_v * Bytes_c, 64);
+                        A_v := aligned(ArQ_v(ArHead_v)) + to_unsigned(Beat_v * Bytes_c, 64);
                     end if;
+                    -- A beat at the FIFO window reads the next word of its backing range (PKG-12)
+                    Mem_v.fifoMap(Index_g, A_v, Bytes_c, false, Base_v);
                     Resp_v := "00";
 
                     for i in 0 to Bytes_c - 1 loop

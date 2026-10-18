@@ -73,6 +73,7 @@ package odma_s2mm_tb_pkg is
 
     type Result_r is record
         Bytes : natural;
+        Sof   : std_logic;
         Eof   : std_logic;
         Err   : std_logic_vector(1 downto 0);
         Cycle : natural;
@@ -92,9 +93,16 @@ package odma_s2mm_tb_pkg is
         LastBeat  : natural;
         Packets   : natural; -- Packets sent completely (not restarted)
         LastSent  : natural; -- Clock cycle of the handshake of the last TLast
+        RunBeats  : natural; -- Stream handshakes in clock cycles with Run '1' (taken before a halt)
+        RunPkts   : natural; -- Handshakes with TLast in clock cycles with Run '1'
+        HaltBeats : natural; -- Stream handshakes in clock cycles with Run '0' (the discard of a rest)
+        HaltPkts  : natural; -- Handshakes with TLast in clock cycles with Run '0'
         AwCount   : natural; -- AW handshakes
         BCount    : natural; -- B handshakes
         AwBadAttr : natural; -- AW handshakes with AwSize, AwBurst, AwLock, AwCache or AwProt not as specified
+        AwFixed   : natural; -- AW handshakes of FIXED bursts
+        AwFixLong : natural; -- FIXED bursts of more than 16 beats
+        AwFixAddr : natural; -- FIXED bursts at another address than FixedAddr of the harness
         WGaps     : natural; -- Clock cycles between two data beats of a burst with WReady high and WValid low
         EccSec    : Nat3_a;  -- Pulses per buffer
         EccDed    : Nat3_a;

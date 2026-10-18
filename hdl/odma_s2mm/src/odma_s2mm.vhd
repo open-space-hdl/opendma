@@ -35,7 +35,8 @@ entity odma_s2mm is
         MemWidth_g    : positive                := 32;
         StreamWidth_g : positive                := 32;
         BurstBeats_g  : positive                := 16;
-        BufferBeats_g : positive                := 64
+        BufferBeats_g : positive                := 64;
+        Split_g       : boolean                 := false
     );
     port (
         -- Control Signals
@@ -53,6 +54,7 @@ entity odma_s2mm is
         Res_Bytes     : out   std_logic_vector(LengthWidth_g - 1 downto 0);
         Res_Eof       : out   std_logic;
         Res_Err       : out   XferErr_t;
+        Res_Sof       : out   std_logic;
         -- Channel control
         Run           : in    std_logic;
         Drain         : in    std_logic;
@@ -95,14 +97,14 @@ end entity;
 ---------------------------------------------------------------------------------------------------
 architecture rtl of odma_s2mm is
 
-    -- Longest burst of the write master (no AXI burst crosses 4 KB; olo_axi_master_simple of Open Logic
-    -- 4.7.0-ft.6 does not elaborate with more beats than 4 KB holds) and stream beats of a chunk
+    -- Longest burst of the write master (no AXI burst crosses 4 KB, G13) and stream beats of a chunk, which is
+    -- one burst (S2-ST-03)
     constant MasterBeats_c : positive := masterBeats(BurstBeats_g, MemWidth_g);
     constant ChunkBeats_c  : positive := MasterBeats_c * MemWidth_g / StreamWidth_g;
     constant DescDepth_c   : positive := 32;
-    -- Size bits of the write master: one more than the length; olo_axi_master_full of Open Logic 4.7.0-ft.6 counts
-    -- the user words of a command at the width of the size field, and the count wraps in the last user word below
-    -- 2**size bits (gap G14), which no command reaches with one more size bit
+    -- Size bits of the write master: one more than the length, so that no command reaches the last user word
+    -- below 2**size bits, where the word count of olo_axi_master_full wrapped up to Open Logic 4.7.0-ft.6 (gap G14,
+    -- corrected in 4.7.0-ft.8)
     constant SizeBits_c    : positive := LengthWidth_g + 1;
 
     -- Chunk former to the buffers
@@ -112,7 +114,11 @@ architecture rtl of odma_s2mm is
     signal Desc_InData  : std_logic_vector(DescWidth_c - 1 downto 0);
     signal Desc_InValid : std_logic;
     signal Desc_InReady : std_logic;
-    signal PacketOpen   : std_logic;
+    signal DescPend     : std_logic;
+    signal Seg_Valid    : std_logic;
+    signal Seg_Size     : std_logic_vector(LengthWidth_g - 1 downto 0);
+    signal Seg_Ready    : std_logic;
+    signal FlushReq     : std_logic;
 
     -- Buffers to the write command block
     signal Data_OutData  : std_logic_vector(StreamWidth_g - 1 downto 0);
@@ -130,21 +136,23 @@ architecture rtl of odma_s2mm is
     signal WriteIdle     : std_logic;
 
     -- Write master
-    signal CmdWr_Addr  : std_logic_vector(AddrWidth_g - 1 downto 0);
-    signal CmdWr_Size  : std_logic_vector(LengthWidth_g - 1 downto 0);
-    signal MasterSize  : std_logic_vector(SizeBits_c - 1 downto 0);
-    signal CmdWr_Valid : std_logic;
-    signal CmdWr_Ready : std_logic;
-    signal Wr_Data     : std_logic_vector(StreamWidth_g - 1 downto 0);
-    signal Wr_Valid    : std_logic;
-    signal Wr_Ready    : std_logic;
-    signal Wr_EccSec   : std_logic;
-    signal Wr_EccDed   : std_logic;
-    signal Wr_Done     : std_logic;
-    signal Wr_Error    : std_logic;
-    signal DataInjFlip : std_logic_vector(eccCodewordWidth(StreamWidth_g) - 1 downto 0);
-    signal DescInjFlip : std_logic_vector(eccCodewordWidth(DescWidth_c) - 1 downto 0);
-    signal WrInjFlip   : std_logic_vector(eccCodewordWidth(StreamWidth_g) - 1 downto 0);
+    signal CmdWr_Addr   : std_logic_vector(AddrWidth_g - 1 downto 0);
+    signal CmdWr_Size   : std_logic_vector(LengthWidth_g - 1 downto 0);
+    signal MasterSize   : std_logic_vector(SizeBits_c - 1 downto 0);
+    signal CmdWr_Valid  : std_logic;
+    signal CmdWr_Ready  : std_logic;
+    signal Wr_Data      : std_logic_vector(StreamWidth_g - 1 downto 0);
+    signal Wr_Valid     : std_logic;
+    signal Wr_Ready     : std_logic;
+    signal Wr_EccSec    : std_logic;
+    signal Wr_EccDed    : std_logic;
+    signal Wr_Done      : std_logic;
+    signal Wr_Error     : std_logic;
+    signal Wr_ErrorResp : std_logic_vector(1 downto 0);
+    signal CmdWr_Fixed  : std_logic;
+    signal DataInjFlip  : std_logic_vector(eccCodewordWidth(StreamWidth_g) - 1 downto 0);
+    signal DescInjFlip  : std_logic_vector(eccCodewordWidth(DescWidth_c) - 1 downto 0);
+    signal WrInjFlip    : std_logic_vector(eccCodewordWidth(StreamWidth_g) - 1 downto 0);
 
 begin
 
@@ -160,7 +168,9 @@ begin
     i_chunker : entity work.odma_s2mm_chunker
         generic map (
             StreamWidth_g => StreamWidth_g,
-            ChunkBeats_g  => ChunkBeats_c
+            ChunkBeats_g  => ChunkBeats_c,
+            LengthWidth_g => LengthWidth_g,
+            Split_g       => Split_g
         )
         port map (
             Clk          => Clk,
@@ -172,13 +182,17 @@ begin
             S_S2mm_Last  => S_S2mm_Last,
             S_S2mm_Valid => S_S2mm_Valid,
             S_S2mm_Ready => S_S2mm_Ready,
+            Seg_Valid    => Seg_Valid,
+            Seg_Size     => Seg_Size,
+            Seg_Ready    => Seg_Ready,
+            FlushReq     => FlushReq,
             Data_Data    => Data_InData,
             Data_Valid   => Data_InValid,
             Data_Ready   => Data_InReady,
             Desc_Data    => Desc_InData,
             Desc_Valid   => Desc_InValid,
             Desc_Ready   => Desc_InReady,
-            PacketOpen   => PacketOpen
+            DescPend     => DescPend
         );
 
     -- *** Data buffer and chunk buffer ***
@@ -235,40 +249,49 @@ begin
         generic map (
             AddrWidth_g   => AddrWidth_g,
             LengthWidth_g => LengthWidth_g,
-            StreamWidth_g => StreamWidth_g
+            StreamWidth_g => StreamWidth_g,
+            Split_g       => Split_g
         )
         port map (
-            Clk         => Clk,
-            Rst         => Rst,
-            Run         => Run,
-            Drain       => Drain,
-            Cmd_Valid   => Cmd_Valid,
-            Cmd_Ready   => Cmd_Ready,
-            Cmd_Addr    => Cmd_Addr,
-            Cmd_Length  => Cmd_Length,
-            Res_Valid   => Res_Valid,
-            Res_Ready   => Res_Ready,
-            Res_Bytes   => Res_Bytes,
-            Res_Eof     => Res_Eof,
-            Res_Err     => Res_Err,
-            Desc_Data   => Desc_OutData,
-            Desc_Valid  => Desc_OutValid,
-            Desc_Ready  => Desc_OutReady,
-            Desc_Stored => Desc_Stored,
-            PacketOpen  => PacketOpen,
-            Buf_Data    => Data_OutData,
-            Buf_Valid   => Data_OutValid,
-            Buf_Ready   => Data_OutReady,
-            CmdWr_Addr  => CmdWr_Addr,
-            CmdWr_Size  => CmdWr_Size,
-            CmdWr_Valid => CmdWr_Valid,
-            CmdWr_Ready => CmdWr_Ready,
-            Wr_Data     => Wr_Data,
-            Wr_Valid    => Wr_Valid,
-            Wr_Ready    => Wr_Ready,
-            Wr_Done     => Wr_Done,
-            Wr_Error    => Wr_Error,
-            Idle        => WriteIdle
+            Clk          => Clk,
+            Rst          => Rst,
+            Run          => Run,
+            Drain        => Drain,
+            Cmd_Valid    => Cmd_Valid,
+            Cmd_Ready    => Cmd_Ready,
+            Cmd_Addr     => Cmd_Addr,
+            Cmd_Length   => Cmd_Length,
+            Cmd_Keyhole  => Cmd_Keyhole,
+            Res_Valid    => Res_Valid,
+            Res_Ready    => Res_Ready,
+            Res_Bytes    => Res_Bytes,
+            Res_Eof      => Res_Eof,
+            Res_Err      => Res_Err,
+            Res_Sof      => Res_Sof,
+            Seg_Valid    => Seg_Valid,
+            Seg_Size     => Seg_Size,
+            Seg_Ready    => Seg_Ready,
+            FlushReq     => FlushReq,
+            Desc_Data    => Desc_OutData,
+            Desc_Valid   => Desc_OutValid,
+            Desc_Ready   => Desc_OutReady,
+            Desc_Stored  => Desc_Stored,
+            DescPend     => DescPend,
+            Buf_Data     => Data_OutData,
+            Buf_Valid    => Data_OutValid,
+            Buf_Ready    => Data_OutReady,
+            CmdWr_Addr   => CmdWr_Addr,
+            CmdWr_Size   => CmdWr_Size,
+            CmdWr_Fixed  => CmdWr_Fixed,
+            CmdWr_Valid  => CmdWr_Valid,
+            CmdWr_Ready  => CmdWr_Ready,
+            Wr_Data      => Wr_Data,
+            Wr_Valid     => Wr_Valid,
+            Wr_Ready     => Wr_Ready,
+            Wr_Done      => Wr_Done,
+            Wr_Error     => Wr_Error,
+            Wr_ErrorResp => Wr_ErrorResp,
+            Idle         => WriteIdle
         );
 
     -- *** AXI4 write master with the write data buffer of two chunks ***
@@ -293,6 +316,7 @@ begin
             CmdWr_Addr        => CmdWr_Addr,
             CmdWr_Size        => MasterSize,
             CmdWr_LowLat      => '0',
+            CmdWr_Fixed       => CmdWr_Fixed,
             CmdWr_Valid       => CmdWr_Valid,
             CmdWr_Ready       => CmdWr_Ready,
             Wr_Data           => Wr_Data,
@@ -302,6 +326,7 @@ begin
             Wr_EccDed         => Wr_EccDed,
             Wr_Done           => Wr_Done,
             Wr_Error          => Wr_Error,
+            Wr_ErrorResp      => Wr_ErrorResp,
             Wr_ErrInj_BitFlip => WrInjFlip,
             Wr_ErrInj_Valid   => EccInj_Valid(2),
             M_Axi_AwAddr      => M_Axi_AwAddr,
@@ -331,7 +356,7 @@ begin
     Ecc_Sec(2) <= Wr_EccSec;
     Ecc_Ded(2) <= Wr_EccDed;
 
-    -- *** Stopped: no transfer in progress and no write outstanding ***
+    -- *** Stopped: no transfer in progress, no write outstanding and no data received before a halt left ***
     Stopped <= WriteIdle;
 
 end architecture;

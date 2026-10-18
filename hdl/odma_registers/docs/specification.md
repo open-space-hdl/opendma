@@ -12,7 +12,7 @@ Sections 3.1 to 3.7 cover Direct Register Mode. Where a field has no function in
 and trace it to the access rules (`MAP.ACCESS`, `MAP.DR`). Section 3.8 holds the requirements of Scatter/Gather Mode
 (`IncludeSg_g`): the register map, the pointer registers, the error flags of the descriptor engine, the interrupt
 coalescing and the delay timer, and the keyhole and cyclic bits towards the engine. Section 3.9 holds the keyhole of
-Direct Register Mode, which waits for the FIXED bursts of Open Logic.
+Direct Register Mode.
 
 ## 2. Partner behaviour
 
@@ -119,11 +119,11 @@ such as the programming sequences (`SEQ.*`, owner CO-1), are verified by the req
 | RG-SG-09 | In Scatter/Gather Mode `DMACR.Keyhole` and `DMACR.CyclicBD` shall be passed to the descriptor engine of the channel, which takes them at the start of a descriptor fetch (`odma_sg` SG-TR-03, SG-CY-01; interpretation I1 for the MM2S keyhole). | `*_DMACR.Keyhole`, `*_DMACR.CyclicBD` |
 | RG-SG-10 | With `IncludeSg_g`, `DMASR.Halted` shall be set after a halt request or an error only when the engine and the channel have both stopped (`odma_sg` SG-HA-01). | `*_DMASR.Halted` |
 
-### 3.9 Requirements waiting for Open Logic
+### 3.9 Keyhole in Direct Register Mode
 
 | ID | Requirement | PG021 items |
 | --- | --- | --- |
-| RG-SG-11 | In Direct Register Mode `S2MM_DMACR.Keyhole` shall select non-incrementing bursts for the S2MM transfers, taken at the start of a transfer (interpretation I1; the FIXED bursts of gap G1, `odma_s2mm` S2-SG-04). | `S2MM_DMACR.Keyhole` |
+| RG-SG-11 | In Direct Register Mode `S2MM_DMACR.Keyhole` shall select non-incrementing bursts for the S2MM transfers, taken at the start of a transfer (interpretation I1; the FIXED bursts of `odma_s2mm` S2-SG-04); the MM2S command shall never carry the keyhole in Direct Register Mode. | `S2MM_DMACR.Keyhole` |
 
 ## 4. Interpretations of the published interface
 

@@ -38,7 +38,7 @@ the registers of this module, is reset by the core reset `CoreRst` = `Rst` or th
 | `Mm2s_Drain` | 1 | out | Stop accepting and issuing, drain the accepted transfers (soft reset) |
 | `Mm2s_Stopped` | 1 | in | No transfer accepted and not completed, no AXI transaction outstanding |
 | `Mm2sRes_Eof` | 1 | in | End of packet: the transfer completed |
-| `S2mmCmd_Valid`, `S2mmCmd_Ready`, `S2mmCmd_Addr`, `S2mmCmd_Length`, `S2mmCmd_Keyhole` | as MM2S | | Transfer command of the S2MM channel; `S2mmCmd_Length` is the buffer length; the command has no start and end of packet |
+| `S2mmCmd_Valid`, `S2mmCmd_Ready`, `S2mmCmd_Addr`, `S2mmCmd_Length`, `S2mmCmd_Keyhole` | as MM2S | | Transfer command of the S2MM channel; `S2mmCmd_Length` is the buffer length; the command has no start and end of packet; `S2mmCmd_Keyhole` is `S2MM_DMACR.Keyhole` at the length write (RG-SG-11) |
 | `S2mmRes_*`, `S2mm_Run`, `S2mm_Drain`, `S2mm_Stopped` | as MM2S | | The same for the S2MM channel; `S2mmRes_Bytes` is the bytes written, `S2mmRes_Eof` the end of the packet in the buffer |
 | `Mm2sSg_CurDesc` | `AddrWidth_g` | out | Scatter/Gather Mode: the value `MM2S_CURDESC` reads, taken by the engine at the rising edge of `Mm2s_Run` |
 | `Mm2sSg_Tail`, `Mm2sSg_TailWr` | `AddrWidth_g`, 1 | out | `MM2S_TAILDESC` and a pulse one clock cycle after the triggering write while the channel runs |

@@ -2,13 +2,13 @@
 
 ## 1. Test results
 
-Run on 2026-10-17 with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7, UVVM 2026.03.20: `python run.py "*odma_sg*"`.
+Run on 2026-10-17 in the GHDL CI of the repository, GitHub Actions run 39076889615 on commit 5e49ffb (its
+`results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
+`python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_sg_tb`.
 
 | Testbench | Tests | Passed |
 | --- | --- | --- |
-| `odma_sg_tb` | 95 (17 test cases: 15 in all six configurations, TC-SG-10 in the four with both channels, TC-SG-17 in `default`) | 95 |
-
-TC-SG-18 waits for the response code of Open Logic (verification plan, section 3.1).
+| `odma_sg_tb` | 101 (18 test cases: 16 in all six configurations, TC-SG-10 in the four with both channels, TC-SG-17 in `default`) | 101 |
 
 Descriptor rate (TC-SG-17, results returned at once, chains of 16 descriptors):
 
@@ -34,6 +34,7 @@ Findings:
 | The counters of the window stopped the simulation with a range error right after a clock edge: the buffer output and the command handshake follow the edge one delta cycle after the registers, so one delta cycle combined the pop of the last cycle with the new count. At a clock edge the counts never leave 0 to 2 | The counters are modular 2-bit values and the queue of the issued commands is written without an index from a count, so no delta cycle produces an out-of-range value; no saturation logic |
 | A fetch could start in the clock cycle between the arrival of a stale descriptor and its check at the head of the buffer | A fetched stale descriptor stops further fetch requests at once (`StaleHold`, architecture section 4.3); TC-SG-07 checks that nothing behind it is fetched |
 | The cyclic test expected a status write for every command; at the halt that ends the ring, the S2MM model ends its transfer without data | Correct behaviour (interpretation SGI-10): the test expects every completed descriptor written |
+| TC-SG-18 ran only with the generic defaults of the testbench, outside the six configurations: the test list of the VUnit configuration did not name it | The list names every test; TC-SG-18 runs in all six configurations. The VUnit configuration of every testbench checks that its lists of tests and configurations match the tests of the testbench, so that a test missing from a list stops the run |
 
 ## 3. Generic ranges
 
@@ -67,10 +68,12 @@ passes all of them:
 | Halted before the status writes are answered | TC-SG-11 |
 | The end pulse of a fetch before its last word | TC-SG-01 |
 | The decode error code for every failed access | TC-SG-09 |
+| The slave error code for every failed descriptor fetch | TC-SG-18 |
+| The slave error code for every failed status write | TC-SG-18 |
 | The priorities of the arbiters swapped | TC-SG-10 |
 | The status written to the `CONTROL` word | TC-SG-02 |
 
-A twentieth fault, in a branch that withdrew a granted access when a drain came before the master had taken the
+One more fault, in a branch that withdrew a granted access when a drain came before the master had taken the
 command, survived. It is not equivalent, but its window of about one clock cycle cannot be reached through the ports.
 The branch is removed: an access granted before a drain completes (architecture section 5), so the RTL has no
 surviving fault of this list.

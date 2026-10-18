@@ -70,6 +70,10 @@ package odma_pkg is
         double : std_logic;
         data   : std_logic) return std_logic_vector;
 
+    -- Error code of a failed AXI command from its response code: the decode error for DECERR, the slave
+    -- error for SLVERR and for EXOKAY ("01", which must not become ErrInt_c; interpretation I14)
+    function respErr (resp : std_logic_vector(1 downto 0)) return XferErr_t;
+
 end package;
 
 ---------------------------------------------------------------------------------------------------
@@ -192,6 +196,14 @@ package body odma_pkg is
             Flip_v(1) := double;
         end if;
         return Flip_v;
+    end function;
+
+    function respErr (resp : std_logic_vector(1 downto 0)) return XferErr_t is
+    begin
+        if resp = "11" then
+            return ErrDec_c;
+        end if;
+        return ErrSlv_c;
     end function;
 
 end package body;

@@ -17,4 +17,12 @@ L player test: streams
 S 01 02 03 04 05 06 07
 E 01 02 03 04 05 06 07
 A
+L player test: wait for single packets
+S 11 12 13
+S 21 22
+E 11 12 13
+T 1
+E 21 22
+T 2 1000
+A
 	D	10

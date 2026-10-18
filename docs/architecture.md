@@ -55,7 +55,7 @@ masters, the data interfaces AXI4-Stream and the register interface AXI4-Lite. T
 
 OpenDMA is an open DMA core based on the Open Logic VHDL Library. The code lives in
 [open-space-hdl/opendma](https://github.com/open-space-hdl/opendma) under the PSI HDL Library License, Version 1.0,
-the licence of Open Logic. Open Logic is pinned to the tag `4.7.0-ft.6` (5d8ae56) of the branch `fault-tolerant` of
+the licence of Open Logic. Open Logic is pinned to the tag `4.7.0-ft.8` (f9e7f59) of the branch `fault-tolerant` of
 open-space-hdl/open-logic-ft, the fault-tolerant fork of Open Logic.
 
 OpenDMA is an independent implementation written from the published product guide. The repository contains no
@@ -69,7 +69,7 @@ only to state the compatibility.
 | \[PG021\] | AMD, AXI DMA LogiCORE IP Product Guide, PG021 | v7.1, 24 June 2025 |
 | \[AXI\] | Arm, AMBA AXI Protocol Specification, IHI 0022 | AXI4 and AXI4-Lite |
 | \[AXIS\] | Arm, AMBA AXI-Stream Protocol Specification, IHI 0051 | AXI4-Stream |
-| \[OLO\] | [Open Logic, fault-tolerant fork, branch fault-tolerant](https://github.com/open-space-hdl/open-logic-ft/tree/fault-tolerant) | 4.7.0-ft.6 (5d8ae56) |
+| \[OLO\] | [Open Logic, fault-tolerant fork, branch fault-tolerant](https://github.com/open-space-hdl/open-logic-ft/tree/fault-tolerant) | 4.7.0-ft.8 (f9e7f59) |
 
 ### Conventions
 
@@ -239,7 +239,7 @@ taken from a system with the vendor core sets both generics explicitly.
 | D11 | Configuration by the generics of section 6 "Generics", named after the user parameters of \[PG021\] Table 44, with the same ranges and, except `IncludeSg_g` and `StsCntrlStrm_g`, the same defaults where a parameter exists | The configuration of an existing system maps one to one; the driver configuration (device tree, generated parameters) stays valid |
 | D12 | The extension window 0x100 to 0x1FF (with `ExtRegs_g`) holds an identification and configuration readback, the ECC event counters of all FT buffers (`olo_ft_ecc_monitor` behind the register bank, so that every access keeps the OKAY response of D10), the enables of the ECC interrupt output `Ecc_Irq` and the error injection controls. Software written for \[PG021\] never accesses it; without `ExtRegs_g` it reads 0 and `Ecc_Irq` stays low | P4: FT additions outside the compatible map |
 | D13 | (Phase b) The descriptor engine has its own AXI4 master (`M_AxiSg_*`, 32-bit data) shared by both channels through a round-robin arbiter; a descriptor is fetched as a whole (8 words, or 13 with the user application fields) into an FT buffer, one descriptor ahead of the one in progress; the status is written back with one write (STATUS, and APP0 to APP4 of the last S2MM descriptor of a packet with the status stream) | Separate descriptor port as in \[PG021\] Figure 1; prefetching hides the fetch latency between descriptors |
-| D14 | (Phase b) Packets of several descriptors are joined (MM2S) and split (S2MM) by a byte-lane realigner on the stream side, so that buffers of any length and address form one contiguous packet | \[PG021\] Tables 30 and 37 allow any buffer length per descriptor; the memory master delivers each buffer starting in lane 0 (section 8, G10) |
+| D14 | (Phase b) Packets of several descriptors are joined (MM2S, `olo_base_stream_join`) and split (S2MM, `olo_base_stream_split`) on the stream side, in SG mode only, so that buffers of any length and address form one contiguous packet | \[PG021\] Tables 30 and 37 allow any buffer length per descriptor; the memory master delivers each buffer starting in lane 0 (section 8, G10) |
 | D15 | The state machines have a defined recovery state: the `when others` branch leads to it from an illegal state where the synthesis tool implements the state machine safe, and the reset input restarts it from any state. Their registers rely on the TMR of the synthesis tool like all other logic | Same as the other cores of the family |
 | D16 | Registers whose values enter arithmetic, comparisons or conversions, in the core or in the Open Logic entities it drives, are reset; an idle core evaluates no undefined value | Simulation logs of systems with the core stay free of numeric_std metavalue warnings |
 
@@ -257,12 +257,13 @@ interpretations that concern them.
 | I5 | Buffer beyond the top of the address space | Not described | Rejected with `DMADecErr` (invalid address), no access (D7) |
 | I6 | `MM2S_LENGTH` or `S2MM_LENGTH` written while the channel is busy | Not described (the software checks the idle state first) | The write has no effect |
 | I7 | `MM2S_LENGTH` or `S2MM_LENGTH` written while halted | No effect on the DMA operation (Tables 7 and 17) | The value is stored and read back; no transfer starts, also not when `RS` is set later |
-| I8 | `DMACR.RS` = 0 during a transfer | Pending transfers flushed or completed | MM2S completes the transfer in progress, including its `TLast`, then halts. S2MM writes the chunks that are complete in its buffer, discards the rest of the packet up to `TLast` and halts without IOC |
+| I8 | `DMACR.RS` = 0 during a transfer | Pending transfers flushed or completed | MM2S completes the transfer in progress, including its `TLast`, then halts. S2MM writes the chunks that are complete in its buffer, discards the rest of the packet up to `TLast` and halts without IOC for that cut packet; a packet whose `TLast` was accepted and whose bytes fit into the buffer is written completely, with IOC; in SG mode a packet that needs a further buffer is cut (`odma_s2mm` S2-HA-01) |
 | I9 | S2MM stream input before the channel runs | Section "Typical System Interconnect" notes that a few beats are accepted before the core is programmed | Beats are accepted into the data buffer only while the channel runs; while it is halted `S_S2mm_Ready` is low |
 | I10 | `TKeep` of S2MM beats | Not described | `TKeep` of a beat without `TLast` is ignored (all bytes are stored); the last beat stores the bytes up to the first deasserted `TKeep` bit (P7) |
 | I11 | MM2S transfer with a memory error | Streams potentially terminated early | The data of the transfer is sent completely with `TLast`, then the channel halts with the error flag; software discards the packet |
 | I12 | Reset outputs | Active-low `*_reset_out_n` (Table 3) | High-active (Open Logic convention), with the same function |
 | I13 | S2MM write error in DR mode | Table 17 sets `DMAIntErr` for any error of the memory write in DR mode, next to the flags of the response | Both are set: `DMAIntErr` and `DMASlvErr` or `DMADecErr` |
+| I14 | EXOKAY response | Tables 7 and 17 name SLVERR and DECERR; EXOKAY is not described | OpenDMA never requests exclusive access, so EXOKAY is a protocol violation of the slave; it counts as SLVERR (`DMASlvErr`, `SGSlvErr`). Observable: an EXOKAY response sets the slave error flag of the access |
 
 ## 7 Building block specifications
 
@@ -283,14 +284,14 @@ built from and the items of the published interface it owns (P1).
 | ID | Block | Responsibility | Open Logic | \[PG021\] items |
 | --- | --- | --- | --- | --- |
 | MM-1 | Read command | Transfer command to the memory master (address, length, keyhole), address wrap check, error collection (SLVERR, DECERR), halt and drain | `olo_ft_axi_master_full` (read side) | `*_DMASR.DMASlvErr`, `*_DMASR.DMADecErr` (MM2S), `MM2S_DMACR.Keyhole`, `FEAT.4K`, `FEAT.BURST`, `FEAT.UNALIGNED` (MM2S) |
-| MM-2 | Stream output | Read data to the MM2S stream: `TKeep` of the last beat, `TLast` at the end of a packet, transfer result when the last beat is accepted; phase b: joining the buffers of a packet (D14) | realigner (G10) | `STRM.MM2S`, `DESC.MM2S_CONTROL.TXSOF`, `DESC.MM2S_CONTROL.TXEOF` (stream side) |
+| MM-2 | Stream output | Read data to the MM2S stream: `TKeep` of the last beat, `TLast` at the end of a packet, transfer result when the last beat is accepted; phase b: joining the buffers of a packet (D14) | `olo_base_stream_join` (G10), `olo_base_pl_stage` | `STRM.MM2S`, `DESC.MM2S_CONTROL.TXSOF`, `DESC.MM2S_CONTROL.TXEOF` (stream side) |
 | MM-3 | Control stream (phase c) | Flag word and APP0 to APP4 of the first descriptor of a packet on the control stream | `olo_ft_fifo_sync` | `STRM.CNTRL`, `DESC.MM2S_APP` |
 
 ### 7.3 S2MM channel (module `odma_s2mm`)
 
 | ID | Block | Responsibility | Open Logic | \[PG021\] items |
 | --- | --- | --- | --- | --- |
-| S2-1 | Chunk former | Stream input, data buffer, cut into chunks (D5), byte count of the last beat, buffer end and overflow (D6), discard up to `TLast`; phase b: split of a packet at the end of each buffer (D14) | `olo_ft_fifo_sync` (data and chunk buffers), realigner (G10) | `STRM.S2MM`, `S2MM_DMASR.DMAIntErr` (DR mode) |
+| S2-1 | Chunk former | Stream input, data buffer, cut into chunks (D5), byte count of the last beat, buffer end and overflow (D6), discard up to `TLast`; phase b: split of a packet at the end of each buffer (D14) | `olo_ft_fifo_sync` (data and chunk buffers), `olo_base_stream_split` (G10) | `STRM.S2MM`, `S2MM_DMASR.DMAIntErr` (DR mode) |
 | S2-2 | Write command | Write command per chunk at the running address, address wrap check, transfer result after the write response of its last chunk, error collection, halt and drain | `olo_ft_axi_master_full` (write side) | `*_DMASR.DMASlvErr`, `*_DMASR.DMADecErr` (S2MM), `S2MM_DMACR.Keyhole`, `FEAT.4K`, `FEAT.BURST`, `FEAT.UNALIGNED` (S2MM) |
 | S2-3 | Status stream (phase c) | Reception of the flag word and APP0 to APP4, receive length of APP4 | `olo_ft_fifo_sync` | `STRM.STS`, `STRM.RXLENGTH`, `DESC.S2MM_APP*` |
 
@@ -328,7 +329,9 @@ built from and the items of the published interface it owns (P1).
 | `olo_ft_axi_master_full` | MM-1, S2-2 | AXI4 masters with byte-exact unaligned transfers, burst and 4 KB splitting, ECC on the data buffers |
 | `olo_ft_axi_master_simple` | SG-3 | AXI4 master of the descriptor port: bursts of aligned 32-bit words, ECC on the read and write data buffers |
 | `olo_ft_fifo_sync` | MM-1, MM-2, S2-1, SG-1, MM-3, S2-3 | Transfer and response buffers of MM2S, data and chunk buffers of S2MM, descriptor buffer, control and status stream buffers |
-| `olo_base_pl_stage` | MM-2, S2-2 | Register stage of the MM2S stream output, stage of the S2MM write jobs |
+| `olo_base_pl_stage` | MM-2, S2-2 | Register stage of the MM2S stream output (DR mode), stage of the S2MM write jobs |
+| `olo_base_stream_join` | MM-2 | Join of the buffers of an MM2S packet in SG mode (G10) |
+| `olo_base_stream_split` | S2-1 | Split of an S2MM packet at the end of every buffer in SG mode (G10) |
 | `olo_base_arb_rr` | SG-3 | Fair choice between the descriptor accesses of both channels |
 | `olo_axi_lite_slave` | RG-1 | AXI4-Lite access to the register file |
 | `olo_ft_ecc_monitor` | RG-4 | SEC and DED counters per buffer |
@@ -350,16 +353,18 @@ wrapper of `olo_axi_master_simple`, instead.
 | G7 | Many small buffers (SG mode with descriptors of a few beats) | At least four clock cycles per command (alignment logic) | Accepted: one buffer per four clock cycles at most; the user guide states the rate. The micro DMA configuration (phase c) may use `olo_axi_master_simple` | b, c |
 | G8 | Halt and soft reset complete or flush pending transfers | No abort of an accepted command | No change of Open Logic: the channels stop issuing commands and drain the accepted ones (D3, D8) | a |
 | G9 | MM2S completion when the data has left the core | `Rd_Done` signals the end of the AXI reads, before the data is consumed | No change of Open Logic: MM-2 reports the result at the handshake of the last beat (D4) | a |
-| G10 | Packets of several buffers with any lengths and addresses (Tables 30 and 37) | Every command delivers its data starting in lane 0; Open Logic has no stream byte realigner | New in open-logic-ft: a stream realigner that shifts a byte stream by a runtime lane offset with carry between beats (data and `TKeep` in and out), for MM-2 (join) and S2-1 (split) | b |
+| G10 | Packets of several buffers with any lengths and addresses (Tables 30 and 37) | Every command delivers its data starting in lane 0; Open Logic has no entity that joins or splits a byte stream | New in open-logic-ft: `olo_base_stream_join` packs the valid bytes of consecutive beats into full beats (MM-2 joins the buffers of a packet), `olo_base_stream_split` cuts the packets into segments of a size given per segment, each starting in lane 0 (S2-1 cuts a packet at the end of each buffer) | b |
 | G11 | Descriptor fetch and update of 8 to 13 words | `olo_axi_master_simple` moves whole words of the AXI width in bursts of any beat count | No gap: SG-3 uses `olo_ft_axi_master_simple` with 32 data bits; descriptors are aligned to 64 bytes, so no alignment logic is needed | b |
 | G12 | Stream width at most the memory width, both powers of two; up to 16 outstanding bursts | `AxiDataWidth_g` an integer multiple of `UserDataWidth_g`; at most 8 open transactions | No gap: every width pair of \[PG021\] Table 44 is valid; 8 open transactions per direction | a |
-| G13 | Bursts of up to 256 beats at every data width (`c_mm2s_burst_size`, `c_s2mm_burst_size` up to 256 with up to 1024 bits) | `olo_axi_master_simple` does not elaborate when `AxiMaxBeats_g` exceeds the beats of 4 KB (`4096 / (AxiDataWidth_g / 8)`): a slice of its 4 KB beat count is out of range | No change needed: MM-1 and S2-2 run the masters with at most the beats of 4 KB; no AXI burst crosses 4 KB, so the bursts are the same. The defect is corrected in open-logic-ft | a |
-| G14 | Write commands of every length up to 2**`LengthWidth_g` - 1 bytes | `olo_axi_master_full` computes the number of user data words of a write command (size / B + 1, B = `UserDataWidth_g` / 8) at the width of the size field without its low log2(B) bits, so the number wraps to 0 for sizes from 2**`UserTransactionSizeBits_g` - B + 1 to 2**`UserTransactionSizeBits_g` - 1; the master then accepts the next command and its data but issues no further burst (for example a command of 4000 to 4095 bytes with 128-byte user words and `UserTransactionSizeBits_g` 12) | No change needed: MM-1 and S2-2 run the masters with `UserTransactionSizeBits_g` = `LengthWidth_g` + 1, so no command reaches that word count; the rule `UserTransactionSizeBits_g` < `AxiAddrWidth_g` - 1 still holds. The defect is corrected in open-logic-ft | a |
+| G13 | Bursts of up to 256 beats at every data width (`c_mm2s_burst_size`, `c_s2mm_burst_size` up to 256 with up to 1024 bits) | `olo_axi_master_simple` does not elaborate when `AxiMaxBeats_g` exceeds the beats of 4 KB (`4096 / (AxiDataWidth_g / 8)`): a slice of its 4 KB beat count is out of range | No change needed: MM-1 and S2-2 run the masters with at most the beats of 4 KB; no AXI burst crosses 4 KB, so the bursts are the same. The defect is corrected in open-logic-ft 4.7.0-ft.8 | a |
+| G14 | Write commands of every length up to 2**`LengthWidth_g` - 1 bytes | `olo_axi_master_full` computes the number of user data words of a write command (size / B + 1, B = `UserDataWidth_g` / 8) at the width of the size field without its low log2(B) bits, so the number wraps to 0 for sizes from 2**`UserTransactionSizeBits_g` - B + 1 to 2**`UserTransactionSizeBits_g` - 1; the master then accepts the next command and its data but issues no further burst (for example a command of 4000 to 4095 bytes with 128-byte user words and `UserTransactionSizeBits_g` 12) | No change needed: MM-1 and S2-2 run the masters with `UserTransactionSizeBits_g` = `LengthWidth_g` + 1, so no command reaches that word count; the rule `UserTransactionSizeBits_g` < `AxiAddrWidth_g` - 1 still holds. The defect is corrected in open-logic-ft 4.7.0-ft.8 | a |
 
-G1, G5 and G10 are additions to open-logic-ft; their requirement specifications follow the review of this
-architecture. G5 is needed in phase a, G1 and G10 in phase b. Until G5 is available, MM-1 and S2-2 report every
-failed transfer with the slave error code; the requirements that distinguish the two error responses are listed as
-waiting for Open Logic in their module specifications.
+G1, G5 and G10 are additions to open-logic-ft, available from tag 4.7.0-ft.8 (G5 from 4.7.0-ft.7): the ports
+`CmdRd_Fixed` and `CmdWr_Fixed` of the masters (G1), `Rd_ErrorResp` and `Wr_ErrorResp` (G5), and the entities
+`olo_base_stream_join` and `olo_base_stream_split` (G10). OpenDMA uses them from that tag on: the channels map the
+response codes to the slave and the decode error (interpretation I14 for EXOKAY), request FIXED bursts for keyhole
+commands, and join and split the buffers of a packet in SG mode only, so that a DR configuration has none of their
+shifters.
 
 ## 9 Verification architecture
 
@@ -546,8 +551,9 @@ with it is checked once for `MM2S_` and once for `S2MM_`.
 2. Phase a: register interface (RG-1 to RG-4) with the generated register map, MM2S channel (MM-1, MM-2), S2MM
    channel (S2-1, S2-2), core top level in DR mode with the core tests of the DR programming sequences, user guide,
    synthesizability check, compliance matrix. QuestaSim with and without coverage at the end of the phase.
-3. Phase b: in open-logic-ft G1 (FIXED bursts) and G10 (stream realigner); Scatter/Gather engine (SG-1 to SG-3),
-   packets of several descriptors, cyclic mode, interrupt coalescing and delay, keyhole.
+3. Phase b: in open-logic-ft G1 (FIXED bursts) and G10 (stream join and split); Scatter/Gather engine (SG-1 to
+   SG-3), packets of several descriptors, cyclic mode, interrupt coalescing and delay, keyhole. QuestaSim with and
+   without coverage for phases a and b together on the Open Logic tag with G1, G5 and G10.
 4. Phase c: control and status streams (MM-3, S2-3), receive length, micro DMA.
 5. Phase d: synthesis and timing closure on a target board, the drivers of a processor system against the core,
    hardware test report.

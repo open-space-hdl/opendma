@@ -931,15 +931,13 @@ def _guarded(s, addr, data):
         s.expected.append((addr + len(data), bytes(s.guard)))
 
 
-def sg_multi_buffer(addr_width=32, length_width=14, channels=("MM2S", "S2MM"), s2mm_chunk=64, seed=18):
+def sg_multi_buffer(addr_width=32, length_width=14, channels=("MM2S", "S2MM"), seed=18):
     """Packets of several descriptors (Tables 30 and 37). MM2S: a chain of 12 descriptors forming packets of one to
     five buffers (TXSOF on the first, TXEOF on the last), every buffer at a random address and of a random length, the
     first of 1 byte; then a packet of three descriptors with the tail at the first and a halt, which ends the packet
     with TLast on its last byte (interpretation M4). S2MM: 12 buffers holding packets over one to four buffers, the
-    first packet ending exactly at a buffer end; then a packet over three buffers whose first buffer lies in the SLVERR
-    range ERR_WRITE_BASE (at most one chunk, s2mm_chunk bytes, so the error is that of the full buffer), the next
-    packet sent directly after it, a soft reset after the end of the discarded packet and the next packet in a new
-    chain."""
+    first packet ending exactly at a buffer end. The S2MM write error inside a packet of several buffers is
+    sg_write_overlap."""
     rng = random.Random(seed)
     buffers = Buffers(addr_width, rng)
     s = Scenario("sg_multi_buffer", addr_width=addr_width, channels=channels, guard=16)
@@ -1002,39 +1000,57 @@ def sg_multi_buffer(addr_width=32, length_width=14, channels=("MM2S", "S2MM"), s
         s.lines.append("A")
         s.read_reg(Regs.BASE["MM2S"] + Regs.DMASR, Regs.HALTED, Regs.STATE)
         s.read_reg(Regs.BASE["MM2S"] + Regs.CURDESC, c.addrs[0] & 0xFFFFFFFF)
-    if "S2MM" in channels:
-        s.reset()
-        s.comment("S2MM: write error in the first buffer of a packet of three, the next packet directly after it")
-        n0 = min(s2mm_chunk, limit, 256)
-        lens = [n0, rng.randint(1, limit), rng.randint(1, limit), rng.randint(1, limit)]
-        first = random_bytes(n0 + lens[1] + rng.randint(1, lens[2]), rng)
-        nxt = random_bytes(rng.randint(1, limit), rng)
-        descs = [SgBuffer(ERR_WRITE_BASE + 0x80, n0, first[:n0], sof=True, eof=False)]
-        descs += [SgBuffer(buffers.take(n), n, b"") for n in lens[1:]]
-        c = SgChain("S2MM", DESC_BASE["S2MM"] + 0x4000, descs)
-        s.desc_memory += c.image()
-        s.desc_expected += c.expected([0], {0: ST_DMA_SLV_ERR | ST_DMA_INT_ERR})
-        for b in descs[1:]:
-            s.expected.append((b.addr, bytes(b.length)))
-        p1 = s.packet("S", first)
-        s.packet("S", nxt)
-        s.sg_start("S2MM", c.addrs[0])
-        s.sg_tail("S2MM", c.addrs[3])
-        s.sg_failed("S2MM", Regs.DMA_SLV_ERR | Regs.DMA_INT_ERR, c.addrs[0])
-        # Halted comes before the end of the discarded rest; the soft reset waits for the TLast of the packet, as the
-        # stream peer of the bench does not follow S2mm_RstOut, and the next packet waits at the stream port
-        s.await_sent(p1)
-        s.reset()
-        s.comment("S2MM: the next packet in a new chain")
-        n = min(limit, len(nxt) + 16)
-        b = SgBuffer(buffers.take(n), n, nxt, sof=True, eof=True)
-        c = SgChain("S2MM", DESC_BASE["S2MM"] + 0x6000, [b, SgBuffer(buffers.take(64), 64, b"")])
-        s.sg_descriptors(c, [0])
-        _guarded(s, b.addr, nxt)
-        s.sg_start("S2MM", c.addrs[0])
-        s.sg_tail("S2MM", c.addrs[0])
-        s.lines.append("A")
-        s.sg_complete("S2MM", c.addrs[0])
+    return s
+
+
+def sg_write_overlap(addr_width=32, length_width=14, s2mm_chunk=64, seed=21):
+    """An S2MM write error of a buffer whose result waits for its write responses while the next buffer of its packet
+    is written (odma_s2mm S2-RS-06, interpretation SGI-15). The first buffer is one chunk in the SLVERR range
+    ERR_WRITE_BASE; the bench holds the write responses back for 400 clock cycles, so the second buffer, two chunks,
+    is written completely before the error arrives, and the packet goes on into the third buffer. The first
+    descriptor gets the error status, the second the status of a buffer whose packet the halt after the error cut off
+    (its bytes, RXSOF and RXEOF 0, Cmplt), the third is not issued and keeps its status, and its buffer is not written:
+    memory beyond the failing buffer holds the bytes of the second buffer only. The next packet is sent directly after
+    the failed one; after the end of the discarded packet a soft reset, and the next packet is complete in a new chain,
+    without a byte of the failed one."""
+    rng = random.Random(seed)
+    buffers = Buffers(addr_width, rng)
+    s = Scenario("sg_write_overlap", addr_width=addr_width, channels=("S2MM",), guard=16)
+    limit = _length_limit(length_width)
+    n0 = min(s2mm_chunk, limit)
+    n1 = min(2 * s2mm_chunk, limit)
+    n2 = min(rng.randint(64, 256), limit)
+    first = random_bytes(n0 + n1 + rng.randint(1, n2), rng)
+    nxt = random_bytes(rng.randint(1, min(limit, 256)), rng)
+    s.reset()
+    s.comment("S2MM: write error in the first buffer while the second buffer of the packet is written")
+    descs = [SgBuffer(ERR_WRITE_BASE + 0x80, n0, first[:n0], sof=True, eof=False),
+             SgBuffer(buffers.take(n1), n1, first[n0:n0 + n1], sof=False, eof=False),
+             SgBuffer(buffers.take(n2), n2, b"")]
+    c = SgChain("S2MM", DESC_BASE["S2MM"] + 0x4000, descs)
+    s.desc_memory += c.image()
+    s.desc_expected += c.expected([0, 1], {0: ST_DMA_SLV_ERR | ST_DMA_INT_ERR})
+    _guarded(s, descs[1].addr, descs[1].data)
+    s.expected.append((descs[2].addr - s.guard, bytes(n2 + 2 * s.guard)))
+    p1 = s.packet("S", first)
+    s.packet("S", nxt)
+    s.sg_start("S2MM", c.addrs[0])
+    s.sg_tail("S2MM", c.addrs[2])
+    s.sg_failed("S2MM", Regs.DMA_SLV_ERR | Regs.DMA_INT_ERR, c.addrs[0])
+    # Halted comes before the end of the discarded rest; the soft reset waits for the TLast of the packet, as the
+    # stream peer of the bench does not follow S2mm_RstOut, and the next packet waits at the stream port
+    s.await_sent(p1)
+    s.reset()
+    s.comment("S2MM: the next packet in a new chain")
+    n = min(limit, len(nxt) + 16)
+    b = SgBuffer(buffers.take(n), n, nxt, sof=True, eof=True)
+    c = SgChain("S2MM", DESC_BASE["S2MM"] + 0x6000, [b, SgBuffer(buffers.take(64), 64, b"")])
+    s.sg_descriptors(c, [0])
+    _guarded(s, b.addr, nxt)
+    s.sg_start("S2MM", c.addrs[0])
+    s.sg_tail("S2MM", c.addrs[0])
+    s.lines.append("A")
+    s.sg_complete("S2MM", c.addrs[0])
     return s
 
 
@@ -1155,7 +1171,8 @@ SCENARIOS = {"dr_reference": dr_reference, "dr_random": dr_random, "dr_concurren
              "dr_errors": dr_errors, "sg_reference": sg_reference, "sg_tail_moves": sg_tail_moves,
              "sg_cyclic": sg_cyclic, "sg_errors": sg_errors, "sg_delay": sg_delay,
              "sg_delay_overlap": sg_delay_overlap, "sg_reset_load": sg_reset_load,
-             "sg_multi_buffer": sg_multi_buffer, "sg_empty": sg_empty, "keyhole": keyhole,
+             "sg_multi_buffer": sg_multi_buffer, "sg_write_overlap": sg_write_overlap, "sg_empty": sg_empty,
+             "keyhole": keyhole,
              "sg_boundary_rate": sg_boundary_rate}
 
 

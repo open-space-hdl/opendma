@@ -102,7 +102,7 @@ reads 0. The other channel keeps working until the reset.
 | Error | Flags |
 | --- | --- |
 | Read response SLVERR or DECERR (MM2S); the packet is still sent completely | `MM2S_DMASR.DMASlvErr` or `DMADecErr` |
-| Write response SLVERR or DECERR (S2MM); no further write for the packet, the rest of the packet is discarded up to `TLast` | `S2MM_DMASR.DMASlvErr` or `DMADecErr`, and `DMAIntErr` |
+| Write response SLVERR or DECERR (S2MM); no further write for the packet once the error has arrived, the rest of the packet is discarded up to `TLast` | `S2MM_DMASR.DMASlvErr` or `DMADecErr`, and `DMAIntErr` |
 | EXOKAY response (OpenDMA never requests exclusive access; interpretation I14) | as SLVERR |
 | Buffer beyond the top of the address space: no memory access, no stream data | `DMADecErr` (S2MM also `DMAIntErr`) |
 | S2MM packet longer than the buffer: the bytes that fit are written, nothing beyond the buffer, the rest discarded up to `TLast` | `S2MM_DMASR.DMAIntErr` |
@@ -167,8 +167,12 @@ and its status is written; descriptors fetched but not started keep their status
 of them. `DMASR.Halted` is set when the channel and the engine have both stopped.
 
 Errors: each halts its channel with `Err_Irq`, and `CURDESC` points to the descriptor of the error. The descriptors
-before it are completed with their status; an MM2S descriptor after it may also be completed, because it was already
-issued (interpretation SGI-08 of `odma_sg`).
+before it are completed with their status; the descriptor after it may also be completed, because it was already
+issued (interpretation SGI-08 of `odma_sg`). For S2MM this happens when the write error of a buffer arrives after the
+channel has accepted the next buffer: when the packet continues there, that buffer can already hold bytes of the
+packet, and its status has those bytes, `RXSOF` and `RXEOF` 0 and `Cmplt` 1, the form of a buffer whose packet a halt
+cut off; when the failed buffer ended its packet, the next buffer can hold the start of the next packet
+(interpretation SGI-15). Software that recovers from the error discards both descriptors.
 
 | Error | Flags |
 | --- | --- |

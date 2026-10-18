@@ -119,6 +119,15 @@ architecture rtl of odma_s2mm_write is
         CmdSize     : unsigned(LengthWidth_g - 1 downto 0);
         CmdLast     : std_logic;                           -- The write command ends the transfer
         Outstanding : natural range 0 to MaxOutstanding_c;
+        Stop        : std_logic;                           -- The queued transfer of the packet failed: no further write
+        -- Queued result: a transfer with all writes issued, waiting for their responses (S2-RS-06)
+        QValid      : std_logic;
+        QBytes      : std_logic_vector(LengthWidth_g - 1 downto 0);
+        QEof        : std_logic;
+        QErr        : XferErr_t;
+        QCont       : std_logic;                           -- Its packet continues in the next transfer
+        QSof        : std_logic;
+        QOutst      : natural range 0 to MaxOutstanding_c;
         -- Feeder
         Feed        : FeedFsm_t;
         FeedCnt     : unsigned(CntWidth_c - 1 downto 0);
@@ -135,8 +144,9 @@ architecture rtl of odma_s2mm_write is
     signal Job_OutReady : std_logic;
     signal Job_OutData  : std_logic_vector(JobWidth_c - 1 downto 0);
 
-    -- The chunk buffer and S2-1 hold no descriptor for a transfer
+    -- The chunk buffer and S2-1 hold no descriptor for a transfer; nothing of a transfer left in Idle_s
     signal NoData : std_logic;
+    signal NoWork : std_logic;
 
 begin
 
@@ -148,6 +158,8 @@ begin
         variable Feed_v  : unsigned(CntWidth_c - 1 downto 0);
         variable Job_v   : boolean;
         variable Issue_v : boolean;
+        variable Resp_v  : boolean;
+        variable QFail_v : boolean;
     begin
         v := r;
 
@@ -162,6 +174,33 @@ begin
         Job_v       := false;
         Issue_v     := false;
         Feed_v      := (others => '0');
+        QFail_v     := false;
+
+        -- *** Write responses: in the order of the writes, so first those of the queued transfer; the first error
+        -- code of a transfer is kept ***
+        Resp_v := Wr_Done = '1' or Wr_Error = '1';
+        if Resp_v and r.QOutst /= 0 then
+            v.QOutst := r.QOutst - 1;
+            -- SLVERR and EXOKAY give the slave error, DECERR the decode error (S2-RS-05, interpretation I14)
+            if Wr_Error = '1' and r.QErr = ErrNone_c then
+                v.QErr  := respErr(Wr_ErrorResp);
+                QFail_v := r.QCont = '1';
+            end if;
+        elsif Resp_v and r.Outstanding /= 0 then
+            v.Outstanding := r.Outstanding - 1;
+            if Wr_Error = '1' and r.Err = ErrNone_c then
+                v.Err := respErr(Wr_ErrorResp);
+            end if;
+        end if;
+
+        -- *** Queued result: returned before any result of the current transfer, once its writes have answered;
+        -- dropped by a drain (S2-RS-06, S2-HA-02) ***
+        if r.QValid = '1' and r.QOutst = 0 and Drain = '0' and r.State /= Drained_s then
+            Res_Valid <= '1';
+            if Res_Ready = '1' then
+                v.QValid := '0';
+            end if;
+        end if;
 
         -- *** Command block ***
         case r.State is
@@ -169,9 +208,14 @@ begin
             when Idle_s =>
                 if Drain = '1' then
                     v.State := Drained_s;
+                elsif r.FlushPend = '1' then
+                    -- The queued transfer failed inside its packet: the rest of the packet is flushed first
+                    v.State := Flush_s;
                 elsif Run = '1' then
-                    Cmd_Ready <= '1';
-                    if Cmd_Valid = '1' then
+                    -- No command while the queued transfer has failed: after an error only the commands accepted
+                    -- before it start (architecture D7)
+                    Cmd_Ready <= '1' when r.QValid = '0' or r.QErr = ErrNone_c else '0';
+                    if Cmd_Valid = '1' and (r.QValid = '0' or r.QErr = ErrNone_c) then
                         v.Addr      := unsigned(Cmd_Addr);
                         v.Length    := resize(unsigned(Cmd_Length), LengthWidth_g + 1);
                         v.Written   := (others => '0');
@@ -181,6 +225,7 @@ begin
                         v.Keyhole   := Cmd_Keyhole;
                         v.Cont      := '0';
                         v.Disc      := '0';
+                        v.Stop      := '0';
                         if unsigned(Cmd_Length) = 0 then
                             -- No write and no stream data for a length of 0 (S2-WR-06)
                             v.Err   := ErrInt_c;
@@ -205,8 +250,9 @@ begin
             when Take_s =>
                 if Drain = '1' then
                     v.State := Drained_s;
-                elsif r.Err /= ErrNone_c then
-                    -- A write error: no further write; the rest of the packet is flushed after the result
+                elsif r.Err /= ErrNone_c or r.Stop = '1' then
+                    -- A write error, also of the queued transfer of the packet: no further write; the rest of the
+                    -- packet is flushed after the result
                     v.FlushPend := '1';
                     v.State     := Wait_s;
                 elsif Desc_Valid = '1' and Job_InReady = '1' then
@@ -271,8 +317,28 @@ begin
                 -- The result once no write of the transfer is outstanding (S2-RS-01, S2-RS-04)
                 if Drain = '1' then
                     v.State := Drained_s;
-                elsif r.Outstanding = 0 then
-                    -- An error before the end of the packet: the rest of the packet is flushed (S2-RS-03)
+                elsif r.QValid = '0' and v.Err = ErrNone_c and r.Stop = '0' and r.FlushPend = '0' and
+                      (r.Eof = '1' or r.Cont = '1' or r.Disc = '1') then
+                    -- Ended at the end of its packet, with a full buffer or with a discarded packet, every write
+                    -- issued: its result is queued, and the next command is accepted while the writes answer
+                    -- (S2-RS-06); the next buffer continues the packet after a full buffer (S2-SG-02)
+                    v.QValid      := '1';
+                    v.QBytes      := std_logic_vector(r.Written(LengthWidth_g - 1 downto 0));
+                    v.QEof        := r.Eof;
+                    v.QErr        := ErrNone_c;
+                    v.QCont       := r.Cont and not r.Disc;
+                    v.QSof        := r.SofNext when r.Written /= 0 or r.Eof = '1' else '0';
+                    v.QOutst      := v.Outstanding;
+                    v.Outstanding := 0;
+                    v.SofNext     := '0' when r.Cont = '1' and r.Disc = '0' else '1';
+                    v.Eof         := '0';
+                    v.Cont        := '0';
+                    v.Disc        := '0';
+                    v.State       := Idle_s;
+                elsif r.Outstanding = 0 and (r.Stop = '0' or Run = '0') then
+                    -- A transfer stopped by the error of the queued one ends with the halt that follows every error
+                    -- (architecture D7), so that its result has the form of a transfer cut by a halt (SGI-15). An
+                    -- error before the end of the packet: the rest of the packet is flushed (S2-RS-03)
                     if r.Err /= ErrNone_c and r.Eof = '0' and r.Disc = '0' then
                         v.FlushPend := '1';
                     end if;
@@ -282,11 +348,12 @@ begin
             when Result_s =>
                 if Drain = '1' then
                     v.State := Drained_s;
-                else
+                elsif r.QValid = '0' then
+                    -- After the queued result (S2-RS-06)
                     Res_Valid <= '1';
                     if Res_Ready = '1' then
                         -- The next buffer continues the packet only after a full buffer without error (S2-SG-02)
-                        if r.Cont = '1' and r.Disc = '0' and r.Err = ErrNone_c then
+                        if r.Cont = '1' and r.Disc = '0' and r.Err = ErrNone_c and r.Stop = '0' then
                             v.SofNext := '0';
                         else
                             v.SofNext := '1';
@@ -331,15 +398,19 @@ begin
             Job_InData  <= std_logic_vector(resize(Desc_v.Beats - Feed_v, CntWidth_c)) & std_logic_vector(Feed_v);
         end if;
 
-        -- *** Write responses: the first error code of the transfer is kept ***
-        if Issue_v and Wr_Done = '0' and Wr_Error = '0' then
-            v.Outstanding := r.Outstanding + 1;
-        elsif not Issue_v and (Wr_Done = '1' or Wr_Error = '1') and r.Outstanding > 0 then
-            v.Outstanding := r.Outstanding - 1;
+        -- An issued write command waits for its response
+        if Issue_v then
+            v.Outstanding := v.Outstanding + 1;
         end if;
-        -- SLVERR and EXOKAY give the slave error, DECERR the decode error (S2-RS-05, interpretation I14)
-        if Wr_Error = '1' and v.Err = ErrNone_c then
-            v.Err := respErr(Wr_ErrorResp);
+
+        -- The queued transfer failed and its packet continues: the transfer of the rest of the packet (accepted
+        -- before or in this clock cycle) issues no further write, and the rest is flushed unless the packet ended
+        -- or was discarded in that transfer (S2-RS-03, SGI-15); without such a transfer the flush comes first
+        if QFail_v then
+            v.Stop := '1';
+            if v.Eof = '0' and v.Disc = '0' then
+                v.FlushPend := '1';
+            end if;
         end if;
 
         -- The split takes the segment of the transfer
@@ -408,19 +479,26 @@ begin
     Seg_Size    <= r.SegSize;
     -- Split_g: S2-1 discards the rest of the packet that has not passed the split (architecture section 4.3)
     FlushReq <= '1' when Split_g and (r.FlushPend = '1' or r.State = Flush_s) else '0';
-    -- The first buffer of a packet: a result with bytes or with the end of packet (a packet without bytes, SGI-13); a
-    -- result without data and without the end of packet (length 0, beyond the top, not started) belongs to no packet
-    Res_Sof   <= r.SofNext when r.Written /= 0 or r.Eof = '1' else '0';
-    Wr_Data   <= Buf_Data;
-    Res_Bytes <= std_logic_vector(r.Written(LengthWidth_g - 1 downto 0));
-    -- A transfer with an error has no end of packet (S2-RS-02, S2-RS-03)
-    Res_Eof <= r.Eof when r.Err = ErrNone_c else '0';
-    Res_Err <= r.Err;
-    -- Idle: no write outstanding, and drained, or in Idle_s with the chunk buffer empty and no descriptor of S2-1
-    -- to come, so that after a halt no data received before it is left for the next transfer (S2-HA-01, S2-HA-03);
-    -- the discard of the rest of an interrupted packet in S2-1 does not hold it
+    Wr_Data  <= Buf_Data;
+    -- The result: the queued one while it is there (S2-RS-06), else the one of the current transfer. The first buffer
+    -- of a packet: a result with bytes or with the end of packet (a packet without bytes, SGI-13); a result without
+    -- data and without the end of packet (length 0, beyond the top, not started) belongs to no packet. A transfer
+    -- with an error, or stopped by the error of the queued one, has no end of packet (S2-RS-02, S2-RS-03, SGI-15)
+    Res_Sof   <= r.QSof when r.QValid = '1' else
+                 r.SofNext when r.Written /= 0 or r.Eof = '1' else
+                 '0';
+    Res_Bytes <= r.QBytes when r.QValid = '1' else std_logic_vector(r.Written(LengthWidth_g - 1 downto 0));
+    Res_Eof   <= r.QEof when r.QValid = '1' and r.QErr = ErrNone_c else
+                 '0' when r.QValid = '1' else
+                 r.Eof when r.Err = ErrNone_c and r.Stop = '0' else
+                 '0';
+    Res_Err   <= r.QErr when r.QValid = '1' else r.Err;
+    -- Idle: no write outstanding, and drained, or in Idle_s without a queued result or a flush to come, with the chunk
+    -- buffer empty and no descriptor of S2-1 to come, so that after a halt no data received before it is left for
+    -- the next transfer (S2-HA-01, S2-HA-03); the discard of the rest of an interrupted packet in S2-1 does not hold it
     NoData <= '1' when Desc_Valid = '0' and Desc_Stored = '0' and DescPend = '0' else '0';
-    Idle   <= '1' when r.Outstanding = 0 and (r.State = Drained_s or (r.State = Idle_s and NoData = '1')) else '0';
+    NoWork <= '1' when r.State = Idle_s and r.QValid = '0' and r.FlushPend = '0' and NoData = '1' else '0';
+    Idle   <= '1' when r.Outstanding = 0 and r.QOutst = 0 and (r.State = Drained_s or NoWork = '1') else '0';
 
     -- *** Sequential Process ***
     p_seq : process (Clk) is
@@ -430,6 +508,9 @@ begin
             if Rst = '1' then
                 r.State       <= Idle_s;
                 r.Outstanding <= 0;
+                r.Stop        <= '0';
+                r.QValid      <= '0';
+                r.QOutst      <= 0;
                 r.Feed        <= Head_s;
                 r.FlushPend   <= '0';
                 r.SofNext     <= '1';

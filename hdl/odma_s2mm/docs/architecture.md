@@ -159,13 +159,33 @@ commands without response gives the outstanding level. With `Split_g` a full buf
 complete transfer without the end of packet, and the overflow row above cannot occur, because a segment is never
 longer than its buffer.
 
+Queued result (S2-RS-06): a transfer that has issued its last write without an error and ended with the end of its
+packet, a full buffer or a discarded packet does not wait in `Wait_s`. Its result and its outstanding count move to
+the queued result register set (`QValid`, `QBytes`, `QEof`, `QErr`, `QCont`, `QSof`, `QOutst`), and the block returns
+to `Idle_s`, so the next command and, with `Split_g`, its segment are accepted while the write responses of the
+queued transfer arrive. The next chunk is then in the data buffer and its write command is issued when the last
+burst of the queued transfer ends, instead of after its response, its result and the refill of the data buffer.
+
+- Depth: one queued result and one current transfer. A current transfer that ends while a result is queued takes
+  the path of `Wait_s` and `Result_s`; the next command waits.
+- Order: the write master answers its commands in order, so `Wr_Done` and `Wr_Error` count against the queued
+  transfer while `QOutst` is not 0 and against the current transfer after that. The queued result is returned when
+  `QOutst` is 0 and before any result of the current transfer; `Result_s` waits while `QValid` is set.
+- Start of packet: at the queuing `QSof` takes `Res_Sof` of the queued transfer, and `SofNext` takes the value it gets
+  at a result (below), since the queued transfer has no error so far.
+- A transfer that ended with a halt (no end of packet, no full buffer, no discard) or with an error is not queued:
+  an error that a later response reports would need the flush of the rest of the packet while the next transfer
+  already takes it.
+- In DR mode the register block issues the next command only after the result, so the queue only moves the return
+  of the result from `Result_s` to `Idle_s`, at the same clock cycle.
+
 Start of packet (S2-SG-02): the register `SofNext` (reset '1') gives `Res_Sof` of a result with bytes or with the
 end of packet (a packet without bytes, SGI-13). A result without bytes and without the end of packet (a buffer length
 of 0, a buffer beyond the top of the address space, a transfer that has not started) belongs to no packet and has
-`Res_Sof` '0'. At every result `SofNext` becomes '0' when the transfer ended with a full buffer of a packet that
-continues (`Pend` without `PktEnd`, no error, no discard), otherwise '1': the next buffer then starts a packet, also
-after an error or a halt, whose packet rest is discarded. Without `Split_g` every transfer ends its packet, so
-`SofNext` is always '1'.
+`Res_Sof` '0'. At every result, and when a result is queued, `SofNext` becomes '0' when the transfer ended with a
+full buffer of a packet that continues (`Pend` without `PktEnd`, no error, no discard), otherwise '1': the next
+buffer then starts a packet, also after an error or a halt, whose packet rest is discarded. Without `Split_g` every
+transfer ends its packet, so `SofNext` is always '1'.
 
 ### 5.3 Errors, halt and flush
 
@@ -174,6 +194,15 @@ after an error or a halt, whose packet rest is discarded. Without `Split_g` ever
   write command is issued for the transfer; the remaining descriptors of the packet, up to the one with `PktEnd`, are
   flushed after the result (S2-RS-03). With `Split_g` the block raises `FlushReq` during the flush, so that S2-1
   drops the rest of the packet that has not passed the split yet (section 4.3).
+- An error of the queued transfer records its first error code in `QErr`. When its packet continues in the next
+  buffer (`QCont`), the rest of the packet must not be written: the current transfer, accepted before the error
+  arrived or in the same clock cycle, gets `Stop`, issues no further write command (a command already presented is
+  completed), leaves `Take_s` as for an error of its own, and the rest of the packet is flushed after its result,
+  unless the packet ended or was discarded in that transfer. Its result waits until `Run` has fallen, which the
+  command source does after every result with an error (architecture D7), so that it has the form of a transfer cut
+  by a halt: the bytes written, no end of packet, no error, and `Res_Sof` '0', since it continues the packet
+  (SGI-15). Without a current transfer the block goes from `Idle_s` to `Flush_s` at once. While the queued result
+  has an error, `Idle_s` accepts no command, so that only the commands accepted before the error start.
 - Overflow records `ErrInt_c` and the end of packet of the overflowing chunk: when that chunk ends the packet, its
   beats beyond the buffer are dropped and nothing is flushed; otherwise the rest of the packet is flushed (S2-RS-02).
 - `Run` = '0' during a transfer: the descriptors of the packet of the transfer are written up to the descriptor with
@@ -197,8 +226,9 @@ after an error or a halt, whose packet rest is discarded. Without `Split_g` ever
 ### 5.4 Drain
 
 `Drain` = '1': no descriptor is taken and no write command issued; the feeder moves the data of the write commands
-the master has accepted from the data buffer (it is complete there, S2-ST-03); the block waits for their responses
-and returns no result (S2-HA-02). The core reset after the drain clears the buffers.
+the master has accepted from the data buffer (it is complete there, S2-ST-03); the block waits for their responses,
+also those of a queued transfer, and returns no result, a queued one neither (S2-HA-02). The core reset after the
+drain clears the buffers.
 
 ### 5.5 Write master
 
@@ -229,11 +259,12 @@ of the consequence of a double error).
 ## 6. Stopped
 
 `Stopped` = '1' when no write is outstanding and S2-2 is in the drained state, or in `Idle_s` (no transfer, no
-flush) with the chunk buffer empty and no descriptor of S2-1 to come (`DescPend`: a packet is open and its rest
-is not discarded). After a halt, `Stopped` thus waits until the data received before it is flushed: a
-descriptor left in the chunk buffer, such as the discard descriptor of a packet cut after its first buffer, would
-otherwise be taken by the next transfer after a restart. S2-1 may still be dropping the rest of an interrupted
-packet (S2-HA-03). A flush that reaches the end of a packet sets `SofNext`, so the next buffer starts a packet.
+queued result, no flush) with the chunk buffer empty and no descriptor of S2-1 to come (`DescPend`: a packet is
+open and its rest is not discarded). After a halt, `Stopped` thus waits until the data received before it is
+flushed: a descriptor left in the chunk buffer, such as the discard descriptor of a packet cut after its first
+buffer, would otherwise be taken by the next transfer after a restart. S2-1 may still be dropping the rest of an
+interrupted packet (S2-HA-03). A flush that reaches the end of a packet sets `SofNext`, so the next buffer starts a
+packet.
 
 ## 7. State machines
 
@@ -249,11 +280,11 @@ reset); feeder: `Head_s` (next job), `Feed_s` (beats to the master), `Drop_s` (b
   after two clock cycles plus the command time of the master. With `Split_g` the split holds up to one beat of bytes,
   so a beat reaches the chunk former one input beat later on an aligned stream, and a buffer end inside a beat inserts
   one clock cycle.
-- Buffer boundary inside a packet (`Split_g`): the next segment is written only when S2-2 accepts the next command,
-  after the result of the full buffer, that is after the write responses of its last chunk. The stream input waits
-  from the end of the buffer until then: about 10 clock cycles plus the write response latency of the memory, plus the
-  time of the command source to present the next command (the engine has it ready when it fetched one descriptor
-  ahead). The verification report of the core has the measured values.
+- Buffer boundary inside a packet (`Split_g`): S2-2 accepts the next command once the last write command of the
+  full buffer is issued (S2-RS-06), so the split takes the next segment while the write responses of the full buffer
+  are outstanding, and the stream input does not wait for them, provided the command source has the next command
+  ready (the engine presents it, as it fetches one descriptor ahead). The verification report of the core has the
+  measured values.
 - Throughput: the channel issues one write command per chunk, and the write master accepts the next command after
   the data of the previous one, about 7 clock cycles of overhead per command. With equal memory and stream widths
   and chunks of C stream beats the channel takes about C / (C + 7) beats per clock cycle once its data buffer is

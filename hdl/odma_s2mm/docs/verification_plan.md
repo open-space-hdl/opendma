@@ -44,6 +44,7 @@ is never longer than the buffer of its command, so a packet longer than the buff
 (S2-SG-01) instead of overflowing. The tests of Scatter/Gather Mode (TC-S2-17 to TC-S2-19)
 run in the `s_` configurations; the halt sweep TC-S2-21 runs in `w32_s32` and `w512_s512` (2-beat chunks) and in
 `s_w64_s8` and `s_w512_s512`, the narrowest and the widest lag of the split (two beats of 8 and of 512 bits);
+TC-S2-22 and TC-S2-23 run in every configuration, their steps with packets over several buffers with `Split_g`;
 lengths are limited to 2**`LengthWidth_g` - 1.
 
 Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the batches of phases a and b.
@@ -73,6 +74,8 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | `test_split_halt` (TC-S2-19) | `Run` falls one and a half chunks into the second buffer of a packet of three buffers, the next packet sent directly after it: the complete chunks are written, the result carries no end of packet, the rest of the packet, longer than 2**`LengthWidth_g` - 1 bytes where the length width allows, is discarded up to its `TLast`, the next packet waits at the input while halted and arrives complete after the restart with the start of packet. SLVERR on the first chunk of a buffer of four chunks of a packet of three buffers, the stream without gaps, the next packet directly after it: result with the error, the rest of the packet discarded through the discard segments of S2-1 (`FlushReq`), the next packet complete in the buffer of the next command. The same with a short rest and a write response latency of 200 cycles. A command accepted, `Run` falling in the next clock cycle, no packet: result with 0 bytes; after `Run` rises, a new packet longer than its buffer arrives complete and alone in the buffers of its two commands. `Run` falling while the split holds the first beat of a packet: the packet is discarded, the next one arrives complete. `Run` falling in the clock cycle after the `TLast` of a packet that ends one byte beyond its buffer: the buffer holds complete chunks or is full, without the end of packet, the last byte is discarded, and the next packet arrives complete and alone. `Drain` inside a multi-buffer packet: no further write, no result, `Stopped` rises | S2-SG-01, S2-SG-02, S2-HA-01, S2-HA-02, S2-RS-03 |
 | `test_keyhole` (TC-S2-20) | Keyhole commands of packets of 1 byte, one memory word, 16 and 17 memory words and 3.5 bursts, at aligned and unaligned addresses, also next to a 4 KB boundary and at the top of the address space: every AW burst FIXED with at most 16 beats at the address with the bits below the memory width cleared; the address is the FIFO window of the memory model (PKG-12), so every beat lands in the next word of its backing range: the backing range holds the packet packed from lane 0, the strobes of the last beat only for the remaining bytes, and nothing else is written (write window); an incrementing transfer after a keyhole transfer and the reverse are both correct; in the `s_` configurations also a keyhole packet over two buffers | S2-SG-04, S2-IF-01 |
 | `test_halt_sweep` (TC-S2-21) | A buffer of six chunks (more than the data buffer holds); packets of the buffer length less one byte, the buffer length, one byte more, one chunk less one byte, one chunk and one byte, one beat and two beats; for each, `Run` falls after the beat 4, 3, 2 or 1 beats before the last one and 0 to 6 clock cycles after the handshake of the `TLast`, once with an always ready memory and once with a memory that stalls 80 % of the cycles with a latency of 20 (the data buffer fills and the stream port stalls inside the long packets). After each halt: `Stopped` within 4000 clock cycles, then the restart at once. Checked every time, from what the channel took while `Run` was '1': a packet whose `TLast` was taken and that fits is complete with the end of packet; a packet longer than the buffer gives the overflow without the split; a cut packet gives complete chunks (with the split also the full buffer) without the end of packet; a packet that had not started is written completely by the next command; the next packet, queued behind it from the halt on, is complete, alone and has the start of packet; the start of packet only in a buffer with bytes or with the end of packet; the bytes in and around every buffer; while `Run` is '0' the stream port takes only the rest of a cut packet, at most up to its `TLast` and all of it when the `TLast` comes, and nothing of a packet that had not started or had ended (handshakes counted in the cycles with `Run` '1' and '0') | S2-HA-01, S2-HA-02, S2-HA-03 |
+| `test_overlap` (TC-S2-22) | Write responses 300 clock cycles late: three packets of different lengths, each ending in its buffer, commanded back to back: the second command is accepted before the first result, the third only after it (one transfer ahead), the results in command order; with `Split_g` the same for a packet over three buffers, the start of packet only in the first result and the end only in the last; then 24 packets of random lengths (with `Split_g` over 1 to 3 buffers) with a random response latency of 0 to 150 clock cycles per packet and 50 % stall: every result in command order with its bytes, start and end of packet, the bytes in and around every buffer | S2-RS-06, S2-IF-03, S2-SG-02 |
+| `test_overlap_error` (TC-S2-23) | With `Split_g`: SLVERR on the last chunk of the first buffer of a packet of three buffers, the responses late enough that the second buffer has written chunks when the error arrives: the first result carries the error, the bench lowers `Run` after it, the second result carries the bytes written, no start and no end of packet and no error, fewer bytes than its buffer where it has several chunks, its bytes in memory beyond the failing buffer and nothing else written; no third command accepted; `Stopped` within 1000 clock cycles, the rest discarded; after the restart the next packet is complete with the start of packet. In every configuration: SLVERR on the last chunk of a packet that ends in its buffer, the next packet arriving at once: after the error result and the halt the next result has the form of a packet cut by the halt (S2-HA-01). With several chunks per buffer: SLVERR on the first chunk, the next command presented after that response and before the result: it is accepted only after the result | S2-RS-03, S2-RS-06, S2-HA-01, S2-HA-03 |
 
 ## 4. Requirement coverage
 
@@ -80,7 +83,7 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | --- | --- |
 | S2-IF-01 | TC-S2-04, TC-S2-20 |
 | S2-IF-02 | TC-S2-01 |
-| S2-IF-03 | TC-S2-07 |
+| S2-IF-03 | TC-S2-07, TC-S2-22 |
 | S2-ST-01 | TC-S2-07, TC-S2-11, TC-S2-18 |
 | S2-ST-02 | TC-S2-03 |
 | S2-ST-03 | TC-S2-01, TC-S2-05, TC-S2-14, TC-S2-17 |
@@ -92,10 +95,11 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | S2-WR-06 | TC-S2-10 |
 | S2-RS-01 | TC-S2-01, TC-S2-17 |
 | S2-RS-02 | TC-S2-08 |
-| S2-RS-03 | TC-S2-09, TC-S2-19 |
+| S2-RS-03 | TC-S2-09, TC-S2-19, TC-S2-23 |
 | S2-RS-05 | TC-S2-15 |
 | S2-RS-04 | TC-S2-08, TC-S2-09 |
-| S2-HA-01, S2-HA-03 | TC-S2-09, TC-S2-11, TC-S2-19, TC-S2-21 |
+| S2-RS-06 | TC-S2-22, TC-S2-23 |
+| S2-HA-01, S2-HA-03 | TC-S2-09, TC-S2-11, TC-S2-19, TC-S2-21, TC-S2-23 |
 | S2-HA-02 | TC-S2-09, TC-S2-12, TC-S2-19, TC-S2-21 |
 | S2-FT-01 | TC-S2-13 |
 | S2-SG-01, S2-SG-02 | TC-S2-17, TC-S2-19 |
@@ -110,6 +114,7 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | Write error responses SLVERR and DECERR | TC-S2-09 |
 | The error code of each response type, EXOKAY, the first error of a packet deciding | TC-S2-15 |
 | Halt, write error and drain inside a packet of several buffers | TC-S2-19 |
+| Write error of a transfer whose result waits for its responses while the next transfer runs | TC-S2-23 |
 | Buffer beyond the top of the address space, buffer length of 0 | TC-S2-10 |
 | Halt and drain in the middle of a packet | TC-S2-11, TC-S2-12 |
 | ECC single and double errors of every buffer | TC-S2-13 |

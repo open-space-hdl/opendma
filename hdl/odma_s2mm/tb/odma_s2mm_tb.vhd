@@ -6,7 +6,7 @@
 ---------------------------------------------------------------------------------------------------
 -- Description
 ---------------------------------------------------------------------------------------------------
--- VUnit testbench of odma_s2mm: the test cases TC-S2-01 to TC-S2-14 of the verification plan. The
+-- VUnit testbench of odma_s2mm: the test cases TC-S2-01 to TC-S2-25 of the verification plan. The
 -- expected memory contents follow from the sent packets and the pre-fill, never from the DUT.
 --
 -- Documentation: hdl/odma_s2mm/docs/verification_plan.md
@@ -85,9 +85,91 @@ architecture sim of odma_s2mm_tb is
     end function;
 
     -- Longest FIXED burst: 16 beats, at most the bursts of the write master (S2-SG-04)
-    constant FixedBeats_c : positive := minimum(16, minimum(BurstBeats_g, 4096 / MemBytes_c));
+    constant FixedBeats_c  : positive := minimum(16, minimum(BurstBeats_g, 4096 / MemBytes_c));
+    -- Longest burst of the write master in memory words and the memory words of a 4 KB page (specification S2-ST-03)
+    constant MasterBeats_c : positive := minimum(BurstBeats_g, 4096 / MemBytes_c);
+    constant PageWords_c   : positive := 4096 / MemBytes_c;
+
+    -- The table of the short chunks of the verification plan (section 2): the beats by which every chunk of a buffer
+    -- that starts inside a stream word is shorter, for a memory width, a stream width and B beats of a burst: one
+    -- memory word with a memory wider than the stream and B of 8 or more, else none
+    function planShort (
+        mem    : positive;
+        stream : positive;
+        beats  : positive) return natural is
+    begin
+        if mem / stream >= 2 and beats >= 8 then
+            return mem / stream;
+        end if;
+        return 0;
+    end function;
+
+    -- Beats by which every chunk of a buffer that starts inside a stream word is shorter in this configuration
+    constant Short_c : natural := planShort(MemWidth_g, StreamWidth_g, MasterBeats_c);
+
+    -- AW bursts of one INCR write command of n bytes at the offset off within a 4 KB page: the write master splits at
+    -- 4 KB and at MasterBeats_c memory words from the start of the command (S2-WR-03)
+    function masterBursts (
+        off : natural;
+        n   : positive) return positive is
+        constant Last_c : natural := (off + n - 1) / MemBytes_c;
+        variable W_v    : natural := off / MemBytes_c;
+        variable Cnt_v  : natural := 0;
+    begin
+
+        while W_v <= Last_c loop
+            W_v   := W_v + minimum(MasterBeats_c, PageWords_c - W_v mod PageWords_c);
+            Cnt_v := Cnt_v + 1;
+        end loop;
+
+        return Cnt_v;
+    end function;
+
+    -- Bytes of the next chunk of a buffer at dst whose chunks have reached the offset off within a 4 KB page, by the
+    -- chunk plan (S2-ST-03, S2-ST-04): chunks of ChunkBytes_c for a keyhole buffer, at a multiple of the memory word
+    -- and without Split_g; at another multiple of the stream width up to the next multiple of the burst size; inside a
+    -- stream word ChunkBytes_c less Short_c beats
+    function chunkBytes (
+        dst     : Addr_t;
+        off     : natural;
+        keyhole : boolean) return positive is
+    begin
+        if keyhole or not Split_g or to_integer(dst(11 downto 0)) mod MemBytes_c = 0 then
+            return ChunkBytes_c;
+        elsif to_integer(dst(11 downto 0)) mod StreamBytes_c = 0 then
+            return ChunkBytes_c - off mod ChunkBytes_c;
+        end if;
+        return ChunkBytes_c - Short_c * StreamBytes_c;
+    end function;
+
+    -- AW bursts of len bytes written into a buffer at dst by the chunk plan, each chunk written by the split of the
+    -- write master; a keyhole chunk in FIXED bursts of at most FixedBeats_c beats
+    function planBursts (
+        dst     : Addr_t;
+        len     : positive;
+        keyhole : boolean := false) return natural is
+        variable Off_v : natural := to_integer(dst(11 downto 0));
+        variable Rem_v : natural := len;
+        variable N_v   : positive;
+        variable Cnt_v : natural := 0;
+    begin
+
+        while Rem_v > 0 loop
+            N_v := minimum(chunkBytes(dst, Off_v, keyhole), Rem_v);
+            if keyhole then
+                Cnt_v := Cnt_v + ((N_v + MemBytes_c - 1) / MemBytes_c + FixedBeats_c - 1) / FixedBeats_c;
+            else
+                Cnt_v := Cnt_v + masterBursts(Off_v mod 4096, N_v);
+                Off_v := Off_v + N_v;
+            end if;
+            Rem_v := Rem_v - N_v;
+        end loop;
+
+        return Cnt_v;
+    end function;
+
     -- Expected results of the split tests, checked while the commands are sent
-    constant MaxCmds_c    : positive := 32;
+    constant MaxCmds_c : positive := 32;
 
     type CmdNat_a is array (0 to MaxCmds_c - 1) of natural;
     type CmdAddr_a is array (0 to MaxCmds_c - 1) of unsigned(63 downto 0);
@@ -209,6 +291,7 @@ begin
         variable Took_v   : natural;
         variable Start_v  : boolean;
         variable End_v    : boolean;
+        variable Exp_v    : natural;
 
         procedure cycles (n : natural) is
         begin
@@ -1939,6 +2022,119 @@ begin
                     waitPackets(Pkts_v + 2);
                 end if;
 
+            elsif run("test_chunk_align") then
+                log(ID_LOG_HDR, "TC-S2-24 the chunks of a buffer follow its address");
+
+                -- Offsets above a burst boundary, the last two below a 4 KB boundary; at each offset k = 0: five chunks
+                -- and 3 bytes, k = 1: a buffer shorter than its first chunk, k = 2 and 3: three chunks with a packet that
+                -- ends inside the first and inside the second chunk, k = 4: three chunks exactly (a first chunk up to
+                -- the burst boundary adds one chunk to it)
+                for c in 0 to 9 loop
+                    Off_v := 0 when c = 0 else
+                             StreamBytes_c when c = 1 else
+                             MemBytes_c when c = 2 else
+                             ChunkBytes_c / 2 when c = 3 else
+                             ChunkBytes_c - StreamBytes_c when c = 4 else
+                             1 when c = 5 else
+                             maximum(StreamBytes_c - 1, 1) when c = 6 else
+                             MemBytes_c + 1 when c = 7 else
+                             4096 - StreamBytes_c when c = 8 else
+                             4095;
+
+                    for k in 0 to 4 loop
+                        Dst_v  := region(1 + 5 * c + k) + Off_v;
+                        Wr_v   := chunkBytes(Dst_v, Off_v, false);
+                        Len_v  := 5 * ChunkBytes_c + 3 when k = 0 else
+                                  maximum(Wr_v / 2, 1) when k = 1 else
+                                  3 * ChunkBytes_c;
+                        Len_v  := minimum(Len_v, MaxLen_c);
+                        Len2_v := maximum(Wr_v / 2, 1) when k = 2 else
+                                  Wr_v + maximum(chunkBytes(Dst_v, Off_v + Wr_v, false) / 2, 1) when k = 3 else
+                                  Len_v;
+                        Len2_v := minimum(Len2_v, Len_v);
+                        Cnt_v  := Obs.AwCount;
+                        Cnt2_v := Obs.AwCross;
+                        transfer(Dst_v, Len_v, source(c), Len2_v, "offset " & to_string(Off_v) & ", case " &
+                                 to_string(k));
+                        check_value(Obs.AwCount - Cnt_v, planBursts(Dst_v, Len2_v), ERROR, "offset " &
+                                    to_string(Off_v) & ", case " & to_string(k) & ": AW bursts");
+                        -- At a multiple of the burst size, and at a multiple of the stream width that is not one of the
+                        -- memory word, every chunk lies between two multiples of the burst size
+                        if Off_v mod ChunkBytes_c = 0 or
+                           (Off_v mod StreamBytes_c = 0 and Off_v mod MemBytes_c /= 0) then
+                            check_value(Obs.AwCross - Cnt2_v, 0, ERROR, "offset " & to_string(Off_v) & ", case " &
+                                        to_string(k) & ": INCR bursts across a multiple of the burst size");
+                        end if;
+                    end loop;
+
+                end loop;
+
+                -- A packet over two buffers, the first at the stream width, the second 1 byte above a burst boundary:
+                -- each with its own chunk plan
+                Len_v  := minimum(2 * ChunkBytes_c + StreamBytes_c, MaxLen_c - MaxLen_c mod StreamBytes_c);
+                Len2_v := minimum(3 * ChunkBytes_c, MaxLen_c);
+                Dst_v  := region(51) + StreamBytes_c;
+                Win_v  := region(52) + 1;
+                Res_v  := Obs.ResCount;
+                Done_v := 0;
+                Sent_v := 0;
+                Cnt_v  := Obs.AwCount;
+                Mem_v.setWindow(0, Dst_v, Win_v + Len2_v - 1);
+                send(source(51), Len_v + Len2_v - 1);
+                splitBuf(Dst_v, Len_v, Len_v, source(51), '1', '0');
+                splitBuf(Win_v, Len2_v, Len2_v - 1, source(51) + Len_v, '0', '1');
+                waitRes(Res_v + 2);
+                checkSplit;
+                check_value(Obs.AwCount - Cnt_v, planBursts(Dst_v, Len_v) + planBursts(Win_v, Len2_v - 1), ERROR,
+                            "packet over two buffers: AW bursts");
+
+                -- A keyhole buffer one memory word above a burst boundary keeps chunks of ChunkBytes_c: N_v chunks give
+                -- N_v times the FIXED bursts of a chunk, a resized first chunk one more
+                N_v := minimum(3, MaxLen_c / ChunkBytes_c);
+                if N_v > 0 then
+                    Len_v     := N_v * ChunkBytes_c;
+                    Win_v     := region(53) + ChunkBytes_c + MemBytes_c;
+                    Back_v    := region(54);
+                    Mem_v.setFifo(0, Win_v, Back_v);
+                    prefill(Back_v, Len_v);
+                    FixedAddr <= std_logic_vector(Win_v);
+                    Cnt_v     := Obs.AwFixed;
+                    Res_v     := Obs.ResCount;
+                    send(source(53), Len_v);
+                    sendCmd(Win_v, Len_v, '1');
+                    waitRes(Res_v + 1);
+                    checkRes(Res_v, Len_v, '1', ErrNone_c, "keyhole buffer one memory word above a burst boundary");
+                    checkMem(Back_v, Len_v, Len_v, source(53), "keyhole buffer: the backing range of the window");
+                    check_value(Obs.AwFixed - Cnt_v, planBursts(Win_v, Len_v, true), ERROR,
+                                "keyhole buffer: FIXED bursts");
+                    check_value(Obs.AwFixAddr, 0, ERROR, "every FIXED burst at the window word");
+                end if;
+
+            elsif run("test_short_rule") then
+                log(ID_LOG_HDR, "TC-S2-25 the short chunks of every configuration of the generic ranges");
+                N_v := 0;
+
+                -- Memory widths 32 to 1024, stream widths 8 to the memory width, burst beats 2 to 256 (B at most the
+                -- beats of 4 KB)
+                for m in 5 to 10 loop
+
+                    for s in 3 to m loop
+
+                        for b in 1 to 8 loop
+                            Cnt_v := minimum(2**b, 4096 / (2**m / 8));
+                            Exp_v := planShort(2**m, 2**s, Cnt_v);
+                            check_value(work.odma_s2mm_pkg.shortBeats(2**m, 2**s, Cnt_v), Exp_v, ERROR,
+                                        "short chunks of " & to_string(2**m) & " / " & to_string(2**s) & " bits, " &
+                                        to_string(Cnt_v) & " burst beats");
+                            N_v   := N_v + 1;
+                        end loop;
+
+                    end loop;
+
+                end loop;
+
+                log(ID_SEQUENCER, "configurations: " & to_string(N_v));
+
             elsif run("test_long_packet") then
                 log(ID_LOG_HDR, "TC-S2-14 a long packet with gaps and backpressure");
                 Len_v       := minimum(MaxLen_c, maximum(65536, 16384 * StreamBytes_c));
@@ -1946,6 +2142,9 @@ begin
                 Gen.Percent <= 50;
                 transfer(region(1), Len_v, source(1), Len_v, "long packet");
             end if;
+
+            -- Every test case: no clock cycle without write data inside a burst while the memory is ready (S2-WR-07)
+            check_value(Obs.WGaps, 0, ERROR, "clock cycles without write data inside a burst");
 
         end loop;
 

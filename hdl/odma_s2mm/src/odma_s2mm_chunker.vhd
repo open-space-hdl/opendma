@@ -34,6 +34,7 @@ library work;
 entity odma_s2mm_chunker is
     generic (
         StreamWidth_g : positive;
+        MemWidth_g    : positive;
         ChunkBeats_g  : positive;
         LengthWidth_g : positive := 14;
         Split_g       : boolean  := false;
@@ -80,6 +81,7 @@ end entity;
 architecture rtl of odma_s2mm_chunker is
 
     constant StreamBytes_c : positive := StreamWidth_g / 8;
+    constant MemBytes_c    : positive := MemWidth_g / 8;
     -- Discard segments: the largest segment of the split
     constant MaxSeg_c      : positive := 2**LengthWidth_g - 1;
     -- Last beat of a full chunk and of a short chunk (Split_g, a buffer that starts inside a stream word)
@@ -160,6 +162,7 @@ begin
     p_comb : process (all) is
         variable v      : TwoProcess_r;
         variable Desc_v : Desc_r;
+        variable Off_v  : natural;
     begin
         v := r;
 
@@ -249,15 +252,17 @@ begin
 
         -- Split_g: the chunk plan of the buffer whose segment the split takes (architecture section 4.2). Every beat of
         -- the buffers before has left the split then, since S2-2 offers a segment only after the descriptor with the
-        -- last beat of the buffer before. A keyhole buffer has full chunks; at a multiple of the stream width the
-        -- first chunk ends at the burst boundary above the address and the later chunks are aligned; inside a stream
-        -- word every chunk is ShortBeats_g beats shorter
+        -- last beat of the buffer before. A keyhole buffer and a buffer at a multiple of the memory word (a full chunk
+        -- covers B memory words) have full chunks; at another multiple of the stream width the first chunk ends at the
+        -- burst boundary above the address and the later chunks are aligned; inside a stream word every chunk is
+        -- ShortBeats_g beats shorter
+        Off_v := to_integer(unsigned(Seg_Offset));
         if Split_g and SegTaken = '1' and r.State = Normal_s then
-            if Seg_Keyhole = '1' then
+            if Seg_Keyhole = '1' or Off_v mod MemBytes_c = 0 then
                 v.Limit := FullLast_c;
                 v.Rest  := FullLast_c;
-            elsif to_integer(unsigned(Seg_Offset)) mod StreamBytes_c = 0 then
-                v.Limit := FullLast_c - to_integer(unsigned(Seg_Offset)) / StreamBytes_c;
+            elsif Off_v mod StreamBytes_c = 0 then
+                v.Limit := FullLast_c - Off_v / StreamBytes_c;
                 v.Rest  := FullLast_c;
             else
                 v.Limit := ShortLast_c;

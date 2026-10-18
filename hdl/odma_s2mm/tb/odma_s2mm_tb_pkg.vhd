@@ -103,6 +103,7 @@ package odma_s2mm_tb_pkg is
         AwFixed   : natural; -- AW handshakes of FIXED bursts
         AwFixLong : natural; -- FIXED bursts of more than 16 beats
         AwFixAddr : natural; -- FIXED bursts at another address than FixedAddr of the harness
+        AwCross   : natural; -- INCR bursts across a multiple of the burst size (B x MemWidth_g / 8 bytes)
         WGaps     : natural; -- Clock cycles between two data beats of a burst with WReady high and WValid low
         EccSec    : Nat3_a;  -- Pulses per buffer
         EccDed    : Nat3_a;

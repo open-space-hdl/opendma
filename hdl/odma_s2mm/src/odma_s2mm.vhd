@@ -178,6 +178,7 @@ begin
     i_chunker : entity work.odma_s2mm_chunker
         generic map (
             StreamWidth_g => StreamWidth_g,
+            MemWidth_g    => MemWidth_g,
             ChunkBeats_g  => ChunkBeats_c,
             LengthWidth_g => LengthWidth_g,
             Split_g       => Split_g,

@@ -121,8 +121,8 @@ testbench. `hdl/<module>/README.md` links the four documents and explains how to
   condition that may hold already is tested before the wait, as the wait itself waits for an event. A bounded delay
   after which either outcome is fine says so in a comment.
 - Tests observe ports and management interfaces only, never internal signals.
-- GHDL is the default simulator; QuestaSim (`python run.py --questa`) is used for code coverage. Every test passes in
-  both simulators.
+- GHDL is the default simulator; QuestaSim (`python run.py --questa`) runs at the time resolution of GHDL (1 fs) and
+  collects the code coverage. Every test passes in both simulators.
 - `run.py` gives every GHDL simulation its own copy of the option `ghdl.sim_flags` and stops when a simulation command
   does not carry exactly the generics of its configuration (VUnit 5.0.0.dev7 shares that list between configurations).
 - A side effect is never obtained by calling an impure function and discarding its result: QuestaSim may remove such
@@ -136,6 +136,10 @@ testbench. `hdl/<module>/README.md` links the four documents and explains how to
 
 ## Git
 
-- `main` holds the integrated state. Every module or change is developed on a branch `feature/<module>` or
-  `bugfix/<topic>` and merged through a pull request once its regression is green.
+- `develop` holds the integrated state and `main` the released state. Every module or change is developed on a branch
+  `feature/<module>` or `bugfix/<topic>` from `develop` and merged into `develop` through a pull request once its
+  regression is green.
+- `main` receives only release branches `release/x.y.z` cut from `develop` and hotfix branches `hotfix/x.y.z`. The
+  full regression in QuestaSim, with and without code coverage, runs on the head of the release branch. Releases are
+  tagged `vX.Y.Z` with semantic versioning, below 1.0.0 until the hardware test.
 - Commit messages: imperative subject line, body explains what and why.

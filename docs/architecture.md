@@ -395,7 +395,7 @@ names its items of the published interface, so the traceability matrix of sectio
   buffers and descriptors and the expected memory, stream and descriptor contents. The sequence player of `tb/`
   executes the sequence through the AXI4-Lite VVC. The model is written from \[PG021\], independently of the RTL and
   without vendor driver code.
-- Simulators: GHDL for every test; QuestaSim with and without code coverage at the end of each batch of features.
+- Simulators: GHDL for every test; QuestaSim with and without code coverage on the head of every release branch.
 
 ### Rules
 

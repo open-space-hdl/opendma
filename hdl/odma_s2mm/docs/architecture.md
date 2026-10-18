@@ -329,10 +329,12 @@ reset); feeder: `Head_s` (next job), `Feed_s` (beats to the master), `Drop_s` (b
   are outstanding, and the stream input does not wait for them, provided the command source has the next command
   ready (the engine presents it, as it fetches one descriptor ahead). The verification report of the core has the
   measured values.
-- Throughput: the channel issues one write command per chunk, and the write master accepts the next command after
-  the data of the previous one, about 7 clock cycles of overhead per command. With equal memory and stream widths
-  and chunks of C stream beats the channel takes about C / (C + 7) beats per clock cycle once its data buffer is
-  full: about 0.7 for chunks of 16 beats (the default of 16-beat bursts at 32 bits), 0.9 for chunks of 64 beats
-  (S2-WR-05), 0.97 for 256 beats. Longer bursts raise it. With a memory four or more times wider than the stream the
-  write side is faster than the stream and the channel takes one beat per clock cycle; the verification report has
-  the measured values.
+- Throughput: the channel issues one write command per chunk, once the chunk is complete in the data buffer. With
+  equal memory and stream widths the write master takes low-latency commands (section 5.5) and issues the burst at
+  once: 0.91 beats per clock cycle with chunks of 16 beats (the defaults), 0.31 with chunks of 2. With a wider memory
+  it issues a burst once its data are in its own buffer, and a command costs up to about 7 clock cycles: at twice the
+  stream width 0.52 beats per clock cycle with chunks of 8 beats, 0.70 with 16 and 0.95 with 64 (S2-WR-05 requires
+  0.9 from 64 beats). Longer bursts raise it. With a memory four or more times wider than the stream the write side
+  is faster than the stream and the channel takes one beat per clock cycle. A buffer that does not start at a
+  multiple of the memory word adds a burst per chunk where the chunk plan of section 4.2 keeps full chunks; the
+  verification report has the measured values.

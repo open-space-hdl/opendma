@@ -19,6 +19,10 @@ document. This page lists the rules and the few OpenDMA-specific additions.
   `to_integer(...)` or a concatenation: declare a signal or constant of the port's subtype and associate it.
   QuestaSim with full optimisation can give the implicit signal of an expression actual a range that matches neither
   the port nor the expression and stop the simulation.
+- A record field that is an array of arrays uses a fully constrained array type (`type T is array (0 to N - 1) of
+  E`), not an index constraint on an unconstrained array type (`U : T(0 to N - 1)`): through an alias of an element
+  of an array of records, xsim 2025.2 can give such a field the element constraint of another field. Vectors of
+  scalars (`std_logic_vector`, `unsigned`, `signed`) have no element constraint and are not affected.
 - Every data path between blocks is a valid / ready stream (AXI4-Stream handshake semantics) or a valid-only stream
   of one-cycle events where the receiver is never slower than the source.
 - Packet streams carry the first byte of a packet in byte lane 0 (`TData(7:0)`). All bytes of a beat are valid

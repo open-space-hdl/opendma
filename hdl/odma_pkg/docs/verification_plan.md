@@ -35,6 +35,7 @@ Simulator: GHDL; QuestaSim for the coverage batch. Clock 100 MHz.
 | `test_seq_errors` (TC-PKG-10) | A mismatching R, a P and an I whose timeout expires, an E that does not match the sent packet: each raises one error alert that names its line; a T for a packet index that no S command before the line has sent raises one TB_ERROR alert | PKG-08 |
 | `test_mem_fill` (TC-PKG-12) | A fill of 64 KB: every byte is `odmaMemByte` of its address and the seed; windows of 256 bytes at the shifts 1, 2, 3, 64, 256, 4096, 8192 and 32768 bytes differ from the window at the start in at least 200 bytes, and so do windows of the function at the shifts 2**16, 2**20, 2**32 and 2**48; another seed gives other bytes | PKG-10 |
 | `test_model_dr` (TC-PKG-11) | The model generates the reference DR scenario (reset, one MM2S and one S2MM transfer with interrupt, one MM2S transfer by polling, a 64-bit buffer address) in the `pre_config` of the test; the sequence, the memory image and the expected memory equal the golden files written by hand from PG021 chapter 4 | PKG-09 |
+| `test_timed_waits` (TC-PKG-16) | Each timed wait of `odma_tb_pkg` on a signal, a clock and a counter of the bench. Without an alert: a rise or a count that reaches n within the timeout ends the wait at that time, as does '1' at the first edge that has it; a rise one delta cycle after the start, a rise or a count above n one clock period before the timeout, '1' at the last edge before the timeout. With one error alert each: a rise or a count that reaches n only at the timeout, a '1' or a count that held already and did not change (the wait ends at the timeout), no rise, a count below n, '1' at the edge of the timeout, '1' only after the last edge before the timeout | PKG-14 |
 
 ## 4. Requirement coverage
 
@@ -53,6 +54,7 @@ Simulator: GHDL; QuestaSim for the coverage batch. Clock 100 MHz.
 | PKG-08 | TC-PKG-09, TC-PKG-10 |
 | PKG-09 | TC-PKG-11 |
 | PKG-10 | TC-PKG-12 |
+| PKG-14 | TC-PKG-16 |
 
 ## 5. Negative tests
 
@@ -60,3 +62,4 @@ Simulator: GHDL; QuestaSim for the coverage batch. Clock 100 MHz.
 | --- | --- |
 | Memory model: 4 KB boundary, burst length, FIXED length, burst type, beat size, `WLast`, write window | TC-PKG-08 |
 | Sequence player: compare, poll timeout, interrupt timeout, stream mismatch, wait for a packet not sent | TC-PKG-10 |
+| Timed waits: a condition that held already and did not change, true only at the timeout, never true; for the edge wait a '1' only after the last edge before the timeout | TC-PKG-16 |

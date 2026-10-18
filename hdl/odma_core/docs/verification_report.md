@@ -2,10 +2,10 @@
 
 ## 1. Test results
 
-Run on 2026-10-18 in the GHDL CI of the repository, GitHub Actions run 39096149208 on commit 831a6e3 (its
-`results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
-`python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_core_tb`, and
-`python lint/synth_check.py -j 4` in the same run.
+Run on 2026-10-18 locally, on commit 0a041f3 (its `results.xml`), with
+GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
+`python run.py -p 2 --xunit-xml results.xml`, the tests of `odma_core_tb`, and
+`python lint/synth_check.py -j 2` on the same commit.
 
 | Testbench or check | Tests | Passed |
 | --- | --- | --- |

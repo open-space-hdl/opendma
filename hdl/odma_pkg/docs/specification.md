@@ -6,9 +6,9 @@
 lane functions of the stream conventions (P7), the address range check of memory safety (P6), the consistency check
 of the core generics and the flip pattern of the error injection into the FT buffers. The shared verification
 components in `tb/` (AXI memory model, sequence player and the model of the programming sequences) are verified with
-this module. The test end procedure `odmaTestEnd` of
-`tb/odma_tb_pkg.vhd`, which fails a test on an unexpected alert or on a missing expected alert, is exercised by every
-negative test of the repository.
+this module, and so are the timed waits of `tb/odma_tb_pkg.vhd` that check their condition. The test end procedure
+`odmaTestEnd` of `tb/odma_tb_pkg.vhd`, which fails a test on an unexpected alert or on a missing expected alert, is
+exercised by every negative test of the repository.
 
 ## 2. Requirements
 
@@ -26,6 +26,7 @@ negative test of the repository.
 | PKG-12 | The AXI memory model shall map a FIFO window, one memory word per instance, to a backing range: the k-th beat that accesses the window word (counted per direction from the setting on) accesses the word at the backing address plus k times the data width, so that the beats of a FIXED burst at the window read or write consecutive words of the backing range, as a FIFO peripheral at a fixed address delivers or takes a new word per beat. | none (verification) |
 | PKG-07 | The AXI memory model shall raise an error alert for a burst that crosses a 4 KB boundary, for a burst longer than its configured maximum or a FIXED burst longer than 16 beats, for a WRAP or reserved burst type, for a beat narrower than the data width, for a missing or early `WLast` and for a strobed byte outside the configured write window. | none (verification) |
 | PKG-08 | The sequence player of the testbenches shall execute a sequence file line by line through the AXI4-Lite VVC: register write, read with masked compare, poll until a masked value within a timeout, wait for an interrupt level within a timeout, and delay; a failed compare or an expired timeout shall raise an error alert that names the line. | none (verification) |
+| PKG-14 | The timed waits of the verification package (`odmaWaitHigh`, `odmaWaitHighAtEdge`, `odmaWaitAtLeast`) shall raise an error alert unless their condition ended the wait before the timeout: also when the condition held already and did not change, when it becomes true only at the timeout, and, for the wait for a clock edge, when the signal is '1' only after the last edge before the timeout. A condition that becomes true before the timeout, also one delta cycle after the start or one clock period before the timeout, shall end the wait without an alert. | none (verification) |
 | PKG-09 | The model of the programming sequences shall generate, for a described DR transfer set, the sequence file of PG021 chapter 4 (reset, start, address, length, completion by interrupt or polling, status check), the memory image with the source buffers and the expected memory and stream contents, independently of the RTL. | none (verification) |
 
 The requirements of the package trace to no item of the published interface: the functions are verified here and

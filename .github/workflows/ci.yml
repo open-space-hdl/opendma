@@ -1,14 +1,13 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 jobs:
   simulation-ghdl:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
@@ -41,6 +40,7 @@ jobs:
           path: results.xml
 
   linting:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository

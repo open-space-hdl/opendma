@@ -2,9 +2,9 @@
 
 ## 1. Test results
 
-Run on 2026-10-18 in the GHDL CI of the repository, GitHub Actions run 39096149208 on commit 831a6e3 (its
-`results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
-`python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_pkg_tb`.
+Run on 2026-10-18 locally, on commit 0a041f3 (its `results.xml`), with
+GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
+`python run.py -p 2 --xunit-xml results.xml`, the tests of `odma_pkg_tb`.
 
 | Test ID | Test case | Status |
 | --- | --- | --- |
@@ -23,12 +23,13 @@ Run on 2026-10-18 in the GHDL CI of the repository, GitHub Actions run 390961492
 | `test_mem_fill` | TC-PKG-12 | PASS |
 | `test_mem_fifo` | TC-PKG-14 | PASS |
 | `test_resp_err` | TC-PKG-15 | PASS |
+| `test_timed_waits` | TC-PKG-16 | PASS |
 
 QuestaSim runs with the next batch of features (module workflow of the repository).
 
 ## 2. Summary
 
-All 15 test cases pass; every requirement of the specification is covered (see the verification plan). VSG reports no
+All 16 test cases pass; every requirement of the specification is covered (see the verification plan). VSG reports no
 errors and no warnings.
 
 - The functions agree with the independent computations of the bench for every tested width and length, and the
@@ -45,6 +46,10 @@ errors and no warnings.
 - The sequence player executes every command, waits with `T` for single packets while later ones are queued, and
   reports a failed compare, an expired poll, an expired interrupt
   wait and a mismatching stream packet with the line that caused them.
+- The timed waits of `odma_tb_pkg` end at the expected time when their condition becomes true before the timeout,
+  also one delta cycle after the start and one clock period before the timeout, and raise exactly one error when
+  it becomes true only at the timeout, held already and did not change, or never becomes true, and for the edge
+  wait when the signal is '1' only after the last edge before the timeout.
 - The model of the programming sequences reproduces the hand-written golden files of the reference scenario line by
   line, and its memory image passes the round trip through the loader and the checker.
 
@@ -60,6 +65,9 @@ errors and no warnings.
 | Memory model: `WLast` missing, `WLast` early | TC-PKG-08 | 1 each |
 | Memory model: strobed bytes outside the write window | TC-PKG-08 | 3 (one per beat) |
 | Sequence player: compare, poll, interrupt wait, stream packet, wait for a packet not sent | TC-PKG-10 | 1 each |
+| `odmaWaitHigh`: rise at the timeout, '1' that held already, no rise | TC-PKG-16 | 1 each |
+| `odmaWaitHighAtEdge`: '1' at the edge of the timeout, '1' only after the last edge before the timeout | TC-PKG-16 | 1 each |
+| `odmaWaitAtLeast`: count that reaches n at the timeout, count that held already, count below n | TC-PKG-16 | 1 each |
 
 ## 4. Remarks on the environment
 
@@ -67,3 +75,14 @@ errors and no warnings.
   which the bench changes only while the VVC is idle.
 - The UVVM AXI4 and AXI4-Lite VVCs execute reads and writes on independent channels. The bench completes every burst
   before the next one, and the sequence player completes every register write before its next command.
+
+## 5. Checks of the testbench
+
+Each of the following faults, inserted into a copy of `tb/odma_tb_pkg.vhd`, fails the test case named; the file of
+the repository passes it:
+
+| Fault | Failing test case |
+| --- | --- |
+| `odmaWaitHigh` checks the value only, not that the condition ended the wait before the timeout | TC-PKG-16 |
+| `odmaWaitHighAtEdge` checks the value only, not that the condition ended the wait before the timeout | TC-PKG-16 |
+| `odmaWaitAtLeast` checks the count only, not that the condition ended the wait before the timeout | TC-PKG-16 |

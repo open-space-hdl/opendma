@@ -18,4 +18,5 @@ Tests: `python run.py "*odma_mm2s*"`
 | `tb/odma_mm2s_th.vhd` | Harness: clock, reset, DUT, AXI memory model on the read port, AXI4-Stream slave VVC and stream checker on the stream port, monitors of the results, the AXI4 port and the ECC events |
 | `tb/odma_mm2s_tb.vhd` | VUnit testbench, one `run("test_...")` per test case of the verification plan |
 | `tb/odma_mm2s_tb_pkg.vhd` | Configuration of the stream checker and the observations of the harness |
+| `tb/odma_mm2s_tb_pktvar_pkg.vhd` | The queue of the packets that the stream checker expects (shared variable `Pkts_v`) |
 | `tb/vunit_config.py` | VUnit configurations of the generics (verification plan, section 2) |

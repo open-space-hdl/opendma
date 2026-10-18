@@ -30,6 +30,7 @@ library work;
     use work.odma_tb_mem_pkg.all;
     use work.odma_tb_memvar_pkg.all;
     use work.odma_s2mm_tb_pkg.all;
+    use work.odma_s2mm_tb_pktvar_pkg.all;
 
 ---------------------------------------------------------------------------------------------------
 -- Entity
@@ -334,7 +335,7 @@ begin
             bytes : natural;
             mode  : KeepMode_t := KeepNormal) is
         begin
-            work.odma_s2mm_tb_pkg.Pkts_v.push(src, bytes, mode);
+            work.odma_s2mm_tb_pktvar_pkg.Pkts_v.push(src, bytes, mode);
         end procedure;
 
         procedure waitRes (n : natural) is

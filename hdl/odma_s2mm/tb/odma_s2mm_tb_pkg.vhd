@@ -59,8 +59,6 @@ package odma_s2mm_tb_pkg is
 
     end protected;
 
-    shared variable Pkts_v : PktQueue_t;
-
     -- TValid of the stream generator
     type GenCfg_r is record
         Percent : natural;   -- Percentage of clock cycles with TValid high while a packet is sent

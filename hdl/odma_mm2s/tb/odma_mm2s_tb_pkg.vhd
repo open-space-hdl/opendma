@@ -55,8 +55,6 @@ package odma_mm2s_tb_pkg is
 
     end protected;
 
-    shared variable Pkts_v : PktQueue_t;
-
     -- TReady of the stream checker
     type ReadyCfg_r is record
         Percent     : natural;   -- Percentage of clock cycles with TReady high

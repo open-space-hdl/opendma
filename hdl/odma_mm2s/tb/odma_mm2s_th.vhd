@@ -29,6 +29,7 @@ library work;
     use work.odma_pkg.all;
     use work.odma_tb_memvar_pkg.all;
     use work.odma_mm2s_tb_pkg.all;
+    use work.odma_mm2s_tb_pktvar_pkg.all;
 
 ---------------------------------------------------------------------------------------------------
 -- Entity

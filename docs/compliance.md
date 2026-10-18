@@ -150,12 +150,12 @@ of the published interface included).
 | --- | --- | --- | --- | --- |
 | `odma_core` | 27 | 27 | - | - |
 | `odma_mm2s` | 22 | 22 | - | - |
-| `odma_pkg` | 13 | 13 | - | - |
+| `odma_pkg` | 14 | 14 | - | - |
 | `odma_registers` | 53 | 53 | - | - |
 | `odma_s2mm` | 26 | 26 | - | - |
 | `odma_sg` | 27 | 27 | - | - |
 
-Requirements: 168; without a test case: 0; test cases of the plans not run by a testbench: 0.
+Requirements: 169; without a test case: 0; test cases of the plans not run by a testbench: 0.
 
 ## 3. Interpretations of the published interface
 

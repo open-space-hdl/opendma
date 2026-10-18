@@ -71,6 +71,10 @@ architecture sim of odma_pkg_tb is
     signal RawCmd   : natural                       := 0;
     signal RawDone  : std_logic;
     signal AddrHigh : std_logic_vector(31 downto 0) := (others => '0');
+    -- Clock, signal and counter of the timed waits (TC-PKG-16), driven by the test
+    signal WaitClk  : std_logic := '0';
+    signal WaitSig  : std_logic := '0';
+    signal WaitCnt  : natural   := 0;
 
     type NatArray_t is array (natural range <>) of natural;
 
@@ -121,6 +125,8 @@ begin
             AddrHigh => AddrHigh
         );
 
+    WaitClk <= not WaitClk after ClkPeriod_c / 2;
+
     p_main : process is
         variable Keep_v  : std_logic_vector(127 downto 0);
         variable Exp_v   : natural;
@@ -132,6 +138,7 @@ begin
         variable Base_v  : unsigned(63 downto 0);
         variable Diff_v  : natural;
         variable Sh_v    : natural;
+        variable Start_v : time;
 
         constant One_c : unsigned(63 downto 0) := to_unsigned(1, 64);
 
@@ -619,6 +626,99 @@ begin
                 -- The memory image round trip through the loader and the checker of the player package
                 odmaLoadImage(1, output_path(runner_cfg) & "memory.txt");
                 odmaCheckImage(1, tb_path(runner_cfg) & "golden/dr_reference/memory.txt");
+
+            elsif run("test_timed_waits") then
+                log(ID_LOG_HDR, "TC-PKG-16 timed waits that check their condition");
+                -- odmaWaitHigh: a rise within the timeout ends the wait at the rise
+                WaitSig <= '0';
+                wait for ClkPeriod_c;
+                Start_v := now;
+                WaitSig <= '1' after 10 * ClkPeriod_c;
+                odmaWaitHigh(WaitSig, 100 * ClkPeriod_c, "odmaWaitHigh, rise");
+                check_value(now - Start_v, 10 * ClkPeriod_c, ERROR, "odmaWaitHigh, rise: the wait ends at the rise");
+                -- A rise one delta cycle after the start and a rise one clock period before the timeout pass
+                WaitSig <= '0';
+                wait for ClkPeriod_c;
+                WaitSig <= '1';
+                odmaWaitHigh(WaitSig, 20 * ClkPeriod_c, "odmaWaitHigh, rise one delta cycle after the start");
+                WaitSig <= '0';
+                wait for ClkPeriod_c;
+                WaitSig <= '1' after 19 * ClkPeriod_c;
+                odmaWaitHigh(WaitSig, 20 * ClkPeriod_c, "odmaWaitHigh, rise one clock period before the timeout");
+                -- A rise at the timeout, a '1' that held already and did not move, no rise: one error each
+                WaitSig <= '0';
+                wait for ClkPeriod_c;
+                WaitSig <= '1' after 20 * ClkPeriod_c;
+                increment_expected_alerts_and_stop_limit(ERROR, 1);
+                odmaWaitHigh(WaitSig, 20 * ClkPeriod_c, "odmaWaitHigh, rise at the timeout");
+                Start_v := now;
+                increment_expected_alerts_and_stop_limit(ERROR, 1);
+                odmaWaitHigh(WaitSig, 20 * ClkPeriod_c, "odmaWaitHigh, '1' that held already");
+                check_value(now - Start_v, 20 * ClkPeriod_c, ERROR,
+                            "odmaWaitHigh, '1' that held already: the wait ends at the timeout");
+                WaitSig <= '0';
+                wait for ClkPeriod_c;
+                increment_expected_alerts_and_stop_limit(ERROR, 1);
+                odmaWaitHigh(WaitSig, 20 * ClkPeriod_c, "odmaWaitHigh, no rise");
+
+                -- odmaWaitHighAtEdge: '1' at a rising edge ends the wait at that edge
+                WaitSig <= '0';
+                wait until rising_edge(WaitClk);
+                Start_v := now;
+                WaitSig <= '1' after 3 * ClkPeriod_c + ClkPeriod_c / 4;
+                odmaWaitHighAtEdge(WaitClk, WaitSig, 20 * ClkPeriod_c, "odmaWaitHighAtEdge, '1' at an edge");
+                check_value(now - Start_v, 4 * ClkPeriod_c, ERROR,
+                            "odmaWaitHighAtEdge, '1' at an edge: the wait ends at the first edge with '1'");
+                -- '1' at the last edge before the timeout passes
+                WaitSig <= '0';
+                wait until rising_edge(WaitClk);
+                WaitSig <= '1' after 4 * ClkPeriod_c - ClkPeriod_c / 4;
+                odmaWaitHighAtEdge(WaitClk, WaitSig, 4 * ClkPeriod_c + ClkPeriod_c / 2,
+                                   "odmaWaitHighAtEdge, '1' at the last edge before the timeout");
+                -- '1' at the edge of the timeout, '1' only after the last edge before the timeout: one error each
+                WaitSig <= '0';
+                wait until rising_edge(WaitClk);
+                WaitSig <= '1' after 4 * ClkPeriod_c - ClkPeriod_c / 4;
+                increment_expected_alerts_and_stop_limit(ERROR, 1);
+                odmaWaitHighAtEdge(WaitClk, WaitSig, 4 * ClkPeriod_c,
+                                   "odmaWaitHighAtEdge, '1' at the edge of the timeout");
+                WaitSig <= '0';
+                wait until rising_edge(WaitClk);
+                WaitSig <= '1' after 4 * ClkPeriod_c + ClkPeriod_c / 4;
+                increment_expected_alerts_and_stop_limit(ERROR, 1);
+                odmaWaitHighAtEdge(WaitClk, WaitSig, 4 * ClkPeriod_c + ClkPeriod_c / 2,
+                                   "odmaWaitHighAtEdge, '1' only after the last edge before the timeout");
+
+                -- odmaWaitAtLeast: the count reaching n ends the wait, a count below n does not
+                WaitCnt <= 0;
+                wait for ClkPeriod_c;
+                Start_v := now;
+                WaitCnt <= 2 after 2 * ClkPeriod_c, 3 after 6 * ClkPeriod_c;
+                odmaWaitAtLeast(WaitCnt, 3, 100 * ClkPeriod_c, "odmaWaitAtLeast, count reaches n");
+                check_value(now - Start_v, 6 * ClkPeriod_c, ERROR,
+                            "odmaWaitAtLeast, count reaches n: the wait ends when the count reaches n");
+                -- A count above n one clock period before the timeout passes
+                WaitCnt <= 0;
+                wait for ClkPeriod_c;
+                WaitCnt <= 4 after 19 * ClkPeriod_c;
+                odmaWaitAtLeast(WaitCnt, 3, 20 * ClkPeriod_c,
+                                "odmaWaitAtLeast, count above n one clock period before the timeout");
+                -- The count reaching n at the timeout, a count that held already and did not move, a count below n:
+                -- one error each
+                WaitCnt <= 0;
+                wait for ClkPeriod_c;
+                WaitCnt <= 3 after 20 * ClkPeriod_c;
+                increment_expected_alerts_and_stop_limit(ERROR, 1);
+                odmaWaitAtLeast(WaitCnt, 3, 20 * ClkPeriod_c, "odmaWaitAtLeast, count reaches n at the timeout");
+                Start_v := now;
+                increment_expected_alerts_and_stop_limit(ERROR, 1);
+                odmaWaitAtLeast(WaitCnt, 3, 20 * ClkPeriod_c, "odmaWaitAtLeast, count that held already");
+                check_value(now - Start_v, 20 * ClkPeriod_c, ERROR,
+                            "odmaWaitAtLeast, count that held already: the wait ends at the timeout");
+                WaitCnt <= 2;
+                wait for ClkPeriod_c;
+                increment_expected_alerts_and_stop_limit(ERROR, 1);
+                odmaWaitAtLeast(WaitCnt, 3, 20 * ClkPeriod_c, "odmaWaitAtLeast, count below n");
             end if;
 
         end loop;

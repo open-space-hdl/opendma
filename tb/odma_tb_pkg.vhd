@@ -65,8 +65,10 @@ package odma_tb_pkg is
     procedure odmaTestEnd (signal runner : inout runner_sync_t);
 
     -- Timed waits that must end with their condition: each waits as "wait until <condition> for timeout" does
-    -- (also for an event when the condition already holds) and then raises an ERROR when the condition does not
-    -- hold, so that a missing handshake or event is not a silent timeout
+    -- (for an event, also when the condition already holds) and then raises an ERROR unless the condition ended
+    -- the wait before the timeout, so that a missing handshake or event is not a silent timeout, also when the
+    -- condition held already and nothing moved. A caller that accepts a condition that holds already does not
+    -- enter the wait
     -- Until sig is '1'
     procedure odmaWaitHigh (
         signal sig : in std_logic;
@@ -112,9 +114,12 @@ package body odma_tb_pkg is
         signal sig : in std_logic;
         timeout    : in time;
         msg        : in string) is
+        variable T0_v : time;
     begin
+        T0_v := now;
         wait until sig = '1' for timeout;
-        check_value(sig, '1', ERROR, msg);
+        check_value(sig = '1' and now - T0_v < timeout, ERROR,
+                    msg & ": '1' within " & to_string(timeout / 1 ns) & " ns");
     end procedure;
 
     procedure odmaWaitHighAtEdge (
@@ -122,9 +127,12 @@ package body odma_tb_pkg is
         signal sig : in std_logic;
         timeout    : in time;
         msg        : in string) is
+        variable T0_v : time;
     begin
+        T0_v := now;
         wait until rising_edge(clk) and sig = '1' for timeout;
-        check_value(sig, '1', ERROR, msg);
+        check_value(sig = '1' and now - T0_v < timeout, ERROR,
+                    msg & ": '1' at a rising edge within " & to_string(timeout / 1 ns) & " ns");
     end procedure;
 
     procedure odmaWaitAtLeast (
@@ -132,9 +140,13 @@ package body odma_tb_pkg is
         n          : in natural;
         timeout    : in time;
         msg        : in string) is
+        variable T0_v : time;
     begin
+        T0_v := now;
         wait until cnt >= n for timeout;
-        check_value(cnt >= n, ERROR, msg & ": " & to_string(cnt) & ", expected at least " & to_string(n));
+        check_value(cnt >= n and now - T0_v < timeout, ERROR,
+                    msg & ": " & to_string(cnt) & ", at least " & to_string(n) & " within " &
+                    to_string(timeout / 1 ns) & " ns");
     end procedure;
 
     function odmaCountBytes (

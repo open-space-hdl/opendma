@@ -117,8 +117,9 @@ testbench. `hdl/<module>/README.md` links the four documents and explains how to
   procedure of `odma_tb_pkg`).
 - A timed wait (`wait until <condition> for <timeout>`) ends with a check of its condition, so that a missing event
   fails the test instead of timing out silently: the procedures `odmaWaitHigh`, `odmaWaitHighAtEdge` and
-  `odmaWaitAtLeast` of `odma_tb_pkg` wait and check. A bounded delay after which either outcome is fine says so in a
-  comment.
+  `odmaWaitAtLeast` of `odma_tb_pkg` wait and check that the condition ended the wait before the timeout. A
+  condition that may hold already is tested before the wait, as the wait itself waits for an event. A bounded delay
+  after which either outcome is fine says so in a comment.
 - Tests observe ports and management interfaces only, never internal signals.
 - GHDL is the default simulator; QuestaSim (`python run.py --questa`) is used for code coverage. Every test passes in
   both simulators.

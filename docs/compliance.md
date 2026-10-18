@@ -124,8 +124,8 @@ the published interface are listed in section 6 of the architecture and in the m
 | `CLK.ASYNC` | Section "Clocking", asynchronous mode, Table 43 | Out of scope (D1) | - | - | - | Out of scope |
 | `RST.HARD` | Section "Resets" | RG-3 | a | RG-RS-01 | TC-RG-11 | Verified |
 | `RST.OUT` | Table 3, reset outputs of the streams (I12) | RG-3 | a | CO-IF-02, CO-RS-01, RG-RS-03 | TC-CO-02, TC-CO-05, TC-CO-06, TC-RG-10 | Verified |
-| `FEAT.4K` | Section "Core Overview", 4 KB address boundary | MM-1 (MM2S), S2-2 (S2MM) | a | MM-RD-02, S2-WR-03 | TC-MM-03, TC-S2-04 | Verified |
-| `FEAT.BURST` | Table 44, `c_mm2s_burst_size`, `c_s2mm_burst_size` | MM-1 (MM2S), S2-2 (S2MM) | a | MM-RD-02, S2-WR-03 | TC-MM-03, TC-S2-04 | Verified |
+| `FEAT.4K` | Section "Core Overview", 4 KB address boundary | MM-1 (MM2S), S2-2 (S2MM) | a | MM-RD-02, S2-WR-03 | TC-MM-03, TC-S2-04, TC-S2-24 | Verified |
+| `FEAT.BURST` | Table 44, `c_mm2s_burst_size`, `c_s2mm_burst_size` | MM-1 (MM2S), S2-2 (S2MM) | a | MM-RD-02, S2-WR-03 | TC-MM-03, TC-S2-04, TC-S2-24 | Verified |
 | `FEAT.UNALIGNED` | Table 44, `c_include_mm2s_dre`, `c_include_s2mm_dre` (D2) | MM-1 (MM2S), S2-2 (S2MM) | a | MM-RD-01, S2-WR-01 | TC-MM-01, TC-MM-02, TC-MM-14, TC-S2-01, TC-S2-02, TC-S2-05, TC-S2-14, TC-S2-16 | Verified |
 | `FEAT.ADDR64` | Table 44, `c_addr_width` | CO-1 | a | CO-CF-01 | TC-CO-01, TC-CO-02, TC-CO-07, TC-CO-09 | Verified |
 | `FEAT.WIDTH` | Table 44, memory and stream data widths | CO-1 | a | CO-CF-01 | TC-CO-01, TC-CO-02, TC-CO-07, TC-CO-09 | Verified |
@@ -152,10 +152,10 @@ of the published interface included).
 | `odma_mm2s` | 22 | 22 | - | - |
 | `odma_pkg` | 14 | 14 | - | - |
 | `odma_registers` | 53 | 53 | - | - |
-| `odma_s2mm` | 26 | 26 | - | - |
+| `odma_s2mm` | 28 | 28 | - | - |
 | `odma_sg` | 27 | 27 | - | - |
 
-Requirements: 169; without a test case: 0; test cases of the plans not run by a testbench: 0.
+Requirements: 171; without a test case: 0; test cases of the plans not run by a testbench: 0.
 
 ## 3. Interpretations of the published interface
 
@@ -191,7 +191,7 @@ state it (the architecture, section 6, and the module specifications, section 4)
 | R6 | - | Both `DMACR.Reset` bits during a soft reset | Both read 1 (RG-CR-06) | odma_registers |
 | R7 | - | Writes not affected by the strobes (Register Space note) | All 32 bits taken; also for partial strobes (RG-IF-03) | odma_registers |
 | R8 | - | `RS` = 1 written while the channel stops after a halt request | No effect, the channel halts; software waits for `Halted` before a restart (RG-CR-01) | odma_registers |
-| R9 | - | The delay timer "begins counting at the end of a packet and resets with receipt of a new packet or a timeout event" (Table 6); the threshold counter after a delay interrupt is not described | The timer runs only after a packet that has not raised `IOC_Irq`, in steps of 125 clock cycles; a timeout sets `Dly_Irq` and reloads the threshold counter, so that the next threshold counts the packets after the delay interrupt (RG-SG-07) | odma_registers |
+| R9 | - | Table 6: the delay timer starts once a packet has ended and starts over when the next packet arrives or when it expires; the threshold counter after a delay interrupt is not described | The timer runs only after a packet that has not raised `IOC_Irq`, in steps of 125 clock cycles; a timeout sets `Dly_Irq` and reloads the threshold counter, so that the next threshold counts the packets after the delay interrupt (RG-SG-07) | odma_registers |
 | R10 | - | Table 6 (`MM2S_DMACR.IRQDelay`): the delay timer resets with the receipt of a new packet; when a packet starts relative to the completion of the one before is not described for MM2S | The timer stops and clears at the first beat of a packet at the stream port of the channel (RG-SG-07). The MM2S engine fetches and issues the next descriptor before the transfer in progress ends (`odma_sg` SGI-08), so the next packet can start before the completion event of the one before; the timer then runs during that packet. Observable: an MM2S `Dly_Irq` can be set while the next packet is being sent; the completed packets are in memory as described by their status | odma_registers |
 | S1 | - | Table 24: a buffer shorter than the packet gives undefined results; Table 17: `DMAIntErr` | No byte beyond the buffer, the rest discarded, internal error (S2-RS-02) | odma_s2mm |
 | S2 | - | Write errors in the middle of a packet are not described | No further write, rest discarded, result once the outstanding writes have answered (S2-RS-03, S2-RS-04) | odma_s2mm |

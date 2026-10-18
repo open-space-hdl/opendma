@@ -4,7 +4,7 @@
 # ---------------------------------------------------------------------------------------------------
 """VUnit configurations of odma_s2mm_tb (verification plan, section 2): the tests of phase a run in every
 configuration, the tests of Scatter/Gather Mode in the configurations with the stream split (prefix s_); together
-they simulate every memory and stream width, and every stream width up to 512 bits with the split. The data buffer
+they simulate every memory and stream width, and every stream width with the split. The data buffer
 holds four bursts, the default of the core."""
 
 # Name: (MemWidth_g, StreamWidth_g, BurstBeats_g, AddrWidth_g, LengthWidth_g)
@@ -21,17 +21,20 @@ CONFIGS = {
     "w1024_s1024": (1024, 1024, 256, 64, 12),
 }
 
-# Configurations that also run with the stream split: every stream width up to 512 bits, the shortest length width
-SPLIT = ("w64_s8", "w256_s16", "w32_s32", "w128_s64", "w256_s128", "w512_s256", "w512_s512", "w1024_s8")
+# Configurations that also run with the stream split: every stream width, the shortest length width, bursts limited
+# by 4 KB (w1024_s1024)
+SPLIT = ("w64_s8", "w256_s16", "w32_s32", "w128_s64", "w256_s128", "w512_s256", "w512_s512", "w1024_s8",
+         "w1024_s1024")
 
 # Tests of Scatter/Gather Mode: only with the stream split
-SG_TESTS = ("test_split", "test_split_wait", "test_split_halt")
+SG_TESTS = ("test_split", "test_split_wait", "test_split_halt", "test_chunk_align")
 # Tests that need a packet in the data buffer before its command or a packet longer than its buffer: only without
 # the split, which excludes both by design (verification plan, section 2)
 DR_TESTS = ("test_early_data", "test_overflow")
-# The halt sweep: the default and the 2-beat chunks without the split, and with the split the narrowest lag (two
-# bytes of an 8-bit stream) and the widest (two beats of 512 bits, a whole chunk)
-SWEEP = {"test_halt_sweep": ("w32_s32", "w512_s512", "s_w64_s8", "s_w512_s512")}
+# Tests in the configurations listed only: the halt sweep in the default and the 2-beat chunks without the split, and
+# with the split the narrowest lag (two bytes of an 8-bit stream) and the widest (two beats of 512 bits, a whole
+# chunk); the rule of the short chunks, which covers every configuration of the generic ranges itself, in the default
+SWEEP = {"test_halt_sweep": ("w32_s32", "w512_s512", "s_w64_s8", "s_w512_s512"), "test_short_rule": ("w32_s32",)}
 
 
 def configure(lib):

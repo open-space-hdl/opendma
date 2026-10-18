@@ -53,10 +53,13 @@ entity odma_s2mm_write is
         Res_Eof      : out   std_logic;
         Res_Err      : out   XferErr_t;
         Res_Sof      : out   std_logic;
-        -- Segment of the stream split (Split_g) and the flush of the rest of a packet
+        -- Segment of the stream split (Split_g) with the address and the keyhole of its transfer, and the flush of the
+        -- rest of a packet
         Seg_Valid    : out   std_logic;
         Seg_Size     : out   std_logic_vector(LengthWidth_g - 1 downto 0);
         Seg_Ready    : in    std_logic;
+        Seg_Addr     : out   std_logic_vector(AddrWidth_g - 1 downto 0);
+        Seg_Keyhole  : out   std_logic;
         FlushReq     : out   std_logic;
         -- Chunk buffer (read side) and the state of the chunk former
         Desc_Data    : in    std_logic_vector(DescWidth_c - 1 downto 0);
@@ -488,6 +491,10 @@ begin
     CmdWr_Valid <= '1' when r.State = Issue_s else '0';
     Seg_Valid   <= r.SegValid;
     Seg_Size    <= r.SegSize;
+    -- The chunk plan of S2-1 (architecture section 4.2): while the segment waits, the transfer of the segment is the
+    -- current one, since the next command is accepted only after it has ended
+    Seg_Addr    <= std_logic_vector(r.Addr);
+    Seg_Keyhole <= r.Keyhole;
     -- Split_g: S2-1 discards the rest of the packet that has not passed the split (architecture section 4.3)
     FlushReq <= '1' when Split_g and (r.FlushPend = '1' or r.State = Flush_s) else '0';
     Wr_Data  <= Buf_Data;

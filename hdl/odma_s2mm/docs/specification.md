@@ -3,10 +3,11 @@
 ## 1. Overview
 
 `odma_s2mm` is the stream to memory channel of OpenDMA (architecture section 7.3): S2-1 receives the S2MM stream
-into an FT data buffer and cuts each packet into chunks of one memory burst, S2-2 writes the complete chunks into the
-buffer of the transfer command through an AXI4 write master and returns one transfer result per command. The channel
-executes the commands of the register interface (DR mode) and of the Scatter/Gather engine (SG mode) through the
-same internal interface (command, result, run, drain, stopped; module architecture of `odma_registers`, section 3).
+into an FT data buffer and cuts each packet into chunks of at most one memory burst, S2-2 writes the complete chunks
+into the buffer of the transfer command through an AXI4 write master and returns one transfer result per command.
+The channel executes the commands of the register interface (DR mode) and of the Scatter/Gather engine (SG mode)
+through the same internal interface (command, result, run, drain, stopped; module architecture of `odma_registers`,
+section 3).
 
 This specification covers phases a and b: one packet per transfer, with `Split_g` (Scatter/Gather Mode) packets
 spread over several buffers, and keyhole writes. The status stream S2-3 (phase c) follows.
@@ -18,7 +19,7 @@ spread over several buffers, and keyhole writes. The status stream S2-3 (phase c
 | `S_S2mm_*` | Stream peer (AXI4-Stream master) | Sends packets of any length from one byte, beats with gaps of any length, also stops in the middle of a packet for any time; marks the last beat with `TLast`; valid bytes contiguous from lane 0 in the last beat; may send a last beat without valid bytes; `TKeep` of other beats is not relied upon |
 | `M_AxiS2mm_*` | Memory through an AXI4 interconnect | Accepts write bursts in any order of ready; answers every burst with one response in the order of the bursts (no IDs), OKAY, SLVERR or DECERR |
 | Command, result, run, drain, stopped | `odma_registers` (DR mode), `odma_sg` (SG mode) | Present one command at a time, possibly long before the packet arrives (SG mode: the engine presents the next command while the channel still works on the previous one, and it waits at the interface until the channel takes it; DR mode: the next command only after the result); take the results in the order of the commands; lower `Run` to halt, also after every result with an error (architecture D7), and raise `Drain` for a soft reset |
-| Write master | `olo_ft_axi_master_full` at 4.7.0-ft.8 | Takes write data only after the command (alignment); writes the bytes of a command of 1 to 2**`LengthWidth_g` - 1 bytes from any address with strobes; in high-latency mode issues a burst only when its data is buffered; signals `Wr_Done`, or `Wr_Error` with the response code of the first failing burst (`Wr_ErrorResp`), per command; with `CmdWr_Fixed` FIXED bursts of at most 16 beats at the AXI word of the address, the bytes packed from lane 0; at least four clock cycles per command |
+| Write master | `olo_ft_axi_master_full` at 4.7.0-ft.8 | Takes write data only after the command (alignment); writes the bytes of a command of 1 to 2**`LengthWidth_g` - 1 bytes from any address with strobes; in high-latency mode issues a burst only when its data is buffered, in low-latency mode at once, the data following as it arrives; signals `Wr_Done`, or `Wr_Error` with the response code of the first failing burst (`Wr_ErrorResp`), per command; with `CmdWr_Fixed` FIXED bursts of at most 16 beats at the AXI word of the address, the bytes packed from lane 0; at least four clock cycles per command |
 | Stream split | `olo_base_stream_split` at 4.7.0-ft.8 (with `Split_g`) | Cuts the packets into segments of a size in bytes taken from its command input; every segment starts in lane 0, ends with `Out_Last` and is full except its last beat; `Out_InLast` on the last beat of the segment in which the packet ends; takes no input beat while no segment is active; a packet without bytes gives one beat with `Out_Be` all '0'; the segment command must not depend combinationally on `In_Ready` or the outputs |
 
 ## 3. Requirements
@@ -37,7 +38,8 @@ spread over several buffers, and keyhole writes. The status stream S2-3 (phase c
 | --- | --- | --- |
 | S2-ST-01 | The channel shall accept stream beats into its data buffer only while `Run` is '1' and the buffer has space, with `Split_g` also only while a command is active for them (S2-SG-03); while the channel is halted, `S_S2mm_Ready` shall be '0', except while the rest of an interrupted packet is discarded (S2-HA-01) (interpretation I9). | `STRM.S2MM` |
 | S2-ST-02 | The bytes of a beat without `TLast` shall all be taken; of a beat with `TLast`, the bytes up to the first lane whose `TKeep` bit is not set; a last beat without valid bytes shall end the packet (interpretation I10). | `STRM.S2MM` |
-| S2-ST-03 | A packet shall be cut into chunks of one burst, `ChunkBeats` = B x `MemWidth_g` / `StreamWidth_g` beats with B the smaller of `BurstBeats_g` and the beats of 4 KB (4096 / (`MemWidth_g` / 8)), the last chunk ending with the packet and, with `Split_g`, a chunk also ending with the buffer; a chunk shall be written only when all its beats are in the data buffer. | none (architecture D5) |
+| S2-ST-03 | A packet shall be cut into chunks of at most one burst, `ChunkBeats` = B x `MemWidth_g` / `StreamWidth_g` beats with B the smaller of `BurstBeats_g` and the beats of 4 KB (4096 / (`MemWidth_g` / 8)), the last chunk ending with the packet and, with `Split_g`, a chunk also ending with the buffer; without `Split_g` every other chunk has `ChunkBeats` beats, with `Split_g` the chunks follow S2-ST-04; a chunk shall be written only when all its beats are in the data buffer. | none (architecture D5) |
+| S2-ST-04 | With `Split_g`, the chunks of a buffer shall follow its address. When the address is a multiple of `MemWidth_g` / 8, every chunk shall have `ChunkBeats` beats (it covers B memory words). When the address is another multiple of `StreamWidth_g` / 8, the first chunk shall end at the first multiple of the burst size (B x `MemWidth_g` / 8 bytes) above the address and every later chunk shall have `ChunkBeats` beats, so that each chunk is written in one burst. When the address lies inside a stream word, every chunk shall have `ChunkBeats` - S beats, with S = `MemWidth_g` / `StreamWidth_g` (one memory word less, which fits into one burst) when `MemWidth_g` is above `StreamWidth_g` and B is at least 8, and S = 0 otherwise (the short chunks, measured in the verification report). A keyhole buffer shall have chunks of `ChunkBeats` beats. | none (performance) |
 
 ### 3.3 Writing the buffer (S2-2)
 
@@ -45,10 +47,11 @@ spread over several buffers, and keyhole writes. The status stream S2-3 (phase c
 | --- | --- | --- |
 | S2-WR-01 | Byte i of a packet shall be written to the command address plus i, at any start address and for every buffer length from 1 to 2**`LengthWidth_g` - 1. | `STRM.S2MM`, `FEAT.UNALIGNED` |
 | S2-WR-02 | No byte outside the buffer (command address to address plus length minus 1) shall be written: write strobes are set only for bytes of the buffer that receive packet data. | `STRM.S2MM` |
-| S2-WR-03 | No write burst shall cross a 4 KB address boundary or have more than `BurstBeats_g` beats; a burst shall be requested only when its data is in the write master. | `FEAT.4K`, `FEAT.BURST` |
+| S2-WR-03 | No write burst shall cross a 4 KB address boundary or have more than `BurstBeats_g` beats; with `MemWidth_g` above `StreamWidth_g` a burst shall be requested only when its data is in the write master, with equal widths once the data of its chunk is in the data buffer (S2-ST-03). | `FEAT.4K`, `FEAT.BURST` |
 | S2-WR-04 | A command whose buffer reaches beyond the top of the address space shall cause no write and consume no stream data; its result shall carry the decode error and 0 bytes (interpretation I5). | `S2MM_DMASR.DMADecErr` |
 | S2-WR-06 | A command with a buffer length of 0 shall cause no write and consume no stream data; its result shall carry the internal error code and 0 bytes (interpretation S4). | none (internal interface) |
 | S2-WR-05 | With the memory always ready, the stream sending without gaps and chunks of at least 64 stream beats, the channel shall take at least 0.9 stream beats per clock cycle on average during a packet of 64 chunks. | none (performance) |
+| S2-WR-07 | The data beats of a write burst shall follow each other without a clock cycle in which the memory is ready (`WReady` '1') and no beat is valid. | none (performance) |
 
 ### 3.4 Results and errors
 

@@ -1159,8 +1159,9 @@ def sg_boundary_rate(addr_width=32, length_width=14, buf_len=1024, aligned=True,
     of the pause at each buffer boundary inside a packet (odma_core TC-CO-20); the bench logs the time. The buffers of
     each buffer length lie in their own region (offset buf_len * 4 KB, unaligned buffers 1 MB above), so that the
     scenarios of one test do not overlap. aligned: every buffer starts at a multiple of 64 bytes (a multiple of every
-    memory word up to 512 bits, so a chunk is one burst); otherwise 1 byte above one, so that every chunk covers one
-    memory word more."""
+    memory word up to 512 bits, so a chunk is one burst); otherwise 1 byte above one: inside a stream word wider than
+    8 bits, where a full chunk covers one memory word more, and at a multiple of an 8-bit stream, where the chunk plan
+    of odma_s2mm (S2-ST-04) aligns the chunks after the first."""
     rng = random.Random(seed)
     buffers = Buffers(addr_width, rng, offset=buf_len * 0x1000 + (0 if aligned else 0x10_0000))
     s = Scenario(f"sg_boundary_rate_{buf_len}{'' if aligned else '_unaligned'}", addr_width=addr_width,

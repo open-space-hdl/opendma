@@ -7,7 +7,7 @@
 -- Description
 ---------------------------------------------------------------------------------------------------
 -- Verification helpers shared by all OpenDMA testbenches (VUnit runner plus UVVM): test end check,
--- AXI4-Stream BFM configuration and byte array helpers.
+-- timed waits that check their condition, AXI4-Stream BFM configuration and byte array helpers.
 --
 -- Documentation: hdl/odma_pkg/docs/architecture.md
 
@@ -64,6 +64,29 @@ package odma_tb_pkg is
     -- hands over to the VUnit runner.
     procedure odmaTestEnd (signal runner : inout runner_sync_t);
 
+    -- Timed waits that must end with their condition: each waits as "wait until <condition> for timeout" does
+    -- (also for an event when the condition already holds) and then raises an ERROR when the condition does not
+    -- hold, so that a missing handshake or event is not a silent timeout
+    -- Until sig is '1'
+    procedure odmaWaitHigh (
+        signal sig : in std_logic;
+        timeout    : in time;
+        msg        : in string);
+
+    -- Until a rising edge of clk with sig '1'
+    procedure odmaWaitHighAtEdge (
+        signal clk : in std_logic;
+        signal sig : in std_logic;
+        timeout    : in time;
+        msg        : in string);
+
+    -- Until the counter cnt reaches at least n
+    procedure odmaWaitAtLeast (
+        signal cnt : in natural;
+        n          : in natural;
+        timeout    : in time;
+        msg        : in string);
+
     -- n bytes with the values (first + i) mod 256
     function odmaCountBytes (
         n     : in natural;
@@ -83,6 +106,35 @@ package body odma_tb_pkg is
             alert(TB_ERROR, "UVVM alert counters do not match the expected alerts", "odmaTestEnd");
         end if;
         test_runner_cleanup(runner);
+    end procedure;
+
+    procedure odmaWaitHigh (
+        signal sig : in std_logic;
+        timeout    : in time;
+        msg        : in string) is
+    begin
+        wait until sig = '1' for timeout;
+        check_value(sig, '1', ERROR, msg);
+    end procedure;
+
+    procedure odmaWaitHighAtEdge (
+        signal clk : in std_logic;
+        signal sig : in std_logic;
+        timeout    : in time;
+        msg        : in string) is
+    begin
+        wait until rising_edge(clk) and sig = '1' for timeout;
+        check_value(sig, '1', ERROR, msg);
+    end procedure;
+
+    procedure odmaWaitAtLeast (
+        signal cnt : in natural;
+        n          : in natural;
+        timeout    : in time;
+        msg        : in string) is
+    begin
+        wait until cnt >= n for timeout;
+        check_value(cnt >= n, ERROR, msg & ": " & to_string(cnt) & ", expected at least " & to_string(n));
     end procedure;
 
     function odmaCountBytes (

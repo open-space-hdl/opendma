@@ -28,7 +28,7 @@ to one adder.
 
 | File | Content |
 | --- | --- |
-| `odma_tb_pkg.vhd` | `odmaTestEnd`, the AXI4-Stream BFM configuration of the benches, byte array helpers (count pattern, hex conversion) |
+| `odma_tb_pkg.vhd` | `odmaTestEnd`, the timed waits with a check of their condition (`odmaWaitHigh`, `odmaWaitHighAtEdge`, `odmaWaitAtLeast`), the AXI4-Stream BFM configuration of the benches, byte array helpers (count pattern, hex conversion) |
 | `odma_tb_mem_pkg.vhd`, `odma_tb_memvar_pkg.vhd` | Memory of the AXI memory model as a protected type with one instance per model (section 3.1); the shared variable `Mem_v` |
 | `odma_tb_axi_ram.vhd` | AXI memory model (section 3.2) |
 | `odma_tb_seq_pkg.vhd` | Sequence player `odmaSequence` and the loader and checker of memory image files (section 3.3) |

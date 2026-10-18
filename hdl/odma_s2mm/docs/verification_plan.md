@@ -36,16 +36,16 @@ by the RTL. The AXI4-Stream VVC of UVVM is not used: its BFM takes at most 32 `T
 
 Every configuration has a data buffer of four bursts (`BufferBeats_g` = 4 x `BurstBeats_g` x `MemWidth_g` /
 `StreamWidth_g`); together the configurations simulate every memory width and every stream width, also with the
-split. The tests of phase a run in every configuration, except two that need a packet
-in the data buffer before its command or a packet longer than its buffer: TC-S2-07 and TC-S2-08 run only without
-`Split_g`. With `Split_g` neither can occur: the split takes no stream beat while no segment is active, and
-a segment exists only for an accepted command, so no data enters the data buffer before its command; and a segment
-is never longer than the buffer of its command, so a packet longer than the buffer continues in the next buffer
-(S2-SG-01) instead of overflowing. The tests of Scatter/Gather Mode (TC-S2-17 to TC-S2-19 and TC-S2-24)
-run in the `s_` configurations; TC-S2-25 runs in `w32_s32` only, since it calls the package function for every configuration of the generic ranges; the halt sweep TC-S2-21 runs in `w32_s32` and `w512_s512` (2-beat chunks) and in
-`s_w64_s8` and `s_w512_s512`, the narrowest and the widest lag of the split (two beats of 8 and of 512 bits);
-TC-S2-22 and TC-S2-23 run in every configuration, their steps with packets over several buffers with `Split_g`;
-lengths are limited to 2**`LengthWidth_g` - 1.
+split. The tests of phase a run in every configuration, except two that need a packet in the data buffer before its
+command or a packet longer than its buffer: TC-S2-07 and TC-S2-08 run only without `Split_g`. With `Split_g` neither
+can occur: the split takes no stream beat while no segment is active, and a segment exists only for an accepted
+command, so no data enters the data buffer before its command; and a segment is never longer than the buffer of its
+command, so a packet longer than the buffer continues in the next buffer (S2-SG-01) instead of overflowing. The
+tests of Scatter/Gather Mode (TC-S2-17 to TC-S2-19 and TC-S2-24) run in the `s_` configurations; TC-S2-25 runs in
+`w32_s32` only, since it calls the package function for every configuration of the generic ranges; the halt sweep
+TC-S2-21 runs in `w32_s32` and `w512_s512` (2-beat chunks) and in `s_w64_s8` and `s_w512_s512`, the narrowest and
+the widest lag of the split (two beats of 8 and of 512 bits); TC-S2-22 and TC-S2-23 run in every configuration,
+their steps with packets over several buffers with `Split_g`; lengths are limited to 2**`LengthWidth_g` - 1.
 
 Every test case ends with the check of the W monitor: no clock cycle with `WReady` '1' and `WValid` '0' between two
 data beats of a burst (S2-WR-07), in every configuration, with the high-latency writes of a memory wider than the

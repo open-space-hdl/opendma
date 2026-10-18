@@ -3,10 +3,11 @@
 ## 1. Overview
 
 `odma_s2mm` is the stream to memory channel of OpenDMA (architecture section 7.3): S2-1 receives the S2MM stream
-into an FT data buffer and cuts each packet into chunks of at most one memory burst, S2-2 writes the complete chunks into the
-buffer of the transfer command through an AXI4 write master and returns one transfer result per command. The channel
-executes the commands of the register interface (DR mode) and of the Scatter/Gather engine (SG mode) through the
-same internal interface (command, result, run, drain, stopped; module architecture of `odma_registers`, section 3).
+into an FT data buffer and cuts each packet into chunks of at most one memory burst, S2-2 writes the complete chunks
+into the buffer of the transfer command through an AXI4 write master and returns one transfer result per command.
+The channel executes the commands of the register interface (DR mode) and of the Scatter/Gather engine (SG mode)
+through the same internal interface (command, result, run, drain, stopped; module architecture of `odma_registers`,
+section 3).
 
 This specification covers phases a and b: one packet per transfer, with `Split_g` (Scatter/Gather Mode) packets
 spread over several buffers, and keyhole writes. The status stream S2-3 (phase c) follows.
@@ -38,7 +39,7 @@ spread over several buffers, and keyhole writes. The status stream S2-3 (phase c
 | S2-ST-01 | The channel shall accept stream beats into its data buffer only while `Run` is '1' and the buffer has space, with `Split_g` also only while a command is active for them (S2-SG-03); while the channel is halted, `S_S2mm_Ready` shall be '0', except while the rest of an interrupted packet is discarded (S2-HA-01) (interpretation I9). | `STRM.S2MM` |
 | S2-ST-02 | The bytes of a beat without `TLast` shall all be taken; of a beat with `TLast`, the bytes up to the first lane whose `TKeep` bit is not set; a last beat without valid bytes shall end the packet (interpretation I10). | `STRM.S2MM` |
 | S2-ST-03 | A packet shall be cut into chunks of at most one burst, `ChunkBeats` = B x `MemWidth_g` / `StreamWidth_g` beats with B the smaller of `BurstBeats_g` and the beats of 4 KB (4096 / (`MemWidth_g` / 8)), the last chunk ending with the packet and, with `Split_g`, a chunk also ending with the buffer; without `Split_g` every other chunk has `ChunkBeats` beats, with `Split_g` the chunks follow S2-ST-04; a chunk shall be written only when all its beats are in the data buffer. | none (architecture D5) |
-| S2-ST-04 | With `Split_g`, the chunks of a buffer shall follow its address. When the address is a multiple of `MemWidth_g` / 8, every chunk shall have `ChunkBeats` beats (it covers B memory words). When the address is another multiple of `StreamWidth_g` / 8, the first chunk shall end at the first multiple of the burst size (B x `MemWidth_g` / 8 bytes) above the address and every later chunk shall have `ChunkBeats` beats, so that each chunk is written in one burst. When the address lies inside a stream word, every chunk shall have `ChunkBeats` - S beats, with S = `MemWidth_g` / `StreamWidth_g` (one memory word less, which fits into one burst) in the configurations where the short chunks are enabled (architecture section 4.2) and S = 0 otherwise. A keyhole buffer shall have chunks of `ChunkBeats` beats. | none (performance) |
+| S2-ST-04 | With `Split_g`, the chunks of a buffer shall follow its address. When the address is a multiple of `MemWidth_g` / 8, every chunk shall have `ChunkBeats` beats (it covers B memory words). When the address is another multiple of `StreamWidth_g` / 8, the first chunk shall end at the first multiple of the burst size (B x `MemWidth_g` / 8 bytes) above the address and every later chunk shall have `ChunkBeats` beats, so that each chunk is written in one burst. When the address lies inside a stream word, every chunk shall have `ChunkBeats` - S beats, with S = `MemWidth_g` / `StreamWidth_g` (one memory word less, which fits into one burst) when `MemWidth_g` is above `StreamWidth_g` and B is at least 8, and S = 0 otherwise (the short chunks, measured in the verification report). A keyhole buffer shall have chunks of `ChunkBeats` beats. | none (performance) |
 
 ### 3.3 Writing the buffer (S2-2)
 

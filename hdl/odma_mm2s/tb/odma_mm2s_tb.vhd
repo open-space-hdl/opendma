@@ -200,8 +200,7 @@ begin
             Cmd_Eof     <= eof;
             Cmd_Keyhole <= keyhole;
             Cmd_Valid   <= '1';
-            wait until rising_edge(Clk) and Cmd_Ready = '1' for 1 ms;
-            check_value(Cmd_Ready, '1', ERROR, "command accepted");
+            odmaWaitHighAtEdge(Clk, Cmd_Ready, 1 ms, "command accepted");
             Cmd_Valid   <= '0';
             Cmd_Keyhole <= '0';
         end procedure;
@@ -401,7 +400,7 @@ begin
                 clearStream;
                 expect(region(1), Len_v);
                 sendCmd(region(1), Len_v);
-                wait until Obs.Beats >= 10 for 1 ms;
+                odmaWaitAtLeast(Obs.Beats, 10, 1 ms, "stream beats before the stall");
                 Ready.Hold <= '1';
                 Cnt_v      := Obs.RHeld;
                 -- Wait until no further burst comes for Quiet_c clock cycles, then for twice as long
@@ -546,7 +545,7 @@ begin
                 clearStream;
                 expect(region(1), Len_v);
                 sendCmd(region(1), Len_v);
-                wait until Obs.Beats >= 10 for 1 ms;
+                odmaWaitAtLeast(Obs.Beats, 10, 1 ms, "stream beats before the stall");
                 Ready.Hold <= '1';
                 cycles(20);
                 Cnt_v      := Obs.Beats;
@@ -554,8 +553,7 @@ begin
                 cycles(2);
                 -- The stream peer is ready again, the channel sends nothing
                 Ready.Hold <= '0';
-                wait until Stopped = '1' for 1 ms;
-                check_value(Stopped, '1', ERROR, "Stopped after the drain");
+                odmaWaitHigh(Stopped, 1 ms, "Stopped after the drain");
                 cycles(20);
                 check_value(Obs.Beats, Cnt_v, ERROR, "no stream beat during the drain");
                 check_value(Obs.RLastCount, Obs.ArCount, ERROR, "every read burst completed");
@@ -751,7 +749,7 @@ begin
                     cycles(40);
                     check_value(Stopped, '0', ERROR, "not stopped while the stream peer holds the open packet");
                     Ready.Hold <= '0';
-                    wait until Stopped = '1' for 1 ms;
+                    odmaWaitHigh(Stopped, 1 ms, "Stopped after the TLast of the open packet");
                     cycles(1);
                     check_value(Obs.Packets, Expected_v, ERROR, "the packet ended with TLast before Stopped");
                     waitRes(Res_v + 1);
@@ -768,7 +766,7 @@ begin
                 sendCmd(region(1) + 12 * 4096, Len_v, '0');
                 ChRun <= '0';
                 streamDone;
-                wait until Stopped = '1' for 1 ms;
+                odmaWaitHigh(Stopped, 1 ms, "Stopped after the command with the read error");
                 waitRes(Res_v + 1);
                 checkRes(Res_v, Len_v, '0', ErrSlv_c, "command with the read error");
                 Mem_v.clearErrors(0);
@@ -783,8 +781,7 @@ begin
                 ChDrain    <= '1';
                 cycles(2);
                 Ready.Hold <= '0';
-                wait until Stopped = '1' for 1 ms;
-                check_value(Stopped, '1', ERROR, "Stopped after the drain");
+                odmaWaitHigh(Stopped, 1 ms, "Stopped after the drain");
                 cycles(20);
                 check_value(Obs.Beats, 0, ERROR, "no beat of the drained packet");
                 RstIn      <= '1';

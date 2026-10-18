@@ -229,8 +229,7 @@ begin
             Cmd_Length  <= len;
             Cmd_Keyhole <= keyhole;
             Cmd_Valid   <= '1';
-            wait until rising_edge(Clk) and Cmd_Ready = '1' for 1 ms;
-            check_value(Cmd_Ready, '1', ERROR, "command accepted");
+            odmaWaitHighAtEdge(Clk, Cmd_Ready, 1 ms, "command accepted");
             Cmd_Valid   <= '0';
             Cmd_Keyhole <= '0';
         end procedure;
@@ -601,8 +600,8 @@ begin
                 sendCmd(Dst_v, Len_v);
                 -- The source stops after one and a half chunks and the beats that the split holds, or after half of a
                 -- shorter packet
-                wait until Obs.Beats >= minimum(ChunkBeats_c + ChunkBeats_c / 2 + SplitLag_c, Len_v / StreamBytes_c / 2)
-                    for 1 ms;
+                odmaWaitAtLeast(Obs.Beats, minimum(ChunkBeats_c + ChunkBeats_c / 2 + SplitLag_c, Len_v / StreamBytes_c / 2),
+                                1 ms, "stream beats before the stall");
                 Gen.Hold <= '1';
                 if Len_v >= 2 * ChunkBytes_c then
                     -- The first chunk is complete: its error result comes, then the flush of the rest
@@ -622,7 +621,7 @@ begin
                 waitRes(Res_v + 1);
                 -- The core reset after the drain, as the soft reset of the core does it
                 ChDrain  <= '1';
-                wait until rising_edge(Clk) and Stopped = '1' for 1 ms;
+                odmaWaitHighAtEdge(Clk, Stopped, 1 ms, "Stopped after the drain");
                 RstIn    <= '1';
                 cycles(2);
                 RstIn    <= '0';
@@ -704,7 +703,8 @@ begin
                 sendCmd(region(2), Len_v);
                 -- The halt half a chunk after those chunks; the beats are counted at the stream port, so the beats that
                 -- the split still holds come on top
-                wait until Obs.Beats >= Cnt2_v * ChunkBeats_c + ChunkBeats_c / 2 + SplitLag_c for 10 ms;
+                odmaWaitAtLeast(Obs.Beats, Cnt2_v * ChunkBeats_c + ChunkBeats_c / 2 + SplitLag_c, 10 ms,
+                                "stream beats before the halt");
                 ChRun <= '0';
                 waitRes(2);
                 check_value(Obs.Results(1).Eof, '0', ERROR, "no end of packet after the halt");
@@ -712,7 +712,7 @@ begin
                 Cnt_v := Obs.Results(1).Bytes;
                 check_value(Cnt_v mod ChunkBytes_c = 0 and Cnt_v >= Cnt2_v * ChunkBytes_c, ERROR,
                             "complete chunks written: " & to_string(Cnt_v) & " bytes");
-                wait until Stopped = '1' for 1 ms;
+                odmaWaitHigh(Stopped, 1 ms, "Stopped after the halt inside the packet");
                 check_value(Obs.Packets, 0, ERROR, "Stopped before the TLast of the rest");
                 waitPackets(1);
                 checkMem(region(2), Len_v, Cnt_v, source(2), "packet interrupted by the halt");
@@ -727,7 +727,7 @@ begin
                 cycles(10);
                 Cnt_v       := Obs.Packets;
                 send(source(6), Len_v);
-                wait until Obs.Packets > Cnt_v for 1 ms;
+                odmaWaitAtLeast(Obs.Packets, Cnt_v + 1, 1 ms, "packet sent before the halt");
                 ChRun       <= '0';
                 waitRes(3);
                 checkRes(2, Len_v, '1', ErrNone_c, "halt in the clock cycle after the end of the packet");
@@ -785,7 +785,7 @@ begin
                 sendCmd(region(7), Len_v);
                 send(source(7), Len_v);
                 -- The source stalls after half of the packet and the beats that the split holds
-                wait until Obs.Beats >= (Len_v / StreamBytes_c) / 2 + SplitLag_c for 1 ms;
+                odmaWaitAtLeast(Obs.Beats, (Len_v / StreamBytes_c) / 2 + SplitLag_c, 1 ms, "stream beats before the stall");
                 Gen.Hold <= '1';
                 cycles(20);
                 ChRun    <= '0';
@@ -838,12 +838,11 @@ begin
                 clearStream;
                 send(source(1), Len_v);
                 sendCmd(region(1), Len_v);
-                wait until Obs.AwCount >= 1 for 10 ms;
+                odmaWaitAtLeast(Obs.AwCount, 1, 10 ms, "first write burst before the drain");
                 ChDrain     <= '1';
                 cycles(2);
                 Cnt_v       := Obs.Beats;
-                wait until Stopped = '1' for 1 ms;
-                check_value(Stopped, '1', ERROR, "Stopped after the drain");
+                odmaWaitHigh(Stopped, 1 ms, "Stopped after the drain");
                 cycles(100);
                 check_value(Obs.Beats, Cnt_v, ERROR, "no stream beat during the drain");
                 check_value(Obs.BCount, Obs.AwCount, ERROR, "every write burst answered");
@@ -1101,8 +1100,8 @@ begin
                 Mem_v.fill(0, region(2) - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
                 sendCmd(region(2), Len_v);
                 -- The halt one and a half chunks into the second buffer, or half way where it has less than two
-                wait until Obs.Beats >= (Len_v + minimum(ChunkBytes_c + ChunkBytes_c / 2, Len_v / 2 + Len_v / 4)) /
-                                        StreamBytes_c for 1 ms;
+                odmaWaitAtLeast(Obs.Beats, (Len_v + minimum(ChunkBytes_c + ChunkBytes_c / 2, Len_v / 2 + Len_v / 4)) /
+                                StreamBytes_c, 1 ms, "stream beats before the halt");
                 ChRun <= '0';
                 waitRes(Res_v + 2);
                 Wr_v  := Obs.Results((Res_v + 1) mod MaxResults_c).Bytes;
@@ -1114,7 +1113,7 @@ begin
                 checkMem(region(2), Len_v, Wr_v, source(1) + Len_v, "second buffer: the complete chunks");
                 -- The rest of the packet is discarded up to its TLast
                 waitPackets(Pkts_v + 1);
-                wait until Stopped = '1' for 1 ms;
+                odmaWaitHigh(Stopped, 1 ms, "Stopped after the discard of the rest");
                 check_value(Obs.Packets, Pkts_v + 1, ERROR, "the next packet waits while halted");
                 ChRun       <= '1';
                 Gen.Percent <= 100;
@@ -1188,7 +1187,7 @@ begin
                 ChRun  <= '0';
                 waitRes(Res_v + 1);
                 checkRes(Res_v, 0, '0', ErrNone_c, "command without a packet before the halt");
-                wait until Stopped = '1' for 1 ms;
+                odmaWaitHigh(Stopped, 1 ms, "Stopped after the command without a packet");
                 cycles(5);
                 ChRun  <= '1';
                 Pkts_v := Obs.Packets;
@@ -1220,13 +1219,13 @@ begin
                 send(source(9), Len_v);
                 send(source(10), Len_v / 2);
                 sendCmd(region(9), Len_v);
-                wait until Obs.Beats > 0 for 1 ms;
+                odmaWaitAtLeast(Obs.Beats, 1, 1 ms, "first stream beat before the halt");
                 ChRun       <= '0';
                 waitRes(Res_v + 1);
                 checkRes(Res_v, 0, '0', ErrNone_c, "packet whose first beat waits in the split at the halt");
                 Gen.Percent <= 100;
                 waitPackets(Pkts_v + 1);
-                wait until Stopped = '1' for 1 ms;
+                odmaWaitHigh(Stopped, 1 ms, "Stopped after the discarded packet");
                 ChRun       <= '1';
                 sendCmd(region(10), Len_v);
                 waitRes(Res_v + 2);
@@ -1250,7 +1249,7 @@ begin
                 sendCmd(region(11), Len_v);
                 cycles(10);
                 send(source(11), Len_v + 1);
-                wait until Obs.Packets > Pkts_v for 1 ms;
+                odmaWaitAtLeast(Obs.Packets, Pkts_v + 1, 1 ms, "packet sent before the halt");
                 ChRun <= '0';
                 waitRes(Res_v + 1);
                 Wr_v  := Obs.Results(Res_v mod MaxResults_c).Bytes;
@@ -1258,7 +1257,7 @@ begin
                             "buffer before the halt: complete chunks or full, " & to_string(Wr_v) & " bytes");
                 check_value(Obs.Results(Res_v mod MaxResults_c).Eof, '0', ERROR, "buffer before the halt: no end of packet");
                 checkMem(region(11), Len_v, Wr_v, source(11), "buffer before the halt");
-                wait until Stopped = '1' for 1 ms;
+                odmaWaitHigh(Stopped, 1 ms, "Stopped after the halt behind the end of the buffer");
                 ChRun <= '1';
                 send(source(12), Len_v / 2);
                 sendCmd(region(12), Len_v);
@@ -1282,13 +1281,13 @@ begin
                     sendCmd(region(11), Len_v);
                     cycles(10);
                     send(source(13 + b), Cnt_v);
-                    wait until Obs.Packets > Pkts_v for 1 ms;
+                    odmaWaitAtLeast(Obs.Packets, Pkts_v + 1, 1 ms, "packet sent before the halt");
                     ChRun  <= '0';
                     waitRes(Res_v + 1);
                     checkRes(Res_v, Cnt_v, '1', ErrNone_c, "packet of " & to_string(b) & " beats halted after its TLast");
                     checkMem(region(11), Len_v, Cnt_v, source(13 + b), "packet of " & to_string(b) & " beats");
                     if Stopped = '0' then
-                        wait until Stopped = '1' for 1 ms;
+                        odmaWaitHigh(Stopped, 1 ms, "Stopped after the halt behind the TLast");
                     end if;
                     ChRun <= '1';
                     send(source(12), Len_v / 2);
@@ -1317,7 +1316,7 @@ begin
                 clearStream;
                 sendCmd(region(11), Len2_v);
                 send(source(16), Len2_v);
-                wait until Obs.Packets > Pkts_v for 10 ms;
+                odmaWaitAtLeast(Obs.Packets, Pkts_v + 1, 10 ms, "packet sent before the halt");
                 ChRun  <= '0';
                 Cnt_v  := (Len2_v + StreamBytes_c - 1) / StreamBytes_c;
                 log(ID_SEQUENCER, "complete packet at a full data buffer: " & to_string(Cnt_v) & " beats in " &
@@ -1328,7 +1327,7 @@ begin
                 Mem_v.setStall(0, 0);
                 Mem_v.setLatency(0, 0);
                 if Stopped = '0' then
-                    wait until Stopped = '1' for 1 ms;
+                    odmaWaitHigh(Stopped, 1 ms, "Stopped after the packet at a full data buffer");
                 end if;
                 ChRun <= '1';
                 send(source(12), Len_v / 2);
@@ -1353,8 +1352,7 @@ begin
                 sendCmd(region(7), Len_v);
                 cycles(10);
                 ChDrain <= '1';
-                wait until Stopped = '1' for 1 ms;
-                check_value(Stopped, '1', ERROR, "Stopped after the drain");
+                odmaWaitHigh(Stopped, 1 ms, "Stopped after the drain");
                 Cnt_v   := Obs.AwCount;
                 cycles(200);
                 check_value(Obs.AwCount, Cnt_v, ERROR, "no write after the drain");
@@ -1409,11 +1407,11 @@ begin
                             -- has fewer beats), or k clock cycles after the handshake of the TLast
                             if k < 0 then
                                 if Cnt_v + k >= 1 and Obs.RunBeats - Beats0_v < Cnt_v + k then
-                                    wait until Obs.RunBeats - Beats0_v >= Cnt_v + k for 1 ms;
+                                    odmaWaitAtLeast(Obs.RunBeats, Beats0_v + Cnt_v + k, 1 ms, sweepMsg(st, c, k) & "beats before the halt");
                                 end if;
                             else
                                 if Obs.RunPkts = Pkts0_v then
-                                    wait until Obs.RunPkts > Pkts0_v for 1 ms;
+                                    odmaWaitAtLeast(Obs.RunPkts, Pkts0_v + 1, 1 ms, sweepMsg(st, c, k) & "TLast before the halt");
                                 end if;
                                 cycles(k);
                             end if;
@@ -1693,10 +1691,9 @@ begin
                 send(source(12), Len_v);
                 sendCmd(region(12), Len_v);
                 -- Every burst of the buffer on the bus: its result is queued
-                wait until Obs.AwCount >= Cnt2_v + Cnt_v for 1 ms;
+                odmaWaitAtLeast(Obs.AwCount, Cnt2_v + Cnt_v, 1 ms, "every burst of the buffer before the drain");
                 ChDrain <= '1';
-                wait until Stopped = '1' for 1 ms;
-                check_value(Stopped, '1', ERROR, "Stopped after the drain with a queued result");
+                odmaWaitHigh(Stopped, 1 ms, "Stopped after the drain with a queued result");
                 check_value(Obs.BCount, Obs.AwCount, ERROR, "every write answered before Stopped");
                 cycles(100);
                 check_value(Obs.ResCount, Res_v, ERROR, "no result of the queued buffer after the drain");
@@ -1770,8 +1767,7 @@ begin
                     end if;
                     checkMem(region(2), Len_v, Wr_v, source(1) + Len_v, "second buffer: bytes beyond the failing one");
                     checkMem(region(3), Len_v, 0, source(1), "third buffer: not written");
-                    wait until Stopped = '1' for 1000 * ClkPeriod_c;
-                    check_value(Stopped, '1', ERROR, "Stopped within 1000 clock cycles after the second result");
+                    odmaWaitHigh(Stopped, 1000 * ClkPeriod_c, "Stopped within 1000 clock cycles after the second result");
                     waitPackets(Pkts_v + 1);
                     Mem_v.clearErrors(0);
                     Mem_v.setLatency(0, 0);
@@ -1827,7 +1823,7 @@ begin
                 check_value(Obs.Results((Res_v + 1) mod MaxResults_c).Sof, SofB_v, ERROR, "next packet: start of packet");
                 checkMem(region(6), Len_v, Wr_v, source(6), "next packet cut after the error");
                 if Stopped = '0' then
-                    wait until Stopped = '1' for 1 ms;
+                    odmaWaitHigh(Stopped, 1 ms, "Stopped after the next packet cut");
                 end if;
                 waitPackets(Pkts_v + 2);
                 Mem_v.clearErrors(0);
@@ -1848,15 +1844,14 @@ begin
                     Cnt_v  := Obs.BCount;
                     send(source(8), Len_v);
                     sendCmd(region(8), Len_v);
-                    wait until Obs.BCount > Cnt_v for 1 ms;
+                    odmaWaitAtLeast(Obs.BCount, Cnt_v + 1, 1 ms, "error response of the first chunk");
                     -- The error reaches S2-2 through the write master a few clock cycles after the response
                     cycles(5);
                     check_value(Obs.ResCount, Res_v, ERROR, "error response before the result");
                     Cmd_Addr   <= std_logic_vector(region(9));
                     Cmd_Length <= Len_v;
                     Cmd_Valid  <= '1';
-                    wait until rising_edge(Clk) and Cmd_Ready = '1' for 1 ms;
-                    check_value(Cmd_Ready, '1', ERROR, "next command accepted");
+                    odmaWaitHighAtEdge(Clk, Cmd_Ready, 1 ms, "next command accepted");
                     Cmd_Valid  <= '0';
                     check_value(Obs.ResCount, Res_v + 1, ERROR, "next command accepted only after the error result");
                     send(source(9), Len_v / 2);
@@ -1889,7 +1884,7 @@ begin
                     send(source(10), 2 * Len_v);
                     sendCmd(region(10), Len_v);
                     -- Every burst of the buffer on the bus: its write commands are issued and its result is queued
-                    wait until Obs.AwCount >= Cnt2_v + Cnt_v for 1 ms;
+                    odmaWaitAtLeast(Obs.AwCount, Cnt2_v + Cnt_v, 1 ms, "every burst of the buffer before the halt");
                     ChRun <= '0';
                     -- Not stopped while the result waits for its write responses (S2-HA-03)
                     Took_v := 0;

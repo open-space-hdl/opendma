@@ -43,6 +43,14 @@ package odma_s2mm_pkg is
         burstBeats : positive;
         memWidth   : positive) return positive;
 
+    -- Stream beats by which every chunk of a buffer that starts inside a stream word is shorter, so that it fits into
+    -- one burst: one memory word in the configurations where that takes more beats per clock cycle than two bursts
+    -- per chunk, else 0 (architecture section 4.2)
+    function shortBeats (
+        memWidth    : positive;
+        streamWidth : positive;
+        masterBeats : positive) return natural;
+
 end package;
 
 ---------------------------------------------------------------------------------------------------
@@ -71,6 +79,17 @@ package body odma_s2mm_pkg is
         memWidth   : positive) return positive is
     begin
         return minimum(burstBeats, 4096 / (memWidth / 8));
+    end function;
+
+    function shortBeats (
+        memWidth    : positive;
+        streamWidth : positive;
+        masterBeats : positive) return natural is
+    begin
+        if memWidth = streamWidth and masterBeats >= 8 then
+            return memWidth / streamWidth;
+        end if;
+        return 0;
     end function;
 
 end package body;

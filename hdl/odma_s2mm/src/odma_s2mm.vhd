@@ -19,6 +19,7 @@ library ieee;
     use ieee.numeric_std.all;
 
 library olo;
+    use olo.olo_base_pkg_math.all;
     use olo.olo_ft_pkg_ecc.all;
 
 library work;
@@ -101,7 +102,14 @@ architecture rtl of odma_s2mm is
     -- one burst (S2-ST-03)
     constant MasterBeats_c : positive := masterBeats(BurstBeats_g, MemWidth_g);
     constant ChunkBeats_c  : positive := MasterBeats_c * MemWidth_g / StreamWidth_g;
-    constant DescDepth_c   : positive := 32;
+    -- Split_g: address bits below the burst size, which decide the chunk plan of a buffer, and the beats by which the
+    -- chunks of a buffer that starts inside a stream word are shorter (architecture section 4.2)
+    constant OffsetBits_c  : positive := log2(MasterBeats_c * MemWidth_g / 8);
+    constant ShortBeats_c  : natural  := shortBeats(MemWidth_g, StreamWidth_g, MasterBeats_c);
+    -- With equal widths the write master issues a burst without waiting for its data, which then follows without
+    -- gaps (architecture section 5.5)
+    constant LowLat_c      : std_logic := choose(MemWidth_g = StreamWidth_g, '1', '0');
+    constant DescDepth_c   : positive  := 32;
     -- Size bits of the write master: one more than the length, so that no command reaches the last user word
     -- below 2**size bits, where the word count of olo_axi_master_full wrapped up to Open Logic 4.7.0-ft.6 (gap G14,
     -- corrected in 4.7.0-ft.8)
@@ -118,6 +126,8 @@ architecture rtl of odma_s2mm is
     signal Seg_Valid    : std_logic;
     signal Seg_Size     : std_logic_vector(LengthWidth_g - 1 downto 0);
     signal Seg_Ready    : std_logic;
+    signal Seg_Addr     : std_logic_vector(AddrWidth_g - 1 downto 0);
+    signal Seg_Keyhole  : std_logic;
     signal FlushReq     : std_logic;
 
     -- Buffers to the write command block
@@ -170,7 +180,8 @@ begin
             StreamWidth_g => StreamWidth_g,
             ChunkBeats_g  => ChunkBeats_c,
             LengthWidth_g => LengthWidth_g,
-            Split_g       => Split_g
+            Split_g       => Split_g,
+            ShortBeats_g  => ShortBeats_c
         )
         port map (
             Clk          => Clk,
@@ -185,6 +196,8 @@ begin
             Seg_Valid    => Seg_Valid,
             Seg_Size     => Seg_Size,
             Seg_Ready    => Seg_Ready,
+            Seg_Offset   => Seg_Addr(OffsetBits_c - 1 downto 0),
+            Seg_Keyhole  => Seg_Keyhole,
             FlushReq     => FlushReq,
             Data_Data    => Data_InData,
             Data_Valid   => Data_InValid,
@@ -271,6 +284,8 @@ begin
             Seg_Valid    => Seg_Valid,
             Seg_Size     => Seg_Size,
             Seg_Ready    => Seg_Ready,
+            Seg_Addr     => Seg_Addr,
+            Seg_Keyhole  => Seg_Keyhole,
             FlushReq     => FlushReq,
             Desc_Data    => Desc_OutData,
             Desc_Valid   => Desc_OutValid,
@@ -315,7 +330,7 @@ begin
             Rst               => Rst,
             CmdWr_Addr        => CmdWr_Addr,
             CmdWr_Size        => MasterSize,
-            CmdWr_LowLat      => '0',
+            CmdWr_LowLat      => LowLat_c,
             CmdWr_Fixed       => CmdWr_Fixed,
             CmdWr_Valid       => CmdWr_Valid,
             CmdWr_Ready       => CmdWr_Ready,

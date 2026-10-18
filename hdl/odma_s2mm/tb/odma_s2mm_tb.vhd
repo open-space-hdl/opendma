@@ -498,6 +498,25 @@ begin
                     check_value(10 * Cnt_v >= 9 * Cnt2_v, ERROR, "clock cycles from the first to the last of " &
                                 to_string(Cnt_v) & " beats: " & to_string(Cnt2_v));
                 end if;
+                N_v := Cnt2_v;
+
+                -- The same packet into a buffer at the stream width above a burst boundary and into one 1 byte above
+                -- (inside a stream word): with Split_g the chunks of the first follow the bursts of the buffer
+                -- (S2-ST-04), so it takes the beats at the rate of the aligned buffer within 2 % when it holds at
+                -- least 16 chunks; the rates are logged and listed in the verification report
+                for k in 1 to 2 loop
+                    Off_v  := StreamBytes_c when k = 1 else 1;
+                    clearStream;
+                    transfer(region(2 + k) + Off_v, Len_v, source(1 + k), Len_v, "packet of 64 chunks at offset " &
+                             to_string(Off_v));
+                    Cnt2_v := Obs.LastBeat - Obs.FirstBeat + 1;
+                    log(ID_SEQUENCER, "throughput at offset " & to_string(Off_v) & ": " & to_string(Cnt_v) &
+                        " beats in " & to_string(Cnt2_v) & " clock cycles");
+                    if Split_g and k = 1 and Len_v >= 16 * ChunkBytes_c then
+                        check_value(98 * Cnt2_v <= 100 * N_v, ERROR, "clock cycles at offset " & to_string(Off_v) &
+                                    ": " & to_string(Cnt2_v) & ", aligned " & to_string(N_v));
+                    end if;
+                end loop;
 
             elsif run("test_early_data") then
                 log(ID_LOG_HDR, "TC-S2-07 a packet before the command, the input of a halted channel");

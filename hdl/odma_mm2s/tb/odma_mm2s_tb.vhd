@@ -818,6 +818,63 @@ begin
                 cycles(2);
                 transfer(region(1) + 10 * 4096, minimum(3 * StreamBytes_c, MaxLen_c), "packet after the reset");
 
+                -- Drain while the closing beat of a packet left open by a halt waits for the stream peer. The command
+                -- of 2 x B + 1 bytes gives two full beats, the join holds its last byte for the closing beat; the peer
+                -- stalls before that beat. The closing beat is not sent, Stopped, then the core reset
+                Len_v             := minimum(2 * StreamBytes_c + 1, MaxLen_c);
+                clearStream;
+                Ready.StallBeat   <= 2;
+                Ready.StallCycles <= 300;
+                expect(region(1) + 14 * 4096, Len_v, true);
+                sendCmd(region(1) + 14 * 4096, Len_v, '0');
+                ChRun             <= '0';
+                odmaWaitAtLeast(Obs.Beats, 2, 1 ms, "the beats before the closing beat");
+                cycles(40);
+                check_value(Obs.Beats, 2, ERROR, "the closing beat waits for the stream peer");
+                check_value(Stopped, '0', ERROR, "not stopped while the closing beat waits");
+                ChDrain           <= '1';
+                odmaWaitHigh(Stopped, 1 ms, "Stopped after the drain of the closing beat");
+                cycles(20);
+                check_value(Obs.Beats, 2, ERROR, "no closing beat after the drain");
+                Ready.StallBeat   <= -1;
+                RstIn             <= '1';
+                cycles(2);
+                RstIn             <= '0';
+                ChDrain           <= '0';
+                ChRun             <= '1';
+                cycles(2);
+                -- The drained packets never end
+                Expected_v := Obs.Packets;
+                clearStream;
+                transfer(region(1) + 11 * 4096, minimum(3 * StreamBytes_c, MaxLen_c),
+                         "packet after the drain of the closing beat");
+
+                -- Halt and drain in the same clock cycle (a soft reset of the core) while a packet is open between
+                -- two of its commands: the peer has taken the two full beats of the first command, the join holds its
+                -- last byte. No closing beat, Stopped, then the core reset
+                clearStream;
+                expect(region(1) + 15 * 4096, Len_v, true);
+                sendCmd(region(1) + 15 * 4096, Len_v, '0');
+                odmaWaitAtLeast(Obs.Beats, 2, 1 ms, "the full beats of the first command");
+                cycles(40);
+                check_value(Stopped, '0', ERROR, "not stopped while the packet is open");
+                wait until rising_edge(Clk);
+                ChRun      <= '0';
+                ChDrain    <= '1';
+                odmaWaitHigh(Stopped, 1 ms, "Stopped after the halt and the drain of an open packet");
+                cycles(20);
+                check_value(Obs.Beats, 2, ERROR, "no closing beat after the halt and the drain");
+                RstIn      <= '1';
+                cycles(2);
+                RstIn      <= '0';
+                ChDrain    <= '0';
+                ChRun      <= '1';
+                cycles(2);
+                Expected_v := Obs.Packets;
+                clearStream;
+                transfer(region(1) + 12 * 4096, minimum(3 * StreamBytes_c, MaxLen_c),
+                         "packet after the halt and the drain");
+
             elsif run("test_keyhole") then
                 log(ID_LOG_HDR, "TC-MM-19 keyhole reads with FIXED bursts");
                 -- The window of the memory model returns the words of its backing range in order (PKG-12)

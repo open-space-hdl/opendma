@@ -1575,6 +1575,13 @@ begin
                         sgPkt(ch);
                         cycles(300);
                         chkMask(Dmasr_c(ch), Zero_c, DlyIrq_c or DlyMask_c, "no timer with IRQDelay 0");
+                        -- Without Dly_IrqEn the timeout sets Dly_Irq but not the interrupt output (RG-SG-08)
+                        wr(Dmacr_c(ch), Rs_c or threshold(4) or delay(2));
+                        sgPkt(ch);
+                        poll(Dmasr_c(ch), DlyIrq_c, DlyIrq_c, "Dly_Irq without Dly_IrqEn");
+                        cycles(2);
+                        check_value(ChIrq(ch), '0', ERROR, "no interrupt from Dly_Irq without Dly_IrqEn");
+                        wr(Dmasr_c(ch), DlyIrq_c);
                         softReset(ch);
                     end if;
                 end loop;

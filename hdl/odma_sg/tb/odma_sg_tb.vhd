@@ -994,6 +994,28 @@ begin
                                 C_TB_SCOPE_DEFAULT, HEX);
                 end if;
 
+                -- A fetched descriptor waits for the channel when the result of D1 fails (one command at a time, results
+                -- 80 clock cycles after the command): it is not issued and keeps its status, CURDESC at D1
+                for ch in 0 to 1 loop
+                    if Incl_c(ch) then
+                        resetAll;
+                        chain(ch, 4);
+                        Cfg(ch).ResDelay                   <= 80;
+                        Cfg(ch).MaxCmds                    <= 1;
+                        Cfg(ch).Results(CmdBase_v(ch) + 1) <= (true, 33, '1', '0', ErrSlv_c);
+                        start(ch, descAddr(ch, 0));
+                        tail(ch, descAddr(ch, 3));
+                        waitErrs(ch, 1, "error of D1 with D2 fetched");
+                        halt(ch, "error of D1 with D2 fetched");
+                        check_value(Obs.ArCount - ArBase_v >= 3, ERROR, "D2 fetched before the error");
+                        check_value(Obs.CmdCount(ch) - CmdBase_v(ch), 2, ERROR, "the fetched D2 not issued after the error");
+                        checkDesc(ch, 1, true, statusExp(ch, 33, '1', '0', ErrSlv_c), "status of D1");
+                        checkDesc(ch, 2, false, Img_v(ch)(2)(7), "the fetched D2 keeps its status");
+                        check_value(Obs.CurPtr(ch), descAddr(ch, 1), ERROR, "CURDESC at D1 with D2 fetched",
+                                    C_TB_SCOPE_DEFAULT, HEX);
+                    end if;
+                end loop;
+
             elsif run("test_error_codes") then
                 log(ID_LOG_HDR, "TC-SG-18 error codes of descriptor accesses");
 
@@ -1273,6 +1295,34 @@ begin
                                     C_TB_SCOPE_DEFAULT, HEX);
                     end if;
                 end loop;
+
+                -- Both channels: Run of S2MM falls while its fetch waits for the descriptor port, which serves the fetch
+                -- of MM2S (memory latency 200 clock cycles): the request is withdrawn, nothing is fetched or issued for
+                -- S2MM, and MM2S completes its chain
+                if IncludeMm2s_g and IncludeS2mm_g then
+                    resetAll;
+                    chain(Mm2s_c, 4);
+                    chain(S2mm_c, 4);
+                    Mem_v.setLatency(MemSg_c, 200);
+                    start(Mm2s_c, descAddr(Mm2s_c, 0));
+                    tail(Mm2s_c, descAddr(Mm2s_c, 3));
+                    odmaWaitAtLeast(Obs.ArCount, ArBase_v + 1, 10 us, "fetch of MM2S D0");
+                    start(S2mm_c, descAddr(S2mm_c, 0));
+                    tail(S2mm_c, descAddr(S2mm_c, 3));
+                    cycles(20);
+                    halt(S2mm_c, "halt of S2MM with its fetch waiting for the port");
+                    waitIdle(Mm2s_c, "MM2S chain after the halt of S2MM");
+                    check_value(Obs.CmdCount(S2mm_c) - CmdBase_v(S2mm_c), 0, ERROR, "nothing issued for S2MM");
+
+                    for k in 0 to Obs.ArCount - ArBase_v - 1 loop
+                        check_value(Obs.Ars(ArBase_v + k).Addr /= descAddr(S2mm_c, 0), ERROR,
+                                    "no fetch for S2MM: fetch " & to_string(k));
+                    end loop;
+
+                    check_value(Obs.CurPtr(S2mm_c), descAddr(S2mm_c, 0), ERROR, "CURDESC of S2MM at D0",
+                                C_TB_SCOPE_DEFAULT, HEX);
+                    checkDesc(S2mm_c, 0, false, Img_v(S2mm_c)(0)(7), "S2MM D0 not started");
+                end if;
 
             elsif run("test_drain") then
                 log(ID_LOG_HDR, "TC-SG-12 drain");

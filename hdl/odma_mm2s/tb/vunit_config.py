@@ -25,7 +25,7 @@ CONFIGS = {
 JOIN = ("w64_s8", "w256_s16", "w32_s32", "w128_s64", "w256_s128", "w512_s256", "w512_s512", "w1024_s1024")
 
 # Tests of Scatter/Gather Mode: only with the stream join
-SG_TESTS = ("test_join", "test_join_results", "test_join_halt")
+SG_TESTS = ("test_join", "test_join_results", "test_join_halt", "test_join_halt_sweep")
 
 
 def configure(lib):

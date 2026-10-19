@@ -875,6 +875,49 @@ begin
                 transfer(region(1) + 12 * 4096, minimum(3 * StreamBytes_c, MaxLen_c),
                          "packet after the halt and the drain");
 
+            elsif run("test_join_halt_sweep") then
+                log(ID_LOG_HDR, "TC-MM-20 halt at every clock cycle after the second command of a packet is accepted");
+                Mem_v.fill(0, region(1), 65536, 43);
+                Len_v  := minimum(2 * StreamBytes_c + 1, MaxLen_c);
+                Len2_v := minimum(StreamBytes_c + 3, MaxLen_c);
+
+                for e in 0 to 1 loop
+
+                    for d in 0 to 8 loop
+                        -- The first command of a packet has passed the stream (its result is returned, the join holds
+                        -- its last byte); the second, with (e = 1) or without the end of packet, is accepted and Run
+                        -- falls d clock cycles after its handshake, before or after its entry reaches the stream
+                        Eof_v := '1' when e = 1 else '0';
+                        Res_v := Obs.ResCount;
+                        clearStream;
+                        expect(region(1) + 2 * 4096, Len_v, false);
+                        expect(region(1) + 3 * 4096 + 1, Len2_v, true);
+                        sendCmd(region(1) + 2 * 4096, Len_v, '0');
+                        waitRes(Res_v + 1);
+                        sendCmd(region(1) + 3 * 4096 + 1, Len2_v, Eof_v);
+                        cycles(d);
+                        ChRun <= '0';
+                        -- Both commands complete; the packet ends with TLast on the last byte of the second (its end of
+                        -- packet or the closing beat after the halt); one result each, no further command
+                        streamDone;
+                        waitRes(Res_v + 2);
+                        checkRes(Res_v, Len_v, '0', ErrNone_c, "first command, halt after " & to_string(d));
+                        checkRes(Res_v + 1, Len2_v, Eof_v, ErrNone_c, "second command, halt after " & to_string(d));
+                        if Stopped = '0' then
+                            odmaWaitHigh(Stopped, 1 ms, "Stopped after the halt after " & to_string(d));
+                        end if;
+                        check_value(Stopped, '1', ERROR, "Stopped after the halt after " & to_string(d));
+                        cycles(50);
+                        check_value(Obs.ResCount, Res_v + 2, ERROR, "no further result, halt after " & to_string(d));
+                        check_value(Obs.Packets, Expected_v, ERROR, "one packet, halt after " & to_string(d));
+                        -- Run again: a fresh packet is complete
+                        ChRun <= '1';
+                        transfer(region(1) + 5 * 4096, minimum(3 * StreamBytes_c, MaxLen_c),
+                                 "packet after the halt after " & to_string(d));
+                    end loop;
+
+                end loop;
+
             elsif run("test_keyhole") then
                 log(ID_LOG_HDR, "TC-MM-19 keyhole reads with FIXED bursts");
                 -- The window of the memory model returns the words of its backing range in order (PKG-12)

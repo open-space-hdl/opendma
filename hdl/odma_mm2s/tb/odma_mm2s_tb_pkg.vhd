@@ -81,6 +81,7 @@ package odma_mm2s_tb_pkg is
         Cycle      : natural;
         ResCount   : natural;
         Results    : Results_a;
+        ResHeld    : natural; -- Clock cycles with Res_Valid high and Res_Ready low
         Beats      : natural; -- Stream handshakes
         Bytes      : natural; -- Stream bytes
         FirstBeat  : natural; -- Clock cycle of the first stream handshake

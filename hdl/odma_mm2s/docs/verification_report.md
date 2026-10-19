@@ -2,7 +2,7 @@
 
 ## 1. Test results
 
-Run on 2026-10-19 in the GHDL CI of the repository, GitHub Actions run 39252416680 on commit 36d4ee9 (its
+Run on 2026-10-19 in the GHDL CI of the repository, GitHub Actions run 39290223755 on commit 8c32323 (its
 `results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
 `python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_mm2s_tb`.
 
@@ -96,5 +96,6 @@ at least one test case; the RTL of the repository passes all of them:
 | The keyhole bit not passed to the read master | TC-MM-19 |
 | A keyhole buffer checked against the top of the address space | TC-MM-19 |
 | The slave error code for every failed read | TC-MM-15 |
+| A drain pops an entry only together with its read response (an entry without a read stays at the head) | TC-MM-10 |
 
 The recovery branches of the state machines (`when others`) cannot be reached through the ports.

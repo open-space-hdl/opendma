@@ -6,6 +6,10 @@ Run on 2026-10-19 in the GHDL CI of the repository, GitHub Actions run 392902237
 `results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
 `python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_registers_tb`.
 
+The same tests pass in QuestaSim (Questa Pro Microchip Edition 2024.3, time resolution 1 fs), with code coverage and in
+the optimised run without it, on 2026-10-19 on commit 6252594 (sources and testbenches as in 8c32323); the code coverage
+of the core is in `docs/coverage.md`.
+
 | Testbench | Tests | Passed |
 | --- | --- | --- |
 | `odma_registers_tb` | 40 (24 test cases; Direct Register Mode: TC-RG-02 in two configurations, TC-RG-12 in two, TC-RG-15 in three; Scatter/Gather Mode: TC-RG-16 in five, TC-RG-17 and TC-RG-18 in three, TC-RG-19 in three, TC-RG-20 in two, TC-RG-23 in two) | 40 |

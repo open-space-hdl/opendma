@@ -209,6 +209,7 @@ architecture sim of odma_s2mm_tb is
     signal RstIn        : std_logic                     := '0';
     signal FixedAddr    : std_logic_vector(63 downto 0) := (others => '0');
     signal Res_Ready    : std_logic                     := '1';
+    signal ResStall     : natural                       := 0;
     signal ChRun        : std_logic                     := '0';
     signal ChDrain      : std_logic                     := '0';
     signal Stopped      : std_logic;
@@ -253,6 +254,31 @@ begin
             EccInjData   => EccInjData,
             Obs          => Obs
         );
+
+    -- Receiver of the results (TC-S2-26): Res_Ready low in runs of 1 to 32 clock cycles, each run low with a
+    -- probability of ResStall percent; '1' without stalls, '0' at 100 percent
+    p_res_ready : process is
+        variable S1_v  : positive := 17;
+        variable S2_v  : positive := 41;
+        variable R_v   : real;
+        variable Run_v : natural  := 0;
+    begin
+        wait until rising_edge(Clk);
+        if ResStall = 0 then
+            Res_Ready <= '1';
+            Run_v     := 0;
+        elsif ResStall >= 100 then
+            Res_Ready <= '0';
+            Run_v     := 0;
+        elsif Run_v > 0 then
+            Run_v := Run_v - 1;
+        else
+            uniform(S1_v, S2_v, R_v);
+            Res_Ready <= '0' when R_v * 100.0 < real(ResStall) else '1';
+            uniform(S1_v, S2_v, R_v);
+            Run_v     := integer(floor(R_v * 32.0)) mod 32;
+        end if;
+    end process;
 
     p_control : process is
         variable Dst_v    : Addr_t;
@@ -958,6 +984,59 @@ begin
                 end loop;
 
                 Cmd_Valid <= '0';
+
+                -- A drain while the rest of a failed packet is flushed: SLVERR on the first chunk of a packet whose
+                -- source stops before its TLast. Without the split the flush waits for the rest and the drain ends it;
+                -- with the split the flush ends at once and the drain meets the channel waiting for data. The core
+                -- reset, which also resets the stream source, recovers the channel for the next packet
+                RstIn       <= '1';
+                cycles(2);
+                RstIn       <= '0';
+                ChDrain     <= '0';
+                Gen.Percent <= 100;
+                Mem_v.setStall(0, 0);
+                Mem_v.setLatency(0, 0);
+                cycles(10);
+                Len_v       := minimum(4 * ChunkBytes_c, MaxLen_c);
+                Dst_v       := region(6);
+                Res_v       := Obs.ResCount;
+                prefill(Dst_v, Len_v);
+                Mem_v.setError(0, 0, Dst_v, Dst_v, ErrSlv_c, TbDirWrite);
+                clearStream;
+                send(source(6), Len_v);
+                sendCmd(Dst_v, Len_v);
+                odmaWaitAtLeast(Obs.Beats, minimum(ChunkBeats_c + ChunkBeats_c / 2 + SplitLag_c, Len_v / StreamBytes_c / 2),
+                                1 ms, "stream beats before the stall");
+                Gen.Hold    <= '1';
+                Exp_v       := 0;
+                if Len_v >= 2 * ChunkBytes_c then
+                    -- The first chunk is complete: its error result comes, then the flush of the rest
+                    waitRes(Res_v + 1);
+                    check_value(Obs.Results(Res_v mod MaxResults_c).Err, ErrSlv_c, ERROR, "flush: write error");
+                    Exp_v := 1;
+                    cycles(200);
+                    if not Split_g then
+                        check_value(Stopped, '0', ERROR, "flush: the flush waits for the rest of the packet");
+                    end if;
+                end if;
+                -- With the split the channel waits for data, already with Stopped
+                ChDrain <= '1';
+                if Stopped = '0' then
+                    odmaWaitHigh(Stopped, 1 ms, "Stopped after the drain during the flush");
+                end if;
+                check_value(Stopped, '1', ERROR, "Stopped after the drain during the flush");
+                cycles(100);
+                check_value(Obs.ResCount, Res_v + Exp_v, ERROR, "no result after the drain during the flush");
+                check_value(Obs.BCount, Obs.AwCount, ERROR, "every write burst answered after the drain during the flush");
+                RstIn    <= '1';
+                cycles(2);
+                RstIn    <= '0';
+                ChDrain  <= '0';
+                Gen.Hold <= '0';
+                Mem_v.clearErrors(0);
+                cycles(10);
+                transfer(region(7), minimum(2 * ChunkBytes_c, MaxLen_c), source(7), minimum(2 * ChunkBytes_c, MaxLen_c),
+                         "packet after the drain during the flush and the core reset");
 
             elsif run("test_ecc") then
                 log(ID_LOG_HDR, "TC-S2-13 single and double errors injected into the three buffers");
@@ -2142,6 +2221,112 @@ begin
                 Mem_v.setStall(0, 30);
                 Gen.Percent <= 50;
                 transfer(region(1), Len_v, source(1), Len_v, "long packet");
+
+            elsif run("test_result_stall") then
+                log(ID_LOG_HDR, "TC-S2-26 results held by their receiver");
+                -- Runs of Res_Ready low in 50 to 95 % of the clock cycles, drawn per packet: packets of one buffer, with
+                -- Split_g of one to four buffers, commanded back to back; every result in order with its bytes, start
+                -- and end of packet, every buffer checked in memory
+                Gen.Percent <= 80;
+                Mem_v.setStall(0, 20);
+                Mem_v.setWindow(0, region(1), region(1) + 16 * 4 * 8192 - 1);
+                Res_v       := Obs.ResCount;
+                Done_v      := 0;
+                Sent_v      := 0;
+
+                for p in 0 to 15 loop
+                    rnd(50, 95, Cnt_v);
+                    ResStall <= Cnt_v;
+                    N_v      := 1;
+                    if Split_g then
+                        rnd(1, 4, N_v);
+                    end if;
+                    Src_v := source(1 + p mod 6) + p * 977;
+                    Off_v := 0;
+
+                    for k in 0 to N_v - 1 loop
+                        rnd(1, minimum(minimum(2 * ChunkBytes_c, 2048), MaxLen_c), Len_v);
+                        ExpLen_v((Sent_v + k) mod MaxCmds_c) := Len_v;
+                        Off_v                                := Off_v + Len_v;
+                    end loop;
+
+                    -- Packet bytes: into the last buffer at least one byte
+                    Len2_v := ExpLen_v((Sent_v + N_v - 1) mod MaxCmds_c);
+                    rnd(Off_v - Len2_v + 1, Off_v, Wr_v);
+                    send(Src_v, Wr_v);
+                    Off_v  := 0;
+
+                    for k in 0 to N_v - 1 loop
+                        Len_v  := ExpLen_v(Sent_v mod MaxCmds_c);
+                        SofB_v := '1' when k = 0 else '0';
+                        EofB_v := '1' when k = N_v - 1 else '0';
+                        splitBuf(region(1) + (4 * p + k) * 8192 + Guard_c, Len_v, minimum(Len_v, Wr_v - Off_v),
+                                 Src_v + Off_v, SofB_v, EofB_v);
+                        Off_v  := Off_v + Len_v;
+                    end loop;
+
+                end loop;
+
+                ResStall    <= 0;
+                waitRes(Res_v + Sent_v);
+                checkSplit;
+                Gen.Percent <= 100;
+                Mem_v.setStall(0, 0);
+
+                -- Res_Ready low: the result of a packet is queued, and the next transfer ends while it waits (its result
+                -- waits behind the queued one); with Split_g that transfer is the full first buffer of a packet of two
+                -- buffers. Both results follow in order when Res_Ready rises, then the rest of the packet
+                Len_v    := minimum(2 * ChunkBytes_c, MaxLen_c);
+                Mem_v.setWindow(0, region(20), region(24) - 1);
+                Res_v    := Obs.ResCount;
+                Done_v   := 0;
+                Sent_v   := 0;
+                Cnt_v    := Obs.BCount;
+                ResStall <= 100;
+                send(source(20), Len_v);
+                splitBuf(region(20) + Guard_c, Len_v, Len_v, source(20), '1', '1');
+                if Split_g then
+                    send(source(21), 2 * Len_v - 1);
+                    splitBuf(region(21) + Guard_c, Len_v, Len_v, source(21), '1', '0');
+                else
+                    send(source(21), Len_v);
+                    splitBuf(region(21) + Guard_c, Len_v, Len_v, source(21), '1', '1');
+                end if;
+                odmaWaitAtLeast(Obs.BCount, Cnt_v + planBursts(region(20) + Guard_c, Len_v) +
+                                planBursts(region(21) + Guard_c, Len_v), 1 ms, "write responses of both transfers");
+                cycles(20);
+                check_value(Obs.ResCount, Res_v, ERROR, "no result while Res_Ready is low");
+                ResStall <= 0;
+                if Split_g then
+                    splitBuf(region(22) + Guard_c, Len_v, Len_v - 1, source(21) + Len_v, '0', '1');
+                end if;
+                waitRes(Res_v + Sent_v);
+                checkSplit;
+
+                -- Res_Ready low: a queued result and a result waiting behind it, then Drain: neither is returned, also
+                -- not when Res_Ready rises (S2-HA-02); the core reset recovers the channel
+                Mem_v.setWindow(0, region(24), region(28) - 1);
+                Res_v    := Obs.ResCount;
+                Cnt_v    := Obs.BCount;
+                ResStall <= 100;
+                send(source(24), Len_v);
+                sendCmd(region(24) + Guard_c, Len_v);
+                send(source(25), Len_v);
+                sendCmd(region(25) + Guard_c, Len_v);
+                odmaWaitAtLeast(Obs.BCount, Cnt_v + planBursts(region(24) + Guard_c, Len_v) +
+                                planBursts(region(25) + Guard_c, Len_v), 1 ms, "write responses before the drain");
+                cycles(20);
+                ChDrain  <= '1';
+                odmaWaitHigh(Stopped, 1 ms, "Stopped after the drain");
+                ResStall <= 0;
+                cycles(100);
+                check_value(Obs.ResCount, Res_v, ERROR, "no result of the drained transfers");
+                RstIn    <= '1';
+                cycles(2);
+                RstIn    <= '0';
+                ChDrain  <= '0';
+                cycles(10);
+                transfer(region(30), Len_v, source(30), Len_v, "packet after the drain and the core reset");
             end if;
 
             -- Every test case: no clock cycle without write data inside a burst while the memory is ready (S2-WR-07)

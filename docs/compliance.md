@@ -27,7 +27,7 @@ the published interface are listed in section 6 of the architecture and in the m
 | `MM2S_DMACR.Reserved` | Tables 6, 16, bits 1, 11 to 5, 15 | RG-1 | a | RG-CR-03 | TC-RG-01 | Verified |
 | `S2MM_DMACR.Reserved` | Tables 6, 16, bits 1, 11 to 5, 15 | RG-1 | a | RG-CR-03 | TC-RG-01 | Verified |
 | `MM2S_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | CO-ER-02, CO-RS-01, CO-SG-08, MM-HA-02, RG-CR-06, RG-RS-02, RG-RS-04, SG-HA-02 | TC-CO-04, TC-CO-05, TC-CO-06, TC-CO-17, TC-MM-12, TC-MM-18, TC-RG-10, TC-SG-12 | Verified |
-| `S2MM_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | CO-ER-02, CO-RS-01, CO-SG-08, RG-CR-06, RG-RS-02, RG-RS-04, S2-HA-02, SG-HA-02 | TC-CO-04, TC-CO-05, TC-CO-06, TC-CO-17, TC-RG-10, TC-S2-09, TC-S2-12, TC-S2-19, TC-S2-21, TC-S2-22, TC-SG-12 | Verified |
+| `S2MM_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | CO-ER-02, CO-RS-01, CO-SG-08, RG-CR-06, RG-RS-02, RG-RS-04, S2-HA-02, SG-HA-02 | TC-CO-04, TC-CO-05, TC-CO-06, TC-CO-17, TC-RG-10, TC-S2-09, TC-S2-12, TC-S2-19, TC-S2-21, TC-S2-22, TC-S2-26, TC-SG-12 | Verified |
 | `MM2S_DMACR.Keyhole` | Tables 6, 16, bit 3 | MM-1 (MM2S), S2-2 (S2MM) | b | CO-SG-11, MM-SG-03, RG-SG-09, S2-SG-04, SG-TR-03 | TC-CO-19, TC-MM-19, TC-RG-23, TC-S2-20, TC-SG-14 | Verified |
 | `S2MM_DMACR.Keyhole` | Tables 6, 16, bit 3 | MM-1 (MM2S), S2-2 (S2MM) | b | CO-SG-11, MM-SG-03, RG-SG-09, RG-SG-11, S2-SG-04, SG-TR-03 | TC-CO-19, TC-MM-19, TC-RG-23, TC-RG-24, TC-S2-20, TC-SG-14 | Verified |
 | `MM2S_DMACR.CyclicBD` | Tables 6, 16, bit 4 | SG-1 | b | RG-SG-09, SG-CY-01 | TC-RG-23, TC-SG-07, TC-SG-13 | Verified |
@@ -72,10 +72,10 @@ the published interface are listed in section 6 of the architecture and in the m
 | `S2MM_DMASR.IRQThresholdSts` | Tables 7, 17, bits 23 to 16 | RG-2 | b | RG-SG-06 | TC-RG-21 | Verified |
 | `MM2S_DMASR.IRQDelaySts` | Tables 7, 17, bits 31 to 24 | RG-2 | b | RG-SG-07 | TC-RG-22 | Verified |
 | `S2MM_DMASR.IRQDelaySts` | Tables 7, 17, bits 31 to 24 | RG-2 | b | RG-SG-07 | TC-RG-22 | Verified |
-| `MM2S_CURDESC` | Tables 8, 18 | SG-1 | b | RG-SG-02, SG-FE-07 | TC-RG-16, TC-RG-17, TC-SG-05 | Verified |
-| `S2MM_CURDESC` | Tables 8, 18 | SG-1 | b | RG-SG-02, SG-FE-07 | TC-RG-16, TC-RG-17, TC-SG-05 | Verified |
-| `MM2S_CURDESC_MSB` | Tables 9, 19 | SG-1 | b | RG-SG-02, SG-FE-07 | TC-RG-16, TC-RG-17, TC-SG-05 | Verified |
-| `S2MM_CURDESC_MSB` | Tables 9, 19 | SG-1 | b | RG-SG-02, SG-FE-07 | TC-RG-16, TC-RG-17, TC-SG-05 | Verified |
+| `MM2S_CURDESC` | Tables 8, 18 | SG-1 | b | RG-SG-02, SG-FE-07 | TC-RG-16, TC-RG-17, TC-SG-05, TC-SG-09 | Verified |
+| `S2MM_CURDESC` | Tables 8, 18 | SG-1 | b | RG-SG-02, SG-FE-07 | TC-RG-16, TC-RG-17, TC-SG-05, TC-SG-09 | Verified |
+| `MM2S_CURDESC_MSB` | Tables 9, 19 | SG-1 | b | RG-SG-02, SG-FE-07 | TC-RG-16, TC-RG-17, TC-SG-05, TC-SG-09 | Verified |
+| `S2MM_CURDESC_MSB` | Tables 9, 19 | SG-1 | b | RG-SG-02, SG-FE-07 | TC-RG-16, TC-RG-17, TC-SG-05, TC-SG-09 | Verified |
 | `MM2S_TAILDESC` | Tables 10, 20 | SG-1 | b | RG-SG-03, SG-FE-02 | TC-RG-16, TC-RG-18, TC-SG-03, TC-SG-16 | Verified |
 | `S2MM_TAILDESC` | Tables 10, 20 | SG-1 | b | RG-SG-03, SG-FE-02 | TC-RG-16, TC-RG-18, TC-SG-03, TC-SG-16 | Verified |
 | `MM2S_TAILDESC_MSB` | Tables 11, 21 | SG-1 | b | RG-SG-03, SG-FE-02 | TC-RG-16, TC-RG-18, TC-SG-03, TC-SG-16 | Verified |
@@ -105,8 +105,8 @@ the published interface are listed in section 6 of the architecture and in the m
 | `DESC.S2MM_CONTROL.RXSOF` | Table 37, bit 27 (micro mode) | SG-1 | c | - | - | Planned |
 | `DESC.S2MM_CONTROL.RXEOF` | Table 37, bit 26 (micro mode) | SG-1 | c | - | - | Planned |
 | `DESC.S2MM_STATUS.TransferredBytes` | Table 38, bits 25 to 0 | SG-2 | b | SG-UP-01, SG-UP-03 | TC-SG-02, TC-SG-16 | Verified |
-| `DESC.S2MM_STATUS.RXEOF` | Table 38, bit 26 | SG-2 | b | S2-SG-02, SG-UP-03 | TC-S2-17, TC-S2-19, TC-S2-22, TC-SG-02, TC-SG-16 | Verified |
-| `DESC.S2MM_STATUS.RXSOF` | Table 38, bit 27 | SG-2 | b | S2-SG-02, SG-UP-03 | TC-S2-17, TC-S2-19, TC-S2-22, TC-SG-02, TC-SG-16 | Verified |
+| `DESC.S2MM_STATUS.RXEOF` | Table 38, bit 26 | SG-2 | b | S2-SG-02, SG-UP-03 | TC-S2-17, TC-S2-19, TC-S2-22, TC-S2-26, TC-SG-02, TC-SG-16 | Verified |
+| `DESC.S2MM_STATUS.RXSOF` | Table 38, bit 27 | SG-2 | b | S2-SG-02, SG-UP-03 | TC-S2-17, TC-S2-19, TC-S2-22, TC-S2-26, TC-SG-02, TC-SG-16 | Verified |
 | `DESC.S2MM_STATUS.DMAIntErr` | Table 38, bit 28 | SG-2 | b | SG-FE-06 | TC-SG-08 | Verified |
 | `DESC.S2MM_STATUS.DMASlvErr` | Table 38, bit 29 | SG-2 | b | SG-ER-01 | TC-SG-08 | Verified |
 | `DESC.S2MM_STATUS.DMADecErr` | Table 38, bit 30 | SG-2 | b | SG-ER-01 | TC-SG-08 | Verified |
@@ -122,7 +122,7 @@ the published interface are listed in section 6 of the architecture and in the m
 | `IRQ.OUT` | Table 3, interrupt outputs | RG-2 | a | CO-IF-02, RG-IR-04, RG-SG-08 | TC-CO-02, TC-RG-04, TC-RG-05, TC-RG-08, TC-RG-22 | Verified |
 | `CLK.SYNC` | Section "Clocking", synchronous mode | CO-1 | a | CO-IF-01 | TC-CO-02 | Verified |
 | `CLK.ASYNC` | Section "Clocking", asynchronous mode, Table 43 | Out of scope (D1) | - | - | - | Out of scope |
-| `RST.HARD` | Section "Resets" | RG-3 | a | RG-RS-01 | TC-RG-11 | Verified |
+| `RST.HARD` | Section "Resets" | RG-3 | a | MM-HA-03, RG-RS-01, SG-HA-03 | TC-MM-12, TC-RG-11, TC-SG-19 | Verified |
 | `RST.OUT` | Table 3, reset outputs of the streams (I12) | RG-3 | a | CO-IF-02, CO-RS-01, RG-RS-03 | TC-CO-02, TC-CO-05, TC-CO-06, TC-RG-10 | Verified |
 | `FEAT.4K` | Section "Core Overview", 4 KB address boundary | MM-1 (MM2S), S2-2 (S2MM) | a | MM-RD-02, S2-WR-03 | TC-MM-03, TC-S2-04, TC-S2-24 | Verified |
 | `FEAT.BURST` | Table 44, `c_mm2s_burst_size`, `c_s2mm_burst_size` | MM-1 (MM2S), S2-2 (S2MM) | a | MM-RD-02, S2-WR-03 | TC-MM-03, TC-S2-04, TC-S2-24 | Verified |
@@ -149,13 +149,13 @@ of the published interface included).
 | Module | Requirements | Verified by a test case | Without a test case | Waiting for Open Logic |
 | --- | --- | --- | --- | --- |
 | `odma_core` | 27 | 27 | - | - |
-| `odma_mm2s` | 22 | 22 | - | - |
+| `odma_mm2s` | 23 | 23 | - | - |
 | `odma_pkg` | 14 | 14 | - | - |
 | `odma_registers` | 53 | 53 | - | - |
 | `odma_s2mm` | 28 | 28 | - | - |
-| `odma_sg` | 27 | 27 | - | - |
+| `odma_sg` | 28 | 28 | - | - |
 
-Requirements: 171; without a test case: 0; test cases of the plans not run by a testbench: 0.
+Requirements: 173; without a test case: 0; test cases of the plans not run by a testbench: 0.
 
 ## 3. Interpretations of the published interface
 
@@ -171,7 +171,7 @@ state it (the architecture, section 6, and the module specifications, section 4)
 | I4 | S2MM packet longer than the buffer in DR mode | Table 24 calls it undefined, Table 17 defines `DMAIntErr` | D6 | architecture |
 | I5 | Buffer beyond the top of the address space | Not described | Rejected with `DMADecErr` (invalid address), no access (D7) | architecture, odma_mm2s, odma_s2mm |
 | I6 | `MM2S_LENGTH` or `S2MM_LENGTH` written while the channel is busy | Not described (the software checks the idle state first) | The write has no effect | architecture, odma_registers |
-| I7 | `MM2S_LENGTH` or `S2MM_LENGTH` written while halted | No effect on the DMA operation (Tables 7 and 17) | The value is stored and read back; no transfer starts, also not when `RS` is set later | architecture, odma_registers |
+| I7 | `MM2S_LENGTH` or `S2MM_LENGTH` written while halted or stopping after a halt request | No effect on the DMA operation (Tables 7 and 17) | The value is stored and read back; no transfer starts, also not when `RS` is set later | architecture, odma_registers |
 | I8 | `DMACR.RS` = 0 during a transfer | Pending transfers flushed or completed | MM2S completes the transfer in progress, including its `TLast`, then halts. S2MM writes the chunks that are complete in its buffer, discards the rest of the packet up to `TLast` and halts without IOC for that cut packet; a packet whose `TLast` was accepted and whose bytes fit into the buffer is written completely, with IOC; in SG mode a packet that needs a further buffer is cut (`odma_s2mm` S2-HA-01) | architecture, odma_mm2s, odma_s2mm |
 | I9 | S2MM stream input before the channel runs | Section "Typical System Interconnect" notes that a few beats are accepted before the core is programmed | Beats are accepted into the data buffer only while the channel runs; while it is halted `S_S2mm_Ready` is low | architecture, odma_s2mm |
 | I10 | `TKeep` of S2MM beats | Not described | `TKeep` of a beat without `TLast` is ignored (all bytes are stored); the last beat stores the bytes up to the first deasserted `TKeep` bit (P7) | architecture, odma_s2mm |

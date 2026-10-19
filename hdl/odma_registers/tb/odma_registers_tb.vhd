@@ -791,7 +791,20 @@ begin
                     cycles(20);
                     check_value(Obs.CmdCount(ch), 1, ERROR, "no command for the length written while busy");
                     chk(Length_c(ch), x"000000C8", "length after the transfer");
+                    -- Stopping after the halt request (the channel model holds Stopped low): stored and read back,
+                    -- no command, also not after the restart
+                    Cfg(ch).DrainTime <= 100;
                     wr(Dmacr_c(ch), Zero_c);
+                    wr(Length_c(ch), x"00000190");
+                    chkMask(Dmasr_c(ch), Zero_c, Halted_c, "still stopping after the length write");
+                    chk(Length_c(ch), x"00000190", "length written while stopping");
+                    poll(Dmasr_c(ch), Halted_c, Halted_c, "halted");
+                    wr(Dmacr_c(ch), Rs_c);
+                    cycles(20);
+                    check_value(Obs.CmdCount(ch), 1, ERROR, "no command for the length written while stopping");
+                    Cfg(ch).DrainTime <= 0;
+                    wr(Dmacr_c(ch), Zero_c);
+                    poll(Dmasr_c(ch), Halted_c, Halted_c, "halted at the end");
                 end loop;
 
             elsif run("test_halt_during_transfer") then
@@ -979,6 +992,24 @@ begin
                 cycles(2);
                 check_value(std_logic_vector'(ChRstOut & CoreRst & ChRun & ChDrain), "0000000", ERROR, "outputs after Rst");
                 checkResetValues("after Rst");
+
+                -- Rst while a soft reset waits for the channels to stop: the soft reset ends with it
+                prepareReset;
+                wr(Dmacr_c(Mm2s_c), Reset_c);
+                check_value(std_logic_vector'(ChDrain & CoreRst), "110", ERROR, "drain of the soft reset");
+                wait until rising_edge(Clk);
+                HardRst <= '1';
+
+                for i in 1 to 5 loop
+                    wait until rising_edge(Clk);
+                    check_value(std_logic_vector'(ChRstOut & CoreRst), "111", ERROR, "reset outputs and core reset during Rst");
+                end loop;
+
+                HardRst <= '0';
+                cycles(2);
+                check_value(std_logic_vector'(ChRstOut & CoreRst & ChRun & ChDrain), "0000000", ERROR,
+                            "outputs after Rst during the soft reset");
+                checkResetValues("after Rst during the soft reset");
 
             elsif run("test_excluded_channel") then
                 log(ID_LOG_HDR, "TC-RG-12 channel not included");

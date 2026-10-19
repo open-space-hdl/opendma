@@ -569,6 +569,32 @@ begin
 
                 Cmd_Valid <= '0';
 
+                -- Rst of the core during a packet (it also resets the memory model): the stream output stops at once,
+                -- no result, and the next transfer is correct
+                RstIn   <= '1';
+                cycles(2);
+                RstIn   <= '0';
+                ChDrain <= '0';
+                cycles(2);
+                Res_v   := Obs.ResCount;
+                Mem_v.fill(0, region(2), Len_v, 31);
+                clearStream;
+                expect(region(2), Len_v);
+                sendCmd(region(2), Len_v);
+                odmaWaitAtLeast(Obs.Beats, 10, 1 ms, "stream beats before the reset");
+                wait until rising_edge(Clk);
+                RstIn   <= '1';
+                cycles(2);
+                Cnt_v   := Obs.Beats;
+                RstIn   <= '0';
+                cycles(50);
+                check_value(Obs.Beats, Cnt_v, ERROR, "no stream beat after the reset");
+                check_value(Obs.ResCount, Res_v, ERROR, "no result of the transfer cut by the reset");
+                -- The drained and the cut packet never end
+                Expected_v := Obs.Packets;
+                clearStream;
+                transfer(region(3), minimum(3 * StreamBytes_c, MaxLen_c), "packet after the reset during a packet");
+
             elsif run("test_ecc") then
                 log(ID_LOG_HDR, "TC-MM-13 single and double errors injected into the three buffers");
                 -- d = 0: single error, d = 1: double error (parity bits), d = 2: single error on a data bit, which

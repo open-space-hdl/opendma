@@ -218,6 +218,8 @@ begin
         )
         port map (
             Clk     => Clk_i,
+            -- Reset with the DUT, as the reset of the core resets its interconnect
+            Rst     => DutRst,
             AwAddr  => AwAddr,
             AwLen   => AwLen,
             AwSize  => AwSize,

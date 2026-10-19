@@ -73,7 +73,7 @@ such as the programming sequences (`SEQ.*`, owner CO-1), are verified by the req
 | RG-AR-04 | A write of a non-zero value to `MM2S_LENGTH` while the MM2S channel runs and no MM2S transfer is in progress shall issue one MM2S transfer command with the address of `MM2S_SA` and `MM2S_SA_MSB`, the written length and start and end of packet set. | `MM2S_LENGTH` |
 | RG-AR-05 | A write of a non-zero value to `S2MM_LENGTH` while the S2MM channel runs and no S2MM transfer is in progress shall issue one S2MM transfer command with the address of `S2MM_DA` and `S2MM_DA_MSB` and the written value as the buffer length. | `S2MM_LENGTH` |
 | RG-AR-06 | When an S2MM transfer completes (a result without error and with the end of packet), `S2MM_LENGTH` shall read the number of bytes written to the buffer; after any other result it shall keep its value. | `S2MM_LENGTH` |
-| RG-AR-07 | A write of 0 to a length register shall have no effect; a write while a transfer of the channel is in progress shall have no effect (interpretation I6); a write while the channel is halted shall be stored and read back but issue no transfer, also not when the channel is started later (interpretation I7). | `MM2S_LENGTH`, `S2MM_LENGTH` |
+| RG-AR-07 | A write of 0 to a length register shall have no effect; a write while a transfer of the channel is in progress shall have no effect (interpretation I6); a write while the channel is halted or stopping after a halt request shall be stored and read back but issue no transfer, also not when the channel is started later (interpretation I7). | `MM2S_LENGTH`, `S2MM_LENGTH` |
 | RG-AR-08 | Writes to the address registers while a transfer is in progress shall not change the transfer in progress. | `MM2S_SA`, `S2MM_DA` |
 
 ### 3.5 Reset (RG-3)

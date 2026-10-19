@@ -184,6 +184,35 @@ begin
                         ERROR, "configuration message '" & got & "' starts with '" & exp & "'");
         end procedure;
 
+        -- The checks of the package functions pass their arguments through variables: a call with literal
+        -- arguments is evaluated when the bench is compiled, not in the simulation
+        procedure checkTop (
+            addr  : unsigned;
+            bytes : natural;
+            exp   : boolean;
+            msg   : string) is
+            variable Addr_v  : unsigned(addr'length - 1 downto 0) := addr;
+            variable Bytes_v : unsigned(25 downto 0)              := to_unsigned(bytes, 26);
+        begin
+            check_value(beyondTop(Addr_v, Bytes_v), exp, ERROR, msg);
+        end procedure;
+
+        -- Generics {AddrWidth, LengthWidth, then MemWidth, StreamWidth, BurstBeats, BufferBeats of MM2S and S2MM};
+        -- exp is empty for a consistent configuration, else the start of the message
+        procedure checkConfig (
+            cfg : NatArray_t;
+            exp : string) is
+            variable C_v : NatArray_t(0 to 9) := cfg;
+        begin
+            if exp = "" then
+                check_value(coreConfigError(C_v(0), C_v(1), C_v(2), C_v(3), C_v(4), C_v(5), C_v(6), C_v(7), C_v(8),
+                                            C_v(9)) = "", ERROR, "consistent configuration");
+            else
+                checkMsg(coreConfigError(C_v(0), C_v(1), C_v(2), C_v(3), C_v(4), C_v(5), C_v(6), C_v(7), C_v(8), C_v(9)),
+                         exp);
+            end if;
+        end procedure;
+
         -- Compares two text files line by line
         procedure compareFiles (
             got : string;
@@ -341,43 +370,45 @@ begin
 
             elsif run("test_beyond_top") then
                 log(ID_LOG_HDR, "TC-PKG-03 beyondTop");
-                check_value(beyondTop(x"FFFF_FFFF", to_unsigned(1, 26)), false, ERROR, "32 bit: last byte at the top");
-                check_value(beyondTop(x"FFFF_FFFF", to_unsigned(2, 26)), true, ERROR, "32 bit: one byte beyond the top");
-                check_value(beyondTop(x"FFFF_FF00", to_unsigned(256, 26)), false, ERROR, "32 bit: 256 bytes to the top");
-                check_value(beyondTop(x"FFFF_FF00", to_unsigned(257, 26)), true, ERROR, "32 bit: 257 bytes");
-                check_value(beyondTop(x"0000_0000", to_unsigned(2 ** 26 - 1, 26)), false, ERROR, "32 bit: largest length at 0");
-                check_value(beyondTop(x"FC00_0001", to_unsigned(2 ** 26 - 1, 26)), false, ERROR, "32 bit: largest length to the top");
-                check_value(beyondTop(x"FC00_0002", to_unsigned(2 ** 26 - 1, 26)), true, ERROR, "32 bit: largest length, one beyond");
-                check_value(beyondTop(a64(x"FFFF_FFFF_FFFF_FFFF"), to_unsigned(1, 26)), false, ERROR, "64 bit: last byte at the top");
-                check_value(beyondTop(a64(x"FFFF_FFFF_FFFF_FFFF"), to_unsigned(2, 26)), true, ERROR, "64 bit: one byte beyond");
-                check_value(beyondTop(a64(x"0000_0000_FFFF_FFFF"), to_unsigned(2, 26)), false, ERROR, "64 bit: across 4 GB");
+                checkTop(x"FFFF_FFFF", 1, false, "32 bit: last byte at the top");
+                checkTop(x"FFFF_FFFF", 2, true, "32 bit: one byte beyond the top");
+                checkTop(x"FFFF_FF00", 256, false, "32 bit: 256 bytes to the top");
+                checkTop(x"FFFF_FF00", 257, true, "32 bit: 257 bytes");
+                checkTop(x"0000_0000", 2 ** 26 - 1, false, "32 bit: largest length at 0");
+                checkTop(x"FC00_0001", 2 ** 26 - 1, false, "32 bit: largest length to the top");
+                checkTop(x"FC00_0002", 2 ** 26 - 1, true, "32 bit: largest length, one beyond");
+                checkTop(a64(x"FFFF_FFFF_FFFF_FFFF"), 1, false, "64 bit: last byte at the top");
+                checkTop(a64(x"FFFF_FFFF_FFFF_FFFF"), 2, true, "64 bit: one byte beyond");
+                checkTop(a64(x"0000_0000_FFFF_FFFF"), 2, false, "64 bit: across 4 GB");
                 -- An empty buffer touches no byte: never beyond the top, also at address 0 (no underflow)
-                check_value(beyondTop(x"0000_0000", to_unsigned(0, 26)), false, ERROR, "32 bit: empty buffer at 0");
-                check_value(beyondTop(x"8000_0000", to_unsigned(0, 26)), false, ERROR, "32 bit: empty buffer");
-                check_value(beyondTop(x"FFFF_FFFF", to_unsigned(0, 26)), false, ERROR, "32 bit: empty buffer at the top");
-                check_value(beyondTop(a64(x"0000_0000_0000_0000"), to_unsigned(0, 26)), false, ERROR,
-                            "64 bit: empty buffer at 0");
-                check_value(beyondTop(a64(x"FFFF_FFFF_FFFF_FFFF"), to_unsigned(0, 26)), false, ERROR,
-                            "64 bit: empty buffer at the top");
+                checkTop(x"0000_0000", 0, false, "32 bit: empty buffer at 0");
+                checkTop(x"8000_0000", 0, false, "32 bit: empty buffer");
+                checkTop(x"FFFF_FFFF", 0, false, "32 bit: empty buffer at the top");
+                checkTop(a64(x"0000_0000_0000_0000"), 0, false, "64 bit: empty buffer at 0");
+                checkTop(a64(x"FFFF_FFFF_FFFF_FFFF"), 0, false, "64 bit: empty buffer at the top");
 
             elsif run("test_config") then
                 log(ID_LOG_HDR, "TC-PKG-04 coreConfigError");
-                check_value(coreConfigError(32, 14, 32, 32, 16, 64, 32, 32, 16, 64) = "", ERROR, "default configuration");
-                check_value(coreConfigError(64, 26, 1024, 1024, 256, 512, 32, 8, 2, 32) = "", ERROR,
-                            "boundary configuration");
-                check_value(coreConfigError(32, 8, 1024, 8, 2, 512, 1024, 8, 2, 512) = "", ERROR, "widest ratio");
-                checkMsg(coreConfigError(31, 14, 32, 32, 16, 64, 32, 32, 16, 64), "AddrWidth_g");
-                checkMsg(coreConfigError(65, 14, 32, 32, 16, 64, 32, 32, 16, 64), "AddrWidth_g");
-                checkMsg(coreConfigError(32, 7, 32, 32, 16, 64, 32, 32, 16, 64), "LengthWidth_g");
-                checkMsg(coreConfigError(32, 27, 32, 32, 16, 64, 32, 32, 16, 64), "LengthWidth_g");
-                checkMsg(coreConfigError(32, 14, 24, 8, 16, 64, 32, 32, 16, 64), "Mm2sMemWidth_g");
-                checkMsg(coreConfigError(32, 14, 2048, 32, 16, 2048, 32, 32, 16, 64), "Mm2sMemWidth_g");
-                checkMsg(coreConfigError(32, 14, 32, 64, 16, 64, 32, 32, 16, 64), "Mm2sStreamWidth_g must not be larger");
-                checkMsg(coreConfigError(32, 14, 32, 32, 3, 64, 32, 32, 16, 64), "Mm2sBurstBeats_g");
-                checkMsg(coreConfigError(32, 14, 32, 32, 512, 2048, 32, 32, 16, 64), "Mm2sBurstBeats_g");
-                checkMsg(coreConfigError(32, 14, 32, 32, 16, 16, 32, 32, 16, 64), "Mm2sBufferBeats_g");
-                checkMsg(coreConfigError(32, 14, 32, 32, 16, 64, 24, 8, 16, 64), "S2mmMemWidth_g");
-                checkMsg(coreConfigError(32, 14, 32, 32, 16, 64, 32, 32, 16, 31), "S2mmBufferBeats_g");
+                -- Default, boundary and widest ratio of memory to stream width
+                checkConfig((32, 14, 32, 32, 16, 64, 32, 32, 16, 64), "");
+                checkConfig((64, 26, 1024, 1024, 256, 512, 32, 8, 2, 32), "");
+                checkConfig((32, 8, 1024, 8, 2, 512, 1024, 8, 2, 512), "");
+                checkConfig((31, 14, 32, 32, 16, 64, 32, 32, 16, 64), "AddrWidth_g");
+                checkConfig((65, 14, 32, 32, 16, 64, 32, 32, 16, 64), "AddrWidth_g");
+                checkConfig((32, 7, 32, 32, 16, 64, 32, 32, 16, 64), "LengthWidth_g");
+                checkConfig((32, 27, 32, 32, 16, 64, 32, 32, 16, 64), "LengthWidth_g");
+                checkConfig((32, 14, 24, 8, 16, 64, 32, 32, 16, 64), "Mm2sMemWidth_g");
+                checkConfig((32, 14, 2048, 32, 16, 2048, 32, 32, 16, 64), "Mm2sMemWidth_g");
+                checkConfig((32, 14, 32, 4, 16, 64, 32, 32, 16, 64), "Mm2sStreamWidth_g must be a power of 2");
+                checkConfig((32, 14, 1024, 2048, 16, 64, 32, 32, 16, 64), "Mm2sStreamWidth_g must be a power of 2");
+                checkConfig((32, 14, 32, 24, 16, 64, 32, 32, 16, 64), "Mm2sStreamWidth_g must be a power of 2");
+                checkConfig((32, 14, 32, 64, 16, 64, 32, 32, 16, 64), "Mm2sStreamWidth_g must not be larger");
+                checkConfig((32, 14, 32, 32, 3, 64, 32, 32, 16, 64), "Mm2sBurstBeats_g");
+                checkConfig((32, 14, 32, 32, 512, 2048, 32, 32, 16, 64), "Mm2sBurstBeats_g");
+                checkConfig((32, 14, 32, 32, 16, 16, 32, 32, 16, 64), "Mm2sBufferBeats_g");
+                checkConfig((32, 14, 32, 32, 16, 64, 24, 8, 16, 64), "S2mmMemWidth_g");
+                checkConfig((32, 14, 32, 32, 16, 64, 32, 4, 16, 64), "S2mmStreamWidth_g must be a power of 2");
+                checkConfig((32, 14, 32, 32, 16, 64, 32, 32, 16, 31), "S2mmBufferBeats_g");
 
             elsif run("test_err_codes") then
                 log(ID_LOG_HDR, "TC-PKG-05 error codes");

@@ -18,7 +18,8 @@ CONFIGS = {
 
 TESTS = ["test_fetch", "test_status", "test_tail", "test_prefetch", "test_curdesc", "test_packet_events",
          "test_stale", "test_transfer_errors", "test_error_codes", "test_descriptor_errors", "test_channels",
-         "test_halt", "test_drain", "test_cyclic", "test_keyhole", "test_ecc", "test_random", "test_rate"]
+         "test_halt", "test_drain", "test_cyclic", "test_keyhole", "test_ecc", "test_random", "test_rate",
+         "test_hard_reset"]
 
 # Tests that need both channels, tests that run in one configuration only
 BOTH = {"test_channels"}

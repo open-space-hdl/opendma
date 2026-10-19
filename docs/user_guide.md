@@ -40,8 +40,10 @@ bursts of at most 4096 bytes whatever the burst generic is (32 beats of 1024 bit
 
 All ports belong to `Clk`, the synchronous configuration of \[PG021\]; the core has no clock domain crossing. A
 system with other stream or memory clocks places `olo_ft_fifo_async` (with `SyncTmr_g` = true) at the ports. `Rst`
-is synchronous and high-active and resets the whole core. A soft reset (section 5.4) resets the channels and the
-registers but not the AXI4-Lite slave, so that the register access that starts it completes.
+is synchronous and high-active and resets the whole core. It is the reset of the whole AXI domain of the core
+and is asserted together with the reset of the interconnect and the slaves on the memory ports, the descriptor
+port and the streams (section 8). A soft reset (section 5.4) resets the channels and the registers but not the
+AXI4-Lite slave, so that the register access that starts it completes.
 
 ## 4. Interfaces
 
@@ -315,6 +317,7 @@ MM2S join of several buffers costs at most one clock cycle per packet.
 | TMR of the synthesis tool enabled for the core | The core protects its FT buffers itself and relies on TMR for all other logic (section 6) |
 | The memory answers every burst in order (no ID signals) | The masters use one ID for all transactions |
 | The stream peers are reset by `Mm2s_RstOut` and `S2mm_RstOut` | A soft reset ends the packets in progress; a peer that continues a packet sends its rest as a new packet |
+| `Rst` only together with the reset of the interconnect and the slaves on `M_AxiMm2s_*`, `M_AxiS2mm_*`, `M_AxiSg_*` and the streams | `Rst` abandons the outstanding AXI transactions of the core; a slave that is not reset would still return their responses. AXI4 resets the master and the slave of an interface together (Arm AMBA AXI Protocol Specification, IHI 0022, section "Reset"). A stop that keeps the buses running is the soft reset (`DMACR.Reset`) or a halt |
 | One clock for all ports | Synchronous configuration; asynchronous stream or memory clocks need FIFOs at the ports (section 3) |
 | `StsCntrlStrm_g`, `UseRxLength_g` and `MicroDma_g` false | The control and status streams and the micro DMA follow in phase c |
 | Keyhole buffers aligned to the memory data width | The address bits below the memory width are ignored for FIXED bursts |

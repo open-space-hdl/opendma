@@ -64,7 +64,7 @@ packets of several commands, and keyhole reads. The control stream MM-3 (phase c
 | --- | --- | --- |
 | MM-HA-01 | When `Run` falls, the channel shall accept no new command and complete the accepted transfers on the stream with their results (interpretation I8); `Stopped` shall be '1' while no accepted command is without result and no read burst is outstanding. | `MM2S_DMACR.RS` |
 | MM-HA-02 | While `Drain` is '1', the channel shall accept no command, send no stream beat, discard the read data of the accepted transfers, complete their read bursts on the AXI4 port and return no result; `Stopped` shall rise when no read burst is outstanding. | `MM2S_DMACR.Reset` |
-| MM-HA-03 | `Rst` during a transfer shall end it at once, with no further stream beat and no result; after `Rst` the channel shall accept and transfer the next command as after the first reset. | `RST.HARD` |
+| MM-HA-03 | `Rst` during a transfer, with the connected AXI slaves reset at the same time, shall end it at once, with no further stream beat and no result; after `Rst` the channel shall accept and transfer the next command as after the first reset. | `RST.HARD` |
 
 ### 3.6 Fault tolerance
 

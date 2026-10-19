@@ -81,7 +81,7 @@ requirements of `odma_registers` (its specification, section "Requirements of ph
 | --- | --- | --- |
 | SG-HA-01 | When `DMACR.RS` falls, the engine shall issue no further command and fetch no further descriptor, let the channel end the transfer in progress as in DR mode, write the status of that descriptor, and then report the channel stopped; fetched descriptors that were not started keep their status unchanged, and `CURDESC` points to the first of them. | `*_DMACR.RS`, `*_DMASR.Halted` |
 | SG-HA-02 | During the drain of a soft reset the engine shall issue no command and start no fetch, complete the descriptor accesses already accepted by the memory, and report stopped when none is outstanding. | `*_DMACR.Reset` |
-| SG-HA-03 | `Rst` at any clock cycle, also while a descriptor access is pending or in progress, shall return the engine to its reset state; after `Rst` the engine shall process a chain as after the first reset. | `RST.HARD` |
+| SG-HA-03 | `Rst` at any clock cycle, also while a descriptor access is pending or in progress, with the connected AXI slaves reset at the same time, shall return the engine to its reset state; after `Rst` the engine shall process a chain as after the first reset. | `RST.HARD` |
 | SG-CY-01 | With `DMACR.CyclicBD` = 1 the engine shall ignore `Cmplt` of fetched descriptors and the tail pointer as pause point: after the start by a tail pointer write it processes the ring until the channel is halted or reset; it still writes the status of every descriptor. | `*_DMACR.CyclicBD`, `SEQ.CYCLIC` |
 
 ### 3.7 Fault tolerance

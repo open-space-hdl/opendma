@@ -2,13 +2,13 @@
 
 ## 1. Test results
 
-Run on 2026-10-18 in the GHDL CI of the repository, GitHub Actions run 39126587166 on commit b6d359e (its
+Run on 2026-10-19 in the GHDL CI of the repository, GitHub Actions run 39209624300 on commit b3a592b (its
 `results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
 `python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_mm2s_tb`.
 
 | Testbench | Tests | Passed |
 | --- | --- | --- |
-| `odma_mm2s_tb` | 312 (19 test cases: 16 in all 18 configurations, TC-MM-16 to TC-MM-18 in the eight `j_` configurations) | 312 |
+| `odma_mm2s_tb` | 320 (20 test cases: 16 in all 18 configurations, TC-MM-16 to TC-MM-18 and TC-MM-20 in the eight `j_` configurations) | 320 |
 
 ## 2. Summary
 

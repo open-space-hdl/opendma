@@ -38,7 +38,7 @@ package odma_s2mm_tb_pkg is
         KeepGapLast   -- The last beat has the valid bytes, a deasserted lane, then asserted lanes (not counted)
     );
 
-    constant MaxPackets_c : positive := 16;
+    constant MaxPackets_c : positive := 64;
 
     type PktQueue_t is protected
 

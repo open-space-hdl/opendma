@@ -399,10 +399,12 @@ begin
                 checkConfig((32, 27, 32, 32, 16, 64, 32, 32, 16, 64), "LengthWidth_g");
                 checkConfig((32, 14, 24, 8, 16, 64, 32, 32, 16, 64), "Mm2sMemWidth_g");
                 checkConfig((32, 14, 2048, 32, 16, 2048, 32, 32, 16, 64), "Mm2sMemWidth_g");
+                checkConfig((32, 14, 48, 8, 16, 128, 32, 32, 16, 64), "Mm2sMemWidth_g");
                 checkConfig((32, 14, 32, 4, 16, 64, 32, 32, 16, 64), "Mm2sStreamWidth_g must be a power of 2");
                 checkConfig((32, 14, 1024, 2048, 16, 64, 32, 32, 16, 64), "Mm2sStreamWidth_g must be a power of 2");
                 checkConfig((32, 14, 32, 24, 16, 64, 32, 32, 16, 64), "Mm2sStreamWidth_g must be a power of 2");
                 checkConfig((32, 14, 32, 64, 16, 64, 32, 32, 16, 64), "Mm2sStreamWidth_g must not be larger");
+                checkConfig((32, 14, 32, 32, 1, 64, 32, 32, 16, 64), "Mm2sBurstBeats_g");
                 checkConfig((32, 14, 32, 32, 3, 64, 32, 32, 16, 64), "Mm2sBurstBeats_g");
                 checkConfig((32, 14, 32, 32, 512, 2048, 32, 32, 16, 64), "Mm2sBurstBeats_g");
                 checkConfig((32, 14, 32, 32, 16, 16, 32, 32, 16, 64), "Mm2sBufferBeats_g");

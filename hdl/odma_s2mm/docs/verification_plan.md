@@ -44,8 +44,8 @@ command, so a packet longer than the buffer continues in the next buffer (S2-SG-
 tests of Scatter/Gather Mode (TC-S2-17 to TC-S2-19 and TC-S2-24) run in the `s_` configurations; TC-S2-25 runs in
 `w32_s32` only, since it calls the package function for every configuration of the generic ranges; the halt sweep
 TC-S2-21 runs in `w32_s32` and `w512_s512` (2-beat chunks) and in `s_w64_s8` and `s_w512_s512`, the narrowest and
-the widest lag of the split (two beats of 8 and of 512 bits); TC-S2-22, TC-S2-23 and TC-S2-26 run in every
-configuration, their steps with packets over several buffers with `Split_g`; lengths are limited to
+the widest lag of the split (two beats of 8 and of 512 bits); TC-S2-22, TC-S2-23, TC-S2-26 and TC-S2-27 run in
+every configuration, their steps with packets over several buffers with `Split_g`; lengths are limited to
 2**`LengthWidth_g` - 1.
 
 Every test case ends with the check of the W monitor: no clock cycle with `WReady` '1' and `WValid` '0' between two
@@ -93,7 +93,8 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | `test_overlap_error` (TC-S2-23) | With `Split_g`: SLVERR on the last chunk of the first buffer of a packet of three buffers, buffers of 16 chunks and responses four chunk times late (each its beats and 6 clock cycles), so that the second buffer has written a third to a half of its chunks when the error arrives: the first result carries the error, the bench lowers `Run` 200 clock cycles after the response latency after it, the second result only after the halt, with the bytes written, no start and no end of packet and no error, fewer bytes than its buffer where it has several chunks, its bytes in memory beyond the failing buffer and nothing else written; no third command accepted; `Stopped` within 1000 clock cycles, the rest discarded; after the restart the next packet is complete with the start of packet. In every configuration: SLVERR on the last chunk of a packet that ends in its buffer, the next packet arriving at once, the halt 600 clock cycles after the error result: the next result only after the halt, complete chunks or the whole packet, the start of packet when it has bytes, never the end of packet. With several chunks per buffer: SLVERR on the first chunk, the next command presented after that response and before the result: it is accepted, with `Cmd_Ready`, only after the result; this step needs two chunks within the longest length of 2**`LengthWidth_g` - 1 bytes and does not run in `w1024_s8`, `s_w1024_s8`, `w1024_s1024`, `s_w1024_s1024` and `w128_s32`, where one chunk is more than half of it. With `Split_g`: a full buffer queued with its responses 400 clock cycles late and `Run` falling right after it is queued, SLVERR on its last chunk: `Stopped` stays '0' until its result and rises within 1000 clock cycles after it; after the restart the next packet is complete and alone | S2-RS-03, S2-RS-04, S2-RS-06, S2-HA-01, S2-HA-03 |
 | `test_chunk_align` (TC-S2-24) | With `Split_g`: buffers at the offsets 0, the stream width, the memory word, half a burst, a burst less the stream width, 1 byte, the stream width less 1 byte and the memory word and 1 byte above a burst boundary, and at the stream width and 1 byte below a 4 KB boundary; at each offset a buffer of five chunks and 3 bytes, a buffer shorter than its first chunk, buffers of three chunks with a packet that ends inside the first chunk and with one that ends inside the second chunk (inside a stream word a short chunk where they are enabled), and a buffer and packet of three chunks exactly (a first chunk up to the burst boundary adds a chunk). For each: the AW bursts equal the bench model (the chunk plan of S2-ST-04 with the short chunks of the table in section 2, and the split of the write master at 4 KB and at B memory words); at a multiple of the burst size and at a multiple of the stream width that is not one of the memory word no INCR burst crosses a multiple of the burst size; the result and the bytes in and around the buffer. A packet over two buffers, the first at the stream width and the second 1 byte above a burst boundary: the bursts of each buffer by its own plan, both results and the bytes. A keyhole buffer of up to three chunks one memory word above a burst boundary: the FIXED bursts of chunks of `ChunkBeats` beats (a resized first chunk adds one), the backing range of the FIFO window | S2-ST-04, S2-ST-03, S2-WR-03 |
 | `test_short_rule` (TC-S2-25) | `shortBeats` of `odma_s2mm_pkg` for every memory width, every stream width up to it and every burst length of the generic ranges (B limited by 4 KB), against the table of section 2 | S2-ST-04 |
-| `test_result_stall` (TC-S2-26) | The receiver of the results holds `Res_Ready` low in runs of 1 to 32 clock cycles, 50 to 95 % of the time: 16 packets of one buffer, with `Split_g` of one to four buffers, commanded back to back, every result in order with its bytes, start and end of packet, every buffer in memory. `Res_Ready` low while a queued result waits and the next transfer ends (with `Split_g` the full first buffer of a packet of two): both results in order when it rises. `Drain` while a queued result and one behind it wait: neither is returned, also not when `Res_Ready` rises; the core reset recovers the channel | S2-RS-06, S2-HA-02, S2-SG-02 |
+| `test_result_stall` (TC-S2-26) | The receiver of the results holds `Res_Ready` low in runs of 1 to 32 clock cycles, 50 to 95 % of the time: 16 packets of one buffer, with `Split_g` of one to four buffers, commanded back to back, every result in order with its bytes, start and end of packet, every buffer in memory. `Res_Ready` low while a queued result waits and the next transfer ends (with `Split_g` the full first buffer of a packet of two): both results in order when it rises. `Drain` while a queued result and one behind it wait: neither is returned, also not when `Res_Ready` rises; the core reset recovers the channel. Results that are not queued, under the same random runs: six transfers with SLVERR on their first burst (the error code, no end of packet, the rest of the packet flushed) and six transfers halted before their packet (0 bytes, no end of packet), then a complete packet. A packet cut by a halt whose first burst answers SLVERR only after the cut, while the result of the packet before is held (write responses 300 clock cycles late): both results in order, the error code and no end of packet for the cut packet, no flush (the packet after the restart is complete), in the configurations whose longest buffer holds two chunks | S2-RS-03, S2-RS-04, S2-RS-06, S2-HA-01, S2-HA-02, S2-SG-02 |
+| `test_chunk_full` (TC-S2-27) | 40 packets of one beat before any command: without `Split_g` they enter until the chunk buffer (32 descriptors) or the data buffer is full, then the stream waits for 500 clock cycles; with `Split_g` no beat enters (S2-SG-03). One command per packet, a buffer of two beats each: every packet once with its bytes and the end of packet, the bytes around each buffer unchanged, one result per packet. Without `Split_g` and with a data buffer of more than 40 beats: the packets before fill all but one descriptor of the chunk buffer, a longer packet the last one with its first chunk and waits open; `Run` falls: the stored packets and the rest of the open packet are discarded up to its `TLast`, no write, no result, `Stopped`, and the next packet after the restart is complete in its buffer | S2-ST-01, S2-HA-01, S2-HA-03, S2-SG-03 |
 
 ## 4. Requirement coverage
 
@@ -102,7 +103,7 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | S2-IF-01 | TC-S2-04, TC-S2-20 |
 | S2-IF-02 | TC-S2-01 |
 | S2-IF-03 | TC-S2-07, TC-S2-22 |
-| S2-ST-01 | TC-S2-07, TC-S2-11, TC-S2-18 |
+| S2-ST-01 | TC-S2-07, TC-S2-11, TC-S2-18, TC-S2-27 |
 | S2-ST-02 | TC-S2-03 |
 | S2-ST-03 | TC-S2-01, TC-S2-05, TC-S2-14, TC-S2-17, TC-S2-24 |
 | S2-ST-04 | TC-S2-06, TC-S2-24, TC-S2-25 |
@@ -115,15 +116,15 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | S2-WR-07 | TC-S2-04, TC-S2-06; the end check of every test case |
 | S2-RS-01 | TC-S2-01, TC-S2-17 |
 | S2-RS-02 | TC-S2-08 |
-| S2-RS-03 | TC-S2-09, TC-S2-19, TC-S2-23 |
+| S2-RS-03 | TC-S2-09, TC-S2-19, TC-S2-23, TC-S2-26 |
 | S2-RS-05 | TC-S2-15 |
-| S2-RS-04 | TC-S2-08, TC-S2-09, TC-S2-23 |
+| S2-RS-04 | TC-S2-08, TC-S2-09, TC-S2-23, TC-S2-26 |
 | S2-RS-06 | TC-S2-22, TC-S2-23, TC-S2-26 |
-| S2-HA-01, S2-HA-03 | TC-S2-09, TC-S2-11, TC-S2-19, TC-S2-21, TC-S2-23 |
+| S2-HA-01, S2-HA-03 | TC-S2-09, TC-S2-11, TC-S2-19, TC-S2-21, TC-S2-23, TC-S2-26, TC-S2-27 |
 | S2-HA-02 | TC-S2-09, TC-S2-12, TC-S2-19, TC-S2-21, TC-S2-22, TC-S2-26 |
 | S2-FT-01 | TC-S2-13 |
 | S2-SG-01, S2-SG-02 | TC-S2-17, TC-S2-19, TC-S2-26 |
-| S2-SG-03 | TC-S2-18 |
+| S2-SG-03 | TC-S2-18, TC-S2-27 |
 | S2-SG-04 | TC-S2-20 |
 
 ## 5. Negative tests
@@ -139,6 +140,8 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | Halt and drain in the middle of a packet | TC-S2-11, TC-S2-12 |
 | Drain during the flush of a failed packet | TC-S2-12 |
 | Results held by their receiver, drained while they wait | TC-S2-26 |
+| Results of write errors and halts held by their receiver; a write error that arrives after the discard of the cut packet | TC-S2-26 |
+| A full chunk buffer: the stream waits, no packet lost or taken twice; a halt with the chunk buffer full and a packet open | TC-S2-27 |
 | ECC single and double errors of every buffer | TC-S2-13 |
 | Clock cycles without write data inside a burst (W monitor, at the end of every test case; a mutant with low-latency writes and a wider memory shows that it fires, verification report section 5) | every test case |
 | Writes outside the buffer (write window of the memory model, in every test) | TC-S2-01, TC-S2-02, TC-S2-08, TC-S2-17, TC-S2-20 |

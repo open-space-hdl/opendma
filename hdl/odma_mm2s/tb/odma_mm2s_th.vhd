@@ -121,7 +121,8 @@ architecture sim of odma_mm2s_th is
                               Cycle      => 0,
                              ResCount   => 0,
                              Results    => (others => (Bytes => 0, Eof => '0', Err => "00", Cycle => 0)),
-                              Beats      => 0,
+                              ResHeld    => 0,
+                             Beats      => 0,
                              Bytes      => 0,
                              FirstBeat  => 0,
                              LastBeat   => 0,
@@ -333,6 +334,9 @@ begin
                                                                Err => Res_Err,
                                                                Cycle => Obs_i.Cycle);
                 O_v.ResCount                               := O_v.ResCount + 1;
+            end if;
+            if Res_Valid = '1' and Res_Ready = '0' then
+                O_v.ResHeld := O_v.ResHeld + 1;
             end if;
 
             -- Stream handshakes

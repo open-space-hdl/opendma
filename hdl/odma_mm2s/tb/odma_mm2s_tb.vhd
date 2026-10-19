@@ -501,6 +501,76 @@ begin
                 check_value(Obs.ArCount, Cnt_v, ERROR, "no read burst");
                 check_value(Obs.Beats, 0, ERROR, "no stream beat");
 
+                -- Drain of the entries of these commands, which have no read: popped without a result. A: both at the
+                -- head of the transfer buffer while their result is held, a transfer behind them whose read is still
+                -- outstanding (read latency 200 clock cycles)
+                Mem_v.fill(0, region(2), 65536, 26);
+                clearStream;
+                Res_v     := Obs.ResCount;
+                Cnt_v     := Obs.ArCount;
+                Res_Ready <= '0';
+                sendCmd(topAddr - Len_v + 2, Len_v);
+                sendCmd(region(2), 0);
+                Cnt2_v    := Obs.ResHeld;
+                cycles(20);
+                check_value(Obs.ResHeld - Cnt2_v >= 10, true, ERROR,
+                            "drain A: the result of the entry at the head is held");
+                check_value(Obs.ArCount, Cnt_v, ERROR, "drain A: no read burst for the error entries");
+                Mem_v.setLatency(0, 200);
+                sendCmd(region(2), Len_v);
+                if Obs.ArCount = Cnt_v then
+                    odmaWaitAtLeast(Obs.ArCount, Cnt_v + 1, 1 ms, "drain A: read of the transfer behind");
+                end if;
+                cycles(20);
+                check_value(Obs.RLastCount, Cnt_v, ERROR, "drain A: the read of the transfer behind is outstanding");
+                ChDrain   <= '1';
+                Res_Ready <= '1';
+                if Stopped = '0' then
+                    odmaWaitHigh(Stopped, 1 ms, "drain A: Stopped");
+                end if;
+                cycles(20);
+                check_value(Obs.ResCount, Res_v, ERROR, "drain A: no result of a drained entry");
+                check_value(Obs.Beats, 0, ERROR, "drain A: no stream beat");
+                check_value(Obs.RLastCount, Obs.ArCount, ERROR, "drain A: every read burst completed");
+                Mem_v.setLatency(0, 0);
+                RstIn   <= '1';
+                cycles(2);
+                RstIn   <= '0';
+                ChDrain <= '0';
+                cycles(2);
+                transfer(region(2) + 4096, Len_v, "transfer after drain A");
+
+                -- B: the same entries reach the head during the drain, behind a transfer whose packet was sent and
+                -- whose result is held
+                clearStream;
+                Res_v     := Obs.ResCount;
+                Res_Ready <= '0';
+                expect(region(2) + 8192, Len_v);
+                sendCmd(region(2) + 8192, Len_v);
+                streamDone;
+                Cnt2_v    := Obs.ResHeld;
+                cycles(20);
+                check_value(Obs.ResHeld - Cnt2_v >= 10, true, ERROR, "drain B: the result of the transfer is held");
+                Cnt_v     := Obs.ArCount;
+                sendCmd(topAddr - Len_v + 2, Len_v);
+                sendCmd(region(2), 0);
+                cycles(20);
+                check_value(Obs.ArCount, Cnt_v, ERROR, "drain B: no read burst for the error entries");
+                ChDrain   <= '1';
+                Res_Ready <= '1';
+                if Stopped = '0' then
+                    odmaWaitHigh(Stopped, 1 ms, "drain B: Stopped");
+                end if;
+                cycles(20);
+                check_value(Obs.ResCount, Res_v, ERROR, "drain B: no result of a drained entry");
+                check_value(Obs.ArCount, Cnt_v, ERROR, "drain B: no read burst during the drain");
+                RstIn   <= '1';
+                cycles(2);
+                RstIn   <= '0';
+                ChDrain <= '0';
+                cycles(2);
+                transfer(region(2) + 12288, Len_v, "transfer after drain B");
+
             elsif run("test_halt") then
                 log(ID_LOG_HDR, "TC-MM-11 halt during a transfer");
                 Mem_v.fill(0, region(1), 65536, 27);

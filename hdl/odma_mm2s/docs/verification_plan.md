@@ -56,7 +56,7 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | `test_queue` (TC-MM-07) | Three commands back to back: three packets in order and three results in order, the second one rejected (buffer beyond the top) between two good ones | MM-IF-03, MM-ST-03, MM-RD-04 |
 | `test_result_timing` (TC-MM-08) | The stream peer takes the last beat 40 clock cycles late: the result appears only after the handshake of the last beat | MM-ST-03 |
 | `test_read_errors` (TC-MM-09) | SLVERR on a middle beat, DECERR on the last beat, SLVERR followed by DECERR within one transfer: the transfer is sent completely with `TLast`, the result carries an error code; a transfer after a failed one has no error | MM-ER-01, MM-ER-02 |
-| `test_beyond_top` (TC-MM-10) | A buffer ending at the top of the address space is read; a buffer one byte longer causes no burst (statistics), no beat and the result decode error with 0 bytes; a command of length 0 causes no burst, no beat and the result internal error with 0 bytes | MM-RD-04, MM-RD-06 |
+| `test_beyond_top` (TC-MM-10) | A buffer ending at the top of the address space is read; a buffer one byte longer causes no burst (statistics), no beat and the result decode error with 0 bytes; a command of length 0 causes no burst, no beat and the result internal error with 0 bytes. `Drain` while the entries of both commands, which have no read, wait with their result held at the head of the transfer buffer and a transfer behind them waits for its read data, and while they reach the head behind a transfer whose packet was sent and whose result is held: no read burst for them, no result of any drained entry, no beat of the drained transfer, `Stopped` rises; after `Rst` the next transfer is correct | MM-RD-04, MM-RD-06, MM-HA-02 |
 | `test_halt` (TC-MM-11) | `Run` falls during a transfer: the transfer is sent completely, its result returned, a further command is not accepted, `Stopped` rises after the result | MM-IF-03, MM-HA-01 |
 | `test_drain` (TC-MM-12) | `Drain` rises during a transfer with a stalled stream peer: no further beat, all read bursts complete (statistics), no result, `Stopped` rises; with `Drain` before any command: no command accepted; then `Rst` during a packet (the memory model is reset with the DUT, as the reset of the core resets its interconnect): no further beat, no result, the next transfer correct | MM-HA-02, MM-HA-03 |
 | `test_ecc` (TC-MM-13) | For each of the three buffers: an error is injected into the data, the entry or the response of a transfer that waits at the output of the buffer while the transfer before it completes at a stalled stream peer; a single error gives correct data and results and one pulse on the bit of the buffer in `Ecc_Sec`, a double error one pulse in `Ecc_Ded`; a single error on a data bit (data mode) gives correct data and results and one pulse in `Ecc_Sec` | MM-FT-01 |
@@ -87,7 +87,7 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | MM-ER-01, MM-ER-02 | TC-MM-09 |
 | MM-ER-03 | TC-MM-15 |
 | MM-HA-01 | TC-MM-11, TC-MM-18, TC-MM-20 |
-| MM-HA-02 | TC-MM-12, TC-MM-18 |
+| MM-HA-02 | TC-MM-10, TC-MM-12, TC-MM-18 |
 | MM-HA-03 | TC-MM-12 |
 | MM-FT-01 | TC-MM-13 |
 | MM-SG-01 | TC-MM-16 |
@@ -107,6 +107,7 @@ the ports; it is reviewed in the code and listed in the coverage report.
 | A packet left open by a halt, an error or a drain | TC-MM-18 |
 | A halt between the acceptance of a command of an open packet and its entry at the stream | TC-MM-20 |
 | Buffer beyond the top of the address space, command of length 0 | TC-MM-10 |
+| `Drain` while entries without a read wait at the head of the transfer buffer or reach it | TC-MM-10 |
 | Commands while halted or draining | TC-MM-11, TC-MM-12 |
 | `Rst` during a packet | TC-MM-12 |
 | ECC single and double errors | TC-MM-13 |

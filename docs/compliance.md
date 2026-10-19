@@ -26,7 +26,7 @@ the published interface are listed in section 6 of the architecture and in the m
 | `S2MM_DMACR.RS` | Tables 6, 16, bit 0 | RG-1 | a | CO-SG-12, CO-SQ-04, MM-SG-04, RG-CR-01, RG-CR-02, S2-HA-01, S2-HA-03, SG-HA-01 | TC-CO-02, TC-CO-18, TC-MM-18, TC-MM-20, TC-RG-03, TC-RG-07, TC-RG-08, TC-S2-09, TC-S2-11, TC-S2-19, TC-S2-21, TC-S2-23, TC-S2-26, TC-S2-27, TC-SG-11 | Verified |
 | `MM2S_DMACR.Reserved` | Tables 6, 16, bits 1, 11 to 5, 15 | RG-1 | a | RG-CR-03 | TC-RG-01 | Verified |
 | `S2MM_DMACR.Reserved` | Tables 6, 16, bits 1, 11 to 5, 15 | RG-1 | a | RG-CR-03 | TC-RG-01 | Verified |
-| `MM2S_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | CO-ER-02, CO-RS-01, CO-SG-08, MM-HA-02, RG-CR-06, RG-RS-02, RG-RS-04, SG-HA-02 | TC-CO-04, TC-CO-05, TC-CO-06, TC-CO-17, TC-MM-12, TC-MM-18, TC-RG-10, TC-SG-12 | Verified |
+| `MM2S_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | CO-ER-02, CO-RS-01, CO-SG-08, MM-HA-02, RG-CR-06, RG-RS-02, RG-RS-04, SG-HA-02 | TC-CO-04, TC-CO-05, TC-CO-06, TC-CO-17, TC-MM-10, TC-MM-12, TC-MM-18, TC-RG-10, TC-SG-12 | Verified |
 | `S2MM_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | CO-ER-02, CO-RS-01, CO-SG-08, RG-CR-06, RG-RS-02, RG-RS-04, S2-HA-02, SG-HA-02 | TC-CO-04, TC-CO-05, TC-CO-06, TC-CO-17, TC-RG-10, TC-S2-09, TC-S2-12, TC-S2-19, TC-S2-21, TC-S2-22, TC-S2-26, TC-SG-12 | Verified |
 | `MM2S_DMACR.Keyhole` | Tables 6, 16, bit 3 | MM-1 (MM2S), S2-2 (S2MM) | b | CO-SG-11, MM-SG-03, RG-SG-09, S2-SG-04, SG-TR-03 | TC-CO-19, TC-MM-19, TC-RG-23, TC-S2-20, TC-SG-14 | Verified |
 | `S2MM_DMACR.Keyhole` | Tables 6, 16, bit 3 | MM-1 (MM2S), S2-2 (S2MM) | b | CO-SG-11, MM-SG-03, RG-SG-09, RG-SG-11, S2-SG-04, SG-TR-03 | TC-CO-19, TC-MM-19, TC-RG-23, TC-RG-24, TC-S2-20, TC-SG-14 | Verified |

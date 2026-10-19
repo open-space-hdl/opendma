@@ -6,7 +6,7 @@
 ---------------------------------------------------------------------------------------------------
 -- Description
 ---------------------------------------------------------------------------------------------------
--- VUnit testbench of odma_s2mm: the test cases TC-S2-01 to TC-S2-25 of the verification plan. The
+-- VUnit testbench of odma_s2mm: the test cases TC-S2-01 to TC-S2-27 of the verification plan. The
 -- expected memory contents follow from the sent packets and the pre-fill, never from the DUT.
 --
 -- Documentation: hdl/odma_s2mm/docs/verification_plan.md
@@ -2327,6 +2327,170 @@ begin
                 ChDrain  <= '0';
                 cycles(10);
                 transfer(region(30), Len_v, source(30), Len_v, "packet after the drain and the core reset");
+
+                -- Results that are not queued: transfers that fail with SLVERR on their first burst and transfers halted
+                -- before their packet, Res_Ready low in runs drawn per transfer as above. Each result waits for its
+                -- handshake with its bytes, end of packet and error code; after the write error the rest of the packet
+                -- is flushed, and the channel goes on with the next transfer
+                for p in 0 to 11 loop
+                    rnd(50, 95, Cnt_v);
+                    ResStall <= Cnt_v;
+                    Dst_v    := region(32 + p) + Guard_c;
+                    Res_v    := Obs.ResCount;
+                    prefill(Dst_v, Len_v);
+                    if p mod 2 = 0 then
+                        Mem_v.setError(0, 0, Dst_v, Dst_v, ErrSlv_c, TbDirWrite);
+                        Pkts_v := Obs.Packets;
+                        send(source(32 + p), Len_v);
+                        sendCmd(Dst_v, Len_v);
+                        waitRes(Res_v + 1);
+                        check_value(Obs.Results(Res_v mod MaxResults_c).Err, ErrSlv_c, ERROR,
+                                    "write error " & to_string(p) & ": result error code");
+                        check_value(Obs.Results(Res_v mod MaxResults_c).Eof, '0', ERROR,
+                                    "write error " & to_string(p) & ": no end of packet");
+                        waitPackets(Pkts_v + 1);
+                        Mem_v.clearErrors(0);
+                    else
+                        sendCmd(Dst_v, Len_v);
+                        cycles(20);
+                        ChRun <= '0';
+                        waitRes(Res_v + 1);
+                        checkRes(Res_v, 0, '0', ErrNone_c, "halt before the packet " & to_string(p));
+                        ChRun <= '1';
+                    end if;
+                end loop;
+
+                ResStall <= 0;
+                transfer(region(31), Len_v, source(31), Len_v, "packet after the write errors and the halts");
+
+                -- A packet cut by a halt whose first burst answers SLVERR only after the cut: the result of the packet
+                -- before is queued and held, so the cut transfer has taken the discard of its packet when its error
+                -- arrives (write responses 300 clock cycles late). Its result carries the error and no end of packet,
+                -- and no flush follows, since the rest of the cut packet is discarded at the stream port (S2-HA-01): the
+                -- packet after the restart is written completely. In the configurations whose longest buffer holds two
+                -- chunks
+                Len_v  := minimum(maximum(8 * ChunkBytes_c, 64 * StreamBytes_c), MaxLen_c);
+                Len2_v := minimum(2 * StreamBytes_c + 3, MaxLen_c);
+                if Len_v >= 2 * ChunkBytes_c then
+                    Dst_v       := region(50) + Guard_c;
+                    Mem_v.fill(0, region(50), Len2_v + 2 * Guard_c, DstSeed_c);
+                    Mem_v.fill(0, region(51), Len_v + 2 * Guard_c, DstSeed_c);
+                    Mem_v.setWindow(0, region(50), region(52) - 1);
+                    Res_v       := Obs.ResCount;
+                    Pkts_v      := Obs.Packets;
+                    ResStall    <= 100;
+                    Mem_v.setLatency(0, 300);
+                    Mem_v.setError(0, 0, region(51) + Guard_c, region(51) + Guard_c, ErrSlv_c, TbDirWrite);
+                    clearStream;
+                    send(source(50), Len2_v);
+                    sendCmd(Dst_v, Len2_v);
+                    Gen.Percent <= 30;
+                    send(source(51), Len_v);
+                    sendCmd(region(51) + Guard_c, Len_v);
+                    -- The halt one and a half chunks into the second packet, plus the beats that the split holds
+                    odmaWaitAtLeast(Obs.Beats, (Len2_v + StreamBytes_c - 1) / StreamBytes_c + ChunkBeats_c +
+                                    ChunkBeats_c / 2 + SplitLag_c, 10 ms, "stream beats before the halt");
+                    ChRun    <= '0';
+                    cycles(1500);
+                    check_value(Obs.ResCount, Res_v, ERROR, "late error: no result while Res_Ready is low");
+                    rnd(50, 95, Cnt_v);
+                    ResStall <= Cnt_v;
+                    waitRes(Res_v + 2);
+                    ResStall <= 0;
+                    checkRes(Res_v, Len2_v, '1', ErrNone_c, "late error: packet before the cut packet");
+                    checkMem(Dst_v, Len2_v, Len2_v, source(50), "late error: packet before the cut packet");
+                    check_value(Obs.Results((Res_v + 1) mod MaxResults_c).Err, ErrSlv_c, ERROR,
+                                "late error: error code of the cut packet");
+                    check_value(Obs.Results((Res_v + 1) mod MaxResults_c).Eof, '0', ERROR,
+                                "late error: no end of packet of the cut packet");
+                    waitPackets(Pkts_v + 2);
+                    if Stopped = '0' then
+                        wait until Stopped = '1' for 1000 * ClkPeriod_c;
+                    end if;
+                    check_value(Stopped, '1', ERROR, "late error: Stopped after the cut packet");
+                    Gen.Percent <= 100;
+                    Mem_v.setLatency(0, 0);
+                    Mem_v.clearErrors(0);
+                    ChRun       <= '1';
+                    Len_v       := minimum(2 * ChunkBytes_c + 9, MaxLen_c);
+                    transfer(region(52) + Guard_c, Len_v, source(52), Len_v, "late error: packet after the restart");
+                end if;
+
+            elsif run("test_chunk_full") then
+                log(ID_LOG_HDR, "TC-S2-27 a full chunk buffer");
+                -- 40 packets of one beat before any command. Without Split_g they enter until the chunk buffer (32
+                -- descriptors) or the data buffer is full, then the stream waits; with Split_g no beat enters without a
+                -- command (S2-SG-03). Each command then takes the next packet into a buffer of two beats: every packet
+                -- once, with its bytes and its end, nothing in between
+                Len_v := minimum(2 * StreamBytes_c, MaxLen_c);
+                Mem_v.setWindow(0, region(1), region(4) - 1);
+
+                for k in 0 to 39 loop
+                    send(source(1) + k * 256, 1 + (7 * k) mod StreamBytes_c);
+                end loop;
+
+                cycles(500);
+                Took_v := Obs.Packets;
+                Cnt_v  := Obs.Beats;
+                cycles(500);
+                check_value(Obs.Beats, Cnt_v, ERROR, "the stream waits while no buffer is given");
+                if Split_g then
+                    check_value(Cnt_v, 0, ERROR, "no beat without a command");
+                else
+                    log(ID_SEQUENCER, to_string(Took_v) & " packets of one beat entered without a command");
+                    check_value(Took_v < 40, ERROR, "the stream waits for space");
+                    if BufferBeats_g > 40 then
+                        check_value(Took_v >= 32, ERROR, "the chunk buffer holds 32 packets");
+                    end if;
+                end if;
+                Res_v := Obs.ResCount;
+
+                for k in 0 to 39 loop
+                    Dst_v := region(1) + k * 1024 + Guard_c;
+                    N_v   := 1 + (7 * k) mod StreamBytes_c;
+                    Mem_v.fill(0, Dst_v - Guard_c, Len_v + 2 * Guard_c, DstSeed_c);
+                    sendCmd(Dst_v, Len_v);
+                    waitRes(Res_v + k + 1);
+                    checkRes(Res_v + k, N_v, '1', ErrNone_c, "packet " & to_string(k));
+                    checkMem(Dst_v, Len_v, N_v, source(1) + k * 256, "packet " & to_string(k));
+                end loop;
+
+                waitPackets(40);
+                cycles(100);
+                check_value(Obs.ResCount, Res_v + 40, ERROR, "one result per packet");
+
+                -- Without Split_g: a halt while a packet is open and the chunk buffer is full. The packets before fill
+                -- all but one descriptor of the chunk buffer, the open packet the last one with its first chunk; the
+                -- discard descriptor of the cut waits for space, which the halted channel frees by discarding the
+                -- stored packets (data received for later transfers). The rest of the cut packet is discarded up to its
+                -- TLast, no write, no result, Stopped; after the restart the next packet is complete in its buffer
+                if not Split_g and BufferBeats_g > 40 and BufferBeats_g > Took_v + ChunkBeats_c then
+                    Cnt_v  := Obs.AwCount;
+                    Pkts_v := Obs.Packets;
+                    clearStream;
+
+                    for k in 0 to Took_v - 2 loop
+                        send(source(5) + k * 256, 1 + (7 * k) mod StreamBytes_c);
+                    end loop;
+
+                    send(source(6), 4 * ChunkBytes_c);
+                    odmaWaitAtLeast(Obs.Beats, Took_v - 1 + ChunkBeats_c, 1 ms, "the first chunk of the open packet");
+                    cycles(500);
+                    check_value(Obs.Beats, Took_v - 1 + ChunkBeats_c, ERROR,
+                                "the stream waits with the chunk buffer full and a packet open");
+                    ChRun <= '0';
+                    if Stopped = '0' then
+                        wait until Stopped = '1' for 1000 * ClkPeriod_c;
+                    end if;
+                    check_value(Stopped, '1', ERROR, "Stopped after the halt with the chunk buffer full");
+                    waitPackets(Pkts_v + Took_v);
+                    cycles(100);
+                    check_value(Obs.AwCount, Cnt_v, ERROR, "no write of the discarded packets");
+                    check_value(Obs.ResCount, Res_v + 40, ERROR, "no result without a command");
+                    ChRun <= '1';
+                    Len_v := minimum(2 * ChunkBytes_c + 5, MaxLen_c);
+                    transfer(region(8), Len_v, source(8), Len_v, "packet after the halt with the chunk buffer full");
+                end if;
             end if;
 
             -- Every test case: no clock cycle without write data inside a burst while the memory is ready (S2-WR-07)

@@ -165,7 +165,10 @@ to the master and passes a feed job {beats to the master, beats to drop} per des
 `olo_base_pl_stage` to the feeder. The feeder moves the beats of a job from the data buffer to `Wr_Data` and then
 drops the other beats of the chunk (a last beat without valid bytes, the beats beyond the buffer, the beats of a
 discarded chunk). The stage holds up to two jobs, so the command part issues the next write command while the
-feeder still moves the data of the previous chunk.
+feeder still moves the data of the previous chunk. The command part takes a descriptor only when the stage has space
+for its job. The stage can be full when the next transfer takes its first descriptor: the write master has taken the
+commands of two chunks whose data the feeder has not moved yet, and a job without a write follows them (a last beat
+without valid bytes).
 
 ### 5.2 Transfer
 

@@ -23,7 +23,7 @@ the published interface are listed in section 6 of the architecture and in the m
 | `MAP.WSTRB` | Register Space, note on the write strobes | RG-1 | a | RG-IF-03 | TC-RG-02 | Verified |
 | `MAP.ACCESS` | Register Access Type Description (RO, R/W, R/WC) | RG-1 | a | RG-CR-04, RG-IR-03, RG-MAP-02 | TC-RG-02, TC-RG-04, TC-RG-09 | Verified |
 | `MM2S_DMACR.RS` | Tables 6, 16, bit 0 | RG-1 | a | CO-SG-12, CO-SQ-04, MM-HA-01, MM-SG-04, RG-CR-01, RG-CR-02, SG-HA-01 | TC-CO-02, TC-CO-18, TC-MM-11, TC-MM-18, TC-MM-20, TC-RG-03, TC-RG-07, TC-RG-08, TC-SG-11 | Verified |
-| `S2MM_DMACR.RS` | Tables 6, 16, bit 0 | RG-1 | a | CO-SG-12, CO-SQ-04, MM-SG-04, RG-CR-01, RG-CR-02, S2-HA-01, S2-HA-03, SG-HA-01 | TC-CO-02, TC-CO-18, TC-MM-18, TC-MM-20, TC-RG-03, TC-RG-07, TC-RG-08, TC-S2-09, TC-S2-11, TC-S2-19, TC-S2-21, TC-S2-23, TC-S2-26, TC-S2-27, TC-SG-11 | Verified |
+| `S2MM_DMACR.RS` | Tables 6, 16, bit 0 | RG-1 | a | CO-SG-12, CO-SQ-04, MM-SG-04, RG-CR-01, RG-CR-02, S2-HA-01, S2-HA-03, SG-HA-01 | TC-CO-02, TC-CO-18, TC-MM-18, TC-MM-20, TC-RG-03, TC-RG-07, TC-RG-08, TC-S2-09, TC-S2-11, TC-S2-19, TC-S2-21, TC-S2-23, TC-S2-26, TC-S2-27, TC-S2-28, TC-SG-11 | Verified |
 | `MM2S_DMACR.Reserved` | Tables 6, 16, bits 1, 11 to 5, 15 | RG-1 | a | RG-CR-03 | TC-RG-01 | Verified |
 | `S2MM_DMACR.Reserved` | Tables 6, 16, bits 1, 11 to 5, 15 | RG-1 | a | RG-CR-03 | TC-RG-01 | Verified |
 | `MM2S_DMACR.Reset` | Tables 6, 16, bit 2 | RG-3 | a | CO-ER-02, CO-RS-01, CO-SG-08, MM-HA-02, RG-CR-06, RG-RS-02, RG-RS-04, SG-HA-02 | TC-CO-04, TC-CO-05, TC-CO-06, TC-CO-17, TC-MM-10, TC-MM-12, TC-MM-18, TC-RG-10, TC-SG-12 | Verified |
@@ -115,7 +115,7 @@ the published interface are listed in section 6 of the architecture and in the m
 | `DESC.S2MM_APP4` | Table 40, APP4 and receive length | S2-3 | c | - | - | Planned |
 | `DESCMGMT.TAIL` | Section "Descriptor Management", tail pointer mode | SG-1 | b | CO-SG-04, RG-SG-03, S2-SG-03, SG-FE-02, SG-FE-03, SG-FE-04, SG-TR-04 | TC-CO-12, TC-RG-16, TC-RG-18, TC-S2-18, TC-S2-27, TC-SG-03, TC-SG-04, TC-SG-16 | Verified |
 | `STRM.MM2S` | Section "MM2S Descriptor Settings and AXI Control Stream", Figure 37 (data stream) | MM-2 | a | CO-IF-02, MM-IF-02, MM-SG-01, MM-ST-01, MM-ST-02 | TC-CO-02, TC-MM-01, TC-MM-02, TC-MM-04, TC-MM-14, TC-MM-16 | Verified |
-| `STRM.S2MM` | Section "S2MM Descriptor Settings and AXI Status Stream", Figure 39 (data stream) | S2-1 | a | CO-IF-02, S2-IF-02, S2-SG-01, S2-ST-01, S2-ST-02, S2-WR-01, S2-WR-02 | TC-CO-02, TC-S2-01, TC-S2-02, TC-S2-03, TC-S2-05, TC-S2-07, TC-S2-08, TC-S2-11, TC-S2-14, TC-S2-16, TC-S2-17, TC-S2-18, TC-S2-19, TC-S2-27 | Verified |
+| `STRM.S2MM` | Section "S2MM Descriptor Settings and AXI Status Stream", Figure 39 (data stream) | S2-1 | a | CO-IF-02, S2-IF-02, S2-SG-01, S2-ST-01, S2-ST-02, S2-WR-01, S2-WR-02 | TC-CO-02, TC-S2-01, TC-S2-02, TC-S2-03, TC-S2-05, TC-S2-07, TC-S2-08, TC-S2-11, TC-S2-14, TC-S2-16, TC-S2-17, TC-S2-18, TC-S2-19, TC-S2-27, TC-S2-28 | Verified |
 | `STRM.CNTRL` | Section "AXI Control Stream", Figure 38 | MM-3 | c | - | - | Planned |
 | `STRM.STS` | Section "AXI Status Stream", Figure 40 | S2-3 | c | - | - | Planned |
 | `STRM.RXLENGTH` | Section "Customizing and Generating the Core", Use RxLength In Status Stream | S2-3 | c | - | - | Planned |

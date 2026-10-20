@@ -53,7 +53,8 @@ merged result over all tests:
 | `odma_sg_port.vhd` | 79 / 79 | 51 / 51 | **4 / 6** | **4 / 8** | **23 / 30** | **12 / 16** |
 | Total | 1189 / 1189 (100.0 %) | 675 / 676 (99.9 %) | 20 / 28 (71.4 %) | 26 / 50 (52.0 %) | 321 / 345 (93.0 %) | 124 / 144 (86.1 %) |
 
-Bold marks a metric with misses; section 4 gives the reason for each of them. The totals of the state machines
+Bold marks a metric with misses; section 4 gives the reason for each of them, except the condition row of
+`odma_s2mm_write.vhd` line 265, which TC-S2-28 tests (section 3). The totals of the state machines
 contain the two machines of section 4.1.
 
 ## 3. Gaps found and closed
@@ -82,6 +83,7 @@ the design.
 | S2MM: the chunk buffer full while the data buffer has space, and a halt while it is full and a packet is open | TC-S2-27 (new: 40 packets of one beat before the commands) |
 | SG engine: a drain while a fetched descriptor waits at the head of the buffer, fresh or stale | TC-SG-12 (extended: a fresh descriptor; a stale one with the drain 0 to 40 clock cycles after its fetch) |
 | MM2S: a drain while transfer entries without a read (a buffer beyond the top of the address space, a command of length 0) wait at the head of the transfer buffer or reach it | TC-MM-10 (extended) |
+| S2MM: a transfer that starts while the stage of the feed jobs is full (`odma_s2mm_write` line 265): the write master holds the commands of two chunks whose data the feeder has not moved yet, then a job without a write follows (a last beat without valid bytes); also with `Run` falling then | TC-S2-28 (new) |
 
 ## 4. Remaining misses
 
@@ -123,8 +125,7 @@ count input terms: a term is covered when both of its rows are hit.
 | `odma_s2mm_chunker.vhd` lines 191, 195, 260 | `Split_g_0` | `Split_g` is a generic: in the configurations without the split the expression is constant. Both values are simulated (the `s_` configurations of the S2MM bench). |
 | `odma_s2mm_chunker.vhd` line 334 (`SplitRst`) | `(r.State = Normal_s)_0` | The row needs `Discard_s` without an open packet. With `Split_g` a packet is open (`Open_i`) from its first beat at the stream port until its last beat leaves the split; `Discard_s` is entered while a packet is open and left in the clock cycle in which the last beat of that packet is dropped. |
 | `odma_s2mm_write.vhd` line 201 (queued result) | `(r.State /= Drained_s)_0` | The row needs `Drained_s` after the drain has ended. `Drained_s` is left only with `Rst`, and the soft reset holds the drain through its reset phase (`odma_soft_reset`). |
-| `odma_s2mm_write.vhd` line 265 | `(Job_InReady = '1')_0` | The row needs the job stage of the feeder full when a chunk descriptor arrives. The write master of Open Logic 4.7.0-ft.8 accepts the next command only after the data of the command before has passed its width converter, so the two entries of the job stage are never both used. The reason depends on the write master and is checked again with each change of the Open Logic version. |
-| `odma_s2mm_write.vhd` line 305 | `(Desc_Valid = '0')_0` | The same condition as line 265: the branch is evaluated with `Desc_Valid` = '1' only when the job stage is full. |
+| `odma_s2mm_write.vhd` line 305 | `(Desc_Valid = '0')_0` | The row needs a descriptor at the output of the chunk buffer while `Desc_Stored` = '0'. `Desc_Stored` is the write level of the chunk buffer (`In_Level` of `olo_ft_fifo_sync`), and `olo_base_fifo_sync` behind it counts an entry in the write level until the clock cycle after its read, while its output is valid only with a read level above 0, which never exceeds the write level: `Desc_Valid` = '1' implies `Desc_Stored` = '1'. The reason depends on `olo_base_fifo_sync` and is checked again with each change of the Open Logic version. |
 | `odma_s2mm_write.vhd` line 328 | `(r.FlushPend = '0')_0` | `FlushPend` is set only together with an error of the transfer (lines 258, 350) or with `Stop` (line 426), which mask it in this condition. |
 | `odma_s2mm_write.vhd` lines 336, 340, 363 | `r.Disc_1`, `(r.Disc = '0')_0` | The rows need `Cont` and `Disc` together. Both are set by the chunk descriptor that ends the transfer, `Cont` by the last chunk of a full buffer and `Disc` by the descriptor of a discarded packet, and both are cleared when the next transfer starts. |
 | `odma_s2mm_write.vhd` line 457 | `(Buf_Valid = '1')_0` | `Feed_s` with `Buf_Valid` = '0', for the reason of section 4.2. |

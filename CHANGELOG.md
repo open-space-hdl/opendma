@@ -10,6 +10,11 @@ version for a fix.
 
 - Open Logic 4.7.0-ft.10 (from 4.7.0-ft.8); no port, generic or register of OpenDMA changes.
 
+### Fixed
+
+- `docs/coverage.md` of 0.1.0 gave a wrong reason for rows 265 and 305 of `odma_s2mm_write`: row 265 is reachable and
+  is now tested (TC-S2-28); row 305 is unreachable for the reason now stated. The behaviour was correct.
+
 ## [0.1.0] - 2026-10-20
 
 First release: Direct Register Mode and Scatter/Gather Mode of a DMA core between AXI4 memory and AXI4-Stream

@@ -35,6 +35,7 @@ entity odma_mm2s is
         StreamWidth_g : positive                := 32;
         BurstBeats_g  : positive                := 16;
         BufferBeats_g : positive                := 64;
+        ReadBursts_g  : positive                := 6;
         Join_g        : boolean                 := false
     );
     port (
@@ -156,9 +157,9 @@ begin
     -- *** Assertions ***
     -- The rules of the channel generics are those of the core (the second channel repeats the first one)
     assert coreConfigError(AddrWidth_g, LengthWidth_g, MemWidth_g, StreamWidth_g, BurstBeats_g, BufferBeats_g,
-                           MemWidth_g, StreamWidth_g, BurstBeats_g, BufferBeats_g) = ""
+                           MemWidth_g, StreamWidth_g, BurstBeats_g, BufferBeats_g, ReadBursts_g) = ""
         report "odma_mm2s: " & coreConfigError(AddrWidth_g, LengthWidth_g, MemWidth_g, StreamWidth_g, BurstBeats_g,
-               BufferBeats_g, MemWidth_g, StreamWidth_g, BurstBeats_g, BufferBeats_g)
+               BufferBeats_g, MemWidth_g, StreamWidth_g, BurstBeats_g, BufferBeats_g, ReadBursts_g)
         severity failure;
 
     -- *** Read command (MM-1) ***
@@ -208,6 +209,9 @@ begin
             AxiMaxOpenTransactions_g  => 8,
             UserTransactionSizeBits_g => SizeBits_c,
             DataFifoDepth_g           => BufferBeats_g,
+            -- ReadBursts_g bursts in flight: in high-latency mode the master requests a burst only when its internal
+            -- FIFO can hold it (MM-RD-07)
+            IntFifoDepth_g            => ReadBursts_g * MasterBeats_c,
             UserDataWidth_g           => StreamWidth_g,
             ImplRead_g                => true,
             ImplWrite_g               => false

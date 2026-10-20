@@ -6,14 +6,25 @@ version for a fix.
 
 ## [Unreleased]
 
+### Added
+
+- `Mm2sReadBursts_g` (2 to 8, default 6): the MM2S read bursts in flight, an OpenDMA extension outside the
+  PG021 parameters. With the defaults MM2S sends one stream beat per clock cycle up to a memory read latency of 72
+  clock cycles; 2, the behaviour of 0.1.0, reaches 8. The internal read FIFO of the read master grows with the value.
+
 ### Changed
 
-- Open Logic 4.7.0-ft.10 (from 4.7.0-ft.8); no port, generic or register of OpenDMA changes.
+- Open Logic 4.7.0-ft.10 (from 4.7.0-ft.8); no port, generic or register of OpenDMA changes. Its write master
+  overlaps consecutive commands, so S2MM with a memory wider than the stream is faster with short chunks: for
+  example 0.98 instead of 0.70 beats per clock cycle with 512 / 256 bits and 8-beat bursts (user guide section 7).
 
 ### Fixed
 
 - `docs/coverage.md` of 0.1.0 gave a wrong reason for rows 265 and 305 of `odma_s2mm_write`: row 265 is reachable and
   is now tested (TC-S2-28); row 305 is unreachable for the reason now stated. The behaviour was correct.
+- User guide section 7 of 0.1.0 named one waiting S2MM result as the cause of the pause at an S2MM buffer boundary
+  in Scatter/Gather Mode; the cause is the window of two descriptors per channel of the engine. Section 7 now also
+  gives the rates over the read latency and over the write response latency.
 
 ## [0.1.0] - 2026-10-20
 

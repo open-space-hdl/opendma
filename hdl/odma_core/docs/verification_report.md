@@ -2,7 +2,7 @@
 
 ## 1. Test results
 
-Run on 2026-10-20 in the GHDL CI of the repository, GitHub Actions run 39442539964 on commit 7dac757 (its
+Run on 2026-10-20 in the GHDL CI of the repository, GitHub Actions run 39467613918 on commit fee4598 (its
 `results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
 `python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_core_tb`, and
 `python lint/synth_check.py -j 4` in the same run.
@@ -14,7 +14,7 @@ of them passed; the code coverage of the core is in `docs/coverage.md`.
 | Testbench or check | Tests | Passed |
 | --- | --- | --- |
 | `odma_core_tb` | 104 (20 test cases in the configurations of verification plan section 2: 9 in the DR, 10 in the SG configurations, TC-CO-19 in both) | 104 |
-| `lint/synth_check.py` (TC-CO-09) | 31 (23 configurations synthesised, 7 of them in SG mode; 8 inconsistent ones rejected) | 31 |
+| `lint/synth_check.py` (TC-CO-09) | 34 (25 configurations synthesised, 7 of them in SG mode; 9 inconsistent ones rejected) | 34 |
 
 Pause per S2MM buffer boundary and rate (TC-CO-20, two packets of 16 KB, a stream without gaps, write response
 latency 0 / 50 / 100 clock cycles, buffers at multiples of 64 bytes unless stated):
@@ -129,6 +129,7 @@ double error in data mode, so such a permutation fails it.
 | `Mm2sStreamWidth_g`, `S2mmStreamWidth_g` | 8 to 1024, powers of 2, at most the memory width | MM2S 8, 32, 64; S2MM 8, 32, 64, 256 | 8, 32, 1024; a stream wider than the memory rejected |
 | `Mm2sBurstBeats_g`, `S2mmBurstBeats_g` | 2 to 256, powers of 2 | MM2S 4, 8, 16; S2MM 2, 4, 16, 32 | 2, 16, 256; 3 rejected |
 | `Mm2sBufferBeats_g`, `S2mmBufferBeats_g` | at least two bursts | four bursts | two bursts, four bursts; 31 (less than two bursts) rejected |
+| `Mm2sReadBursts_g` | 2 to 8 | 6 (`odma_mm2s` simulates 2, 6, 8) | 2, 6, 8; 9 rejected |
 | `ExtRegs_g` | boolean | true, false | true, false |
 
 The unit benches of `odma_mm2s` and `odma_s2mm` simulate every memory width with every stream width class, the

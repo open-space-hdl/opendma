@@ -48,7 +48,8 @@ package odma_pkg is
         addr  : unsigned;
         bytes : unsigned) return boolean;
 
-    -- Empty for consistent core generics, otherwise a message naming the first inconsistent generic
+    -- Empty for consistent core generics, otherwise a message naming the first inconsistent generic; the read bursts
+    -- in flight of MM2S default to the default of the core
     function coreConfigError (
         addrWidth       : natural;
         lengthWidth     : natural;
@@ -59,7 +60,8 @@ package odma_pkg is
         s2mmMemWidth    : natural;
         s2mmStreamWidth : natural;
         s2mmBurstBeats  : natural;
-        s2mmBufferBeats : natural) return string;
+        s2mmBufferBeats : natural;
+        mm2sReadBursts  : natural := 6) return string;
 
     -- Flip pattern of an injected error in a codeword of olo_ft_pkg_ecc of width bits. Parity mode (data '0'):
     -- the overall parity (bit 0) and, for a double error, the Hamming parity p0 (bit 1), so the data never
@@ -169,7 +171,8 @@ package body odma_pkg is
         s2mmMemWidth    : natural;
         s2mmStreamWidth : natural;
         s2mmBurstBeats  : natural;
-        s2mmBufferBeats : natural) return string is
+        s2mmBufferBeats : natural;
+        mm2sReadBursts  : natural := 6) return string is
     begin
         if addrWidth < 32 or addrWidth > 64 then
             return "AddrWidth_g must be 32 to 64";
@@ -177,6 +180,9 @@ package body odma_pkg is
             return "LengthWidth_g must be 8 to 26";
         elsif channelError("Mm2s", mm2sMemWidth, mm2sStreamWidth, mm2sBurstBeats, mm2sBufferBeats) /= "" then
             return channelError("Mm2s", mm2sMemWidth, mm2sStreamWidth, mm2sBurstBeats, mm2sBufferBeats);
+        elsif mm2sReadBursts < 2 or mm2sReadBursts > 8 then
+            -- At most the open transactions of the read master (architecture of odma_mm2s, section 4)
+            return "Mm2sReadBursts_g must be 2 to 8";
         else
             return channelError("S2mm", s2mmMemWidth, s2mmStreamWidth, s2mmBurstBeats, s2mmBufferBeats);
         end if;

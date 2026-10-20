@@ -42,6 +42,7 @@ entity odma_core is
         MicroDma_g        : boolean                 := false;
         Mm2sBufferBeats_g : positive                := 64;
         S2mmBufferBeats_g : positive                := 64;
+        Mm2sReadBursts_g  : positive                := 6;
         ExtRegs_g         : boolean                 := true
     );
     port (
@@ -186,7 +187,8 @@ architecture rtl of odma_core is
 
     constant ConfigError_c : string := coreConfigError(AddrWidth_g, LengthWidth_g, Mm2sMemWidth_g, Mm2sStreamWidth_g,
                                                        Mm2sBurstBeats_g, Mm2sBufferBeats_g, S2mmMemWidth_g,
-                                                       S2mmStreamWidth_g, S2mmBurstBeats_g, S2mmBufferBeats_g);
+                                                       S2mmStreamWidth_g, S2mmBurstBeats_g, S2mmBufferBeats_g,
+                                                       Mm2sReadBursts_g);
 
     -- Core reset of the channels
     signal CoreRst : std_logic;
@@ -626,6 +628,7 @@ begin
                 StreamWidth_g => Mm2sStreamWidth_g,
                 BurstBeats_g  => Mm2sBurstBeats_g,
                 BufferBeats_g => Mm2sBufferBeats_g,
+                ReadBursts_g  => Mm2sReadBursts_g,
                 -- Scatter/Gather Mode joins the buffers of a packet (architecture section 5)
                 Join_g        => IncludeSg_g
             )

@@ -2,7 +2,7 @@
 
 ## 1. Test results
 
-Run on 2026-10-20 in the GHDL CI of the repository, GitHub Actions run 39442539964 on commit 7dac757 (its
+Run on 2026-10-20 in the GHDL CI of the repository, GitHub Actions run 39467613918 on commit fee4598 (its
 `results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
 `python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_pkg_tb`.
 

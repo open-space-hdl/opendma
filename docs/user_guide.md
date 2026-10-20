@@ -28,6 +28,7 @@ top level is `opendma.odma_core`. Open Logic is the submodule `open-logic/` (ope
 | `StsCntrlStrm_g`, `UseRxLength_g` | `c_sg_include_stscntrl_strm`, `c_sg_use_stsapp_length` | false until phase c | false |
 | `MicroDma_g` | `c_micro_dma` | false until phase c | false |
 | `Mm2sBufferBeats_g`, `S2mmBufferBeats_g` | none: depth of the data buffer of a channel in stream beats | at least two bursts (2 x burst x memory width / stream width) | 64 |
+| `Mm2sReadBursts_g` | none: MM2S read bursts in flight | 2 to 8 | 6 |
 | `ExtRegs_g` | none: extension register window 0x100 to 0x1FF | boolean | true |
 
 An inconsistent configuration stops the elaboration with a message that names the generic. The defaults of
@@ -35,6 +36,22 @@ An inconsistent configuration stops the elaboration with a message that names th
 system with the vendor core sets them explicitly. Bursts never cross 4 KB, so a channel with a wide memory issues
 bursts of at most 4096 bytes whatever the burst generic is (32 beats of 1024 bits). The verification report of
 `odma_core` lists the simulated and the synthesised values of every generic.
+
+`Mm2sReadBursts_g` sets how many MM2S read bursts are in flight: the read master requests a burst only when its
+internal FIFO can hold all its beats, and that FIFO holds `Mm2sReadBursts_g` bursts. With T stream beats per burst
+(`Mm2sBurstBeats_g` x memory width / stream width, at least 8) MM2S sends one stream beat per clock cycle up to a
+memory read latency of (`Mm2sReadBursts_g` - 1) x T - 8 clock cycles; with the defaults (T = 16) and 6 bursts that
+is 72 clock cycles. A burst is at most 4 KB. The internal FIFO is built from registers, which the TMR of the
+synthesis tool protects (section 6): `Mm2sReadBursts_g` x burst beats x (memory width + 1) bits.
+
+| Memory width, burst beats | 2 bursts | 6 bursts (default) | 8 bursts |
+| --- | --- | --- | --- |
+| 32 bits, 16 beats (the defaults) | 1056 bits | 3168 bits | 4224 bits |
+| 512 bits, 8 beats | 8208 bits | 24624 bits | 32832 bits |
+| 512 bits, 16 beats | 16416 bits | 49248 bits | 65664 bits |
+
+The figures are before TMR. With a wide memory port choose the smallest value that covers the read latency L of the
+memory: `Mm2sReadBursts_g` >= (L + 8) / T + 1; 2 gives the behaviour of OpenDMA 0.1.0.
 
 ## 3. Clock and reset
 
@@ -50,7 +67,7 @@ AXI4-Lite slave, so that the register access that starts it completes.
 | Interface | Ports | Content |
 | --- | --- | --- |
 | Register port | `S_AxiLite_*` | AXI4-Lite slave, 10 address bits, 32 data bits. Every access gets OKAY; a write uses all 32 bits whatever `WStrb` holds; offsets without a register read 0 |
-| MM2S memory port | `M_AxiMm2s_Ar*`, `M_AxiMm2s_R*` | AXI4 read master: INCR bursts of full-width beats (FIXED bursts of at most 16 beats for keyhole), `ArCache` 0011, `ArProt` 000, no ID signals; up to 8 bursts outstanding |
+| MM2S memory port | `M_AxiMm2s_Ar*`, `M_AxiMm2s_R*` | AXI4 read master: INCR bursts of full-width beats (FIXED bursts of at most 16 beats for keyhole), `ArCache` 0011, `ArProt` 000, no ID signals; up to `Mm2sReadBursts_g` bursts outstanding |
 | MM2S stream | `M_Mm2s_Data`, `_Keep`, `_Last`, `_Valid`, `_Ready` | AXI4-Stream master: one packet per transfer, first byte in lane 0, `TKeep` contiguous from lane 0 in the last beat |
 | S2MM stream | `S_S2mm_Data`, `_Keep`, `_Last`, `_Valid`, `_Ready` | AXI4-Stream slave: packets of any length; the bytes of the last beat are those up to the first lane whose `TKeep` bit is clear; `TKeep` of the other beats is not used |
 | S2MM memory port | `M_AxiS2mm_Aw*`, `M_AxiS2mm_W*`, `M_AxiS2mm_B*` | AXI4 write master: INCR bursts with write strobes (FIXED bursts of at most 16 beats for keyhole), `AwCache` 0011, `AwProt` 000, no ID signals; a burst is requested only when all its data is in the core |
@@ -229,7 +246,7 @@ TMR for all other logic:
 | The FT buffers: MM2S read data, transfer and response buffers; S2MM data, chunk and write data buffers; in SG mode the descriptor buffers of both channels and the read and write data buffers of the descriptor port | SECDED ECC of the Open Logic ft entities: a single error is corrected, a double error is detected and counted; the word of a double error is passed on as read (corrupted data, length, result code or descriptor field of the transfer it belongs to), and the core does not turn the double error into a transfer error | `ECC_COUNT_0` to `ECC_COUNT_9`, `ECC_STATUS`, `Ecc_Irq` with `ECC_ENABLE`; error injection through `ECC_INJECT` (parity mode non-destructive, data mode corrupts data with a double error, section 5.6) |
 | Clock domain crossings and reset synchronisers | The core has none (one clock domain); an `olo_ft_fifo_async` placed at a port by the integrator uses triplicated synchronisers (`SyncTmr_g` = true) | none |
 | State machines | Recovery state through the `when others` branch and the reset | none |
-| All other logic: registers of the control and data paths, counters, pointers, pipeline registers | TMR of the synthesis tool (for example `syn_radhardlevel` = `tmr` with Synplify, or the equivalent setting of the tool chain). The core adds no protection of its own for this logic; without TMR, an upset in it is not covered | synthesis report |
+| All other logic: registers of the control and data paths, counters, pointers, pipeline registers, the internal read FIFO of the MM2S read master (`Mm2sReadBursts_g` bursts) | TMR of the synthesis tool (for example `syn_radhardlevel` = `tmr` with Synplify, or the equivalent setting of the tool chain). The core adds no protection of its own for this logic; without TMR, an upset in it is not covered | synthesis report |
 
 The integrator:
 
@@ -248,28 +265,51 @@ requirements of a mission is shown by a radiation test with the core in operatio
 ## 7. Performance
 
 MM2S sends one stream beat per clock cycle when a burst has at least 8 stream beats (burst beats x memory width /
-stream width) and the memory and the stream peer are ready; with fewer, the read latency of the memory is not hidden.
+stream width), the stream peer is ready and the read bursts in flight cover the read latency of the memory (see below).
 S2MM issues one write command per chunk of one burst, and only for a chunk that is complete in its data buffer. With
 equal memory and stream widths the write master issues the burst as soon as the command arrives (low-latency
-commands); with a wider memory it issues a burst once its data are in its own buffer, and the next command follows
-about 7 clock cycles after the data of the previous one. With a memory at least four times as wide as the stream the
-channel takes one beat per clock cycle. Measured with an always ready memory, a stream without gaps and buffers at
-burst boundaries (verification reports of the channels):
+commands); with a wider memory it issues a burst once its data are in its own buffer. The write master overlaps the
+at least four clock cycles of a command with the data of the command before, so commands cost time with short chunks
+only. With a memory at least four times as wide as the stream the channel takes one beat per clock cycle.
+Measured with a memory without latency, a stream without gaps and buffers at burst boundaries (verification reports
+of the channels):
 
 | Memory / stream width, burst beats | MM2S beats per clock cycle | S2MM beats per clock cycle |
 | --- | --- | --- |
-| 32 / 32 bits, 16 beats (the defaults) | 1.0 | 0.91 |
-| 128 / 64 bits, 32 beats | 1.0 | 0.95 |
-| 256 / 128 bits, 4 beats | 1.0 | 0.51 |
-| 512 / 256 bits, 8 beats | 1.0 | 0.70 |
+| 32 / 32 bits, 16 beats (the defaults) | 1.0 | 0.98 |
+| 128 / 64 bits, 32 beats | 1.0 | 1.0 |
+| 256 / 128 bits, 4 beats | 1.0 | 0.85 |
+| 512 / 256 bits, 8 beats | 1.0 | 0.98 |
 | 512 / 512 bits, 2 beats | 0.51 | 0.31 |
 | Memory four or more times the stream width | 1.0 | 1.0 |
 
-Short bursts cost the most. A system that needs the full S2MM rate chooses chunks of at least 64 stream beats
-(`S2mmBurstBeats_g` x memory width / stream width, at least 0.9 beats per clock cycle), bursts of 16 beats or more
-with equal widths, or a memory port at least four times the stream width. A transfer
+Short bursts cost the most. A system that needs the full S2MM rate chooses chunks of at least 16 stream beats
+(`S2mmBurstBeats_g` x memory width / stream width) or a memory port at least four times the stream width. A transfer
 takes at least four clock cycles in the AXI master for its command, and the register accesses of DR mode add the
 time of the processor for every transfer.
+
+With a read latency of L clock cycles (from the read burst to its first beat, the further beats without wait states)
+MM2S keeps `Mm2sReadBursts_g` bursts in flight and sends about min(1, `Mm2sReadBursts_g` x T / (L + T + 5)) beats
+per clock cycle, with T stream beats per burst; section 2 gives the value for a latency and its register cost.
+Measured in the MM2S bench (TC-MM-05, 64 bursts, the stream peer always ready):
+
+| Memory / stream width, burst beats (stream beats per burst) | `Mm2sReadBursts_g` | Read latency 20 | Read latency 50 | Read latency 100 |
+| --- | --- | --- | --- | --- |
+| 32 / 32 bits, 16 beats (16), the defaults | 6 | 1.0 | 1.0 | 0.80 |
+| 32 / 32 bits, 16 beats (16) | 2 | 0.77 | 0.45 | 0.27 |
+| 128 / 64 bits, 32 beats (64) | 6 | 1.0 | 1.0 | 1.0 |
+| 256 / 128 bits, 4 beats (8) | 6 | 1.0 | 0.77 | 0.44 |
+| 256 / 128 bits, 4 beats (8) | 8 | 1.0 | 1.0 | 0.60 |
+| 512 / 256 bits, 8 beats (16) | 6 | 1.0 | 1.0 | 0.80 |
+| 512 / 512 bits, 2 beats (2) | 6 | 0.44 | 0.22 | 0.12 |
+
+The write master keeps at most 8 write bursts open, the most that Open Logic allows; once 8 bursts take less time on
+the stream than a burst waits for its write response, S2MM slows down. Measured in the core bench (TC-CO-20, buffers
+of 4 KB, a stream without gaps): the defaults (16 stream beats per burst) keep their rate up to a write response
+latency of 100 clock cycles; with 8 stream beats per burst (512 / 256 bits, 4 beats) S2MM keeps it up to 50 and
+reaches 0.59 beats per clock cycle at 100. The unaligned buffers of the defaults, whose chunks are written as two
+bursts each, likewise keep their rate up to 50 and reach 0.54 at 100. Longer bursts or a wider memory port raise the
+latency that is covered.
 
 In SG mode the engine processes at most one descriptor per fetch time: about 22 clock cycles per descriptor for one
 channel and 40 per channel when both work, with a descriptor memory without latency; a latency of L clock cycles
@@ -279,33 +319,37 @@ buffers runs at the descriptor rate.
 
 An S2MM packet over several buffers continues at a buffer boundary without waiting for the write responses of the
 full buffer: the channel accepts the next buffer once the last write command of the full buffer is issued, and the
-result of the full buffer waits for its responses meanwhile (`odma_s2mm` S2-RS-06); the engine holds the next
-descriptor, as it fetches one ahead. A boundary adds at most one clock cycle to the pace between two bursts inside a
-buffer. One result waits at a time: a buffer that takes less time
-to fill than the write responses of the buffer before it take to arrive waits for them at its end. Measured in the
-core bench (TC-CO-20) with packets of 16 KB, a stream without gaps and a memory that is always ready apart from the
-write response latency:
+result of the full buffer waits for its responses meanwhile (`odma_s2mm` S2-RS-06). The engine keeps a window of two
+descriptors per channel: while buffer n waits for its result and buffer n + 1 is written, it fetches the descriptor
+of buffer n + 2 once the result of buffer n has been taken. A buffer that fills in less time than the write responses
+of the buffer before it take to arrive, together with that fetch, waits at its end for its next descriptor. Measured
+in the core bench (TC-CO-20) with packets of 16 KB, a stream without gaps and a memory that is always ready apart from
+the write response latency:
 
 | Memory / stream width, burst beats | Write response latency | Pause per buffer boundary | Beats per clock cycle, 1 KB buffers | Beats per clock cycle, 4 KB buffers | Beats per clock cycle, 4 KB buffers at unaligned addresses |
 | --- | --- | --- | --- | --- | --- |
-| 32 / 32 bits, 16 beats (the defaults) | 0 | 1 clock cycle | 0.85 | 0.85 | 0.81 |
-| 32 / 32 bits, 16 beats (the defaults) | 50 | 1 clock cycle | 0.85 | 0.85 | 0.81 |
-| 512 / 256 bits, 4 beats | 0 | 1 clock cycle | 0.48 | 0.49 | 0.40 |
-| 512 / 256 bits, 4 beats | 50 | 19 clock cycles | 0.40 | 0.49 | 0.40 |
+| 32 / 32 bits, 16 beats (the defaults) | 0 | 1 clock cycle | 0.94 | 0.95 | 0.90 |
+| 32 / 32 bits, 16 beats (the defaults) | 50 | 1 clock cycle | 0.94 | 0.95 | 0.90 |
+| 32 / 32 bits, 16 beats (the defaults) | 100 | 1 clock cycle | 0.94 | 0.95 | 0.54 |
+| 512 / 256 bits, 4 beats | 0 | 6 clock cycles | 0.71 | 0.80 | 0.68 |
+| 512 / 256 bits, 4 beats | 50 | 38 clock cycles | 0.47 | 0.80 | 0.56 |
+| 512 / 256 bits, 4 beats | 100 | 51 clock cycles | 0.34 | 0.59 | 0.31 |
 
-With 512 / 256 bits a buffer of 1 KB fills in about 66 clock cycles; with a response latency of 50 the responses of
-the buffer before are not back when it is full, so each of these boundaries waits for them.
+With the defaults a buffer of 1 KB fills in 256 clock cycles and its boundaries cost one clock cycle up to a latency
+of 100. With 512 / 256 bits it fills in about 40 clock cycles, so its boundaries wait for the next descriptor at every
+latency. At a latency of 100 the 8 open write bursts slow the 4 KB buffers of 512 / 256 bits and the unaligned buffers
+of the defaults as well (see above).
 
 Packets that fit into one buffer do not pause; buffers of several KB keep the loss small. A buffer address that is
 not a multiple of the memory word can cost time: a full chunk then covers one memory word more than a burst holds
 and is written as two bursts. In SG mode the chunks follow the address of the buffer (`odma_s2mm` S2-ST-04):
 
 - At a multiple of the stream width the first chunk ends at the burst boundary above the address and the later
-  chunks are aligned, so the buffer takes no longer than an aligned one (0 clock cycles more per KB with 64 / 8 bits
+  chunks are aligned, so the buffer takes no longer than an aligned one (no clock cycle more per KB with 64 / 8 bits
   and 2-beat bursts, TC-CO-20).
 - Inside a stream word the chunks are one memory word shorter, one burst each, when the memory is wider than the
-  stream and a burst has at least 8 beats. Otherwise they keep their full size: 15 clock cycles more per KB with the
-  defaults and 14 with 512 / 256 bits and 4-beat bursts (TC-CO-20).
+  stream and a burst has at least 8 beats. Otherwise they keep their full size: 14 clock cycles more per KB with the
+  defaults and 7 with 512 / 256 bits and 4-beat bursts (TC-CO-20, write response latency 0).
 
 In DR mode every chunk has its full size. Buffers at multiples of the memory word avoid the cost in both modes. The
 MM2S join of several buffers costs at most one clock cycle per packet.

@@ -44,6 +44,7 @@ entity odma_mm2s_tb is
         StreamWidth_g : positive := 32;
         BurstBeats_g  : positive := 16;
         BufferBeats_g : positive := 64;
+        ReadBursts_g  : positive := 6;
         Join_g        : boolean  := false
     );
 end entity;
@@ -138,6 +139,7 @@ begin
             StreamWidth_g => StreamWidth_g,
             BurstBeats_g  => BurstBeats_g,
             BufferBeats_g => BufferBeats_g,
+            ReadBursts_g  => ReadBursts_g,
             Join_g        => Join_g
         )
         port map (
@@ -409,6 +411,13 @@ begin
                     Cnt2_v := Obs.LastBeat - Obs.FirstBeat + 1;
                     log(ID_SEQUENCER, "throughput at read latency " & to_string(RdLatencies_c(k)) & ": " &
                         to_string(Cnt_v) & " beats in " & to_string(Cnt2_v) & " clock cycles");
+                    -- MM-RD-07: one beat per clock cycle up to a read latency of (ReadBursts_g - 1) x the stream
+                    -- beats of a burst - 8, with at least 8 stream beats per burst
+                    if BurstStream_c >= 8 and RdLatencies_c(k) <= (ReadBursts_g - 1) * BurstStream_c - 8 then
+                        check_value(Cnt2_v <= Cnt_v + 2, ERROR, "clock cycles from the first to the last of " &
+                                    to_string(Cnt_v) & " beats at read latency " & to_string(RdLatencies_c(k)) &
+                                    ": " & to_string(Cnt2_v));
+                    end if;
                 end loop;
 
                 Mem_v.setLatency(0, 0);
@@ -435,9 +444,9 @@ begin
                 cycles(2 * Quiet_c);
                 check_value(Obs.ArCount, Cnt2_v, ERROR, "no further read burst while the buffers are full");
                 check_value(Obs.RHeld, Cnt_v, ERROR, "R channel held while the stream peer stops");
-                -- The bursts issued fit into the buffers: the read data buffer, the internal FIFOs of the master
-                -- (two bursts) and the register stages (a few words)
-                check_value(Cnt2_v <= (Obs.Bytes + (BufferBeats_g + 4) * StreamBytes_c + 2 * BurstBytes_c +
+                -- The bursts issued fit into the buffers: the read data buffer, the internal FIFO of the master
+                -- (ReadBursts_g bursts) and the register stages (a few words)
+                check_value(Cnt2_v <= (Obs.Bytes + (BufferBeats_g + 4) * StreamBytes_c + ReadBursts_g * BurstBytes_c +
                                        4 * MemBytes_c) / BurstBytes_c + 2,
                             ERROR, "read bursts bounded by the buffers: " & to_string(Cnt2_v));
                 Ready.Hold <= '0';

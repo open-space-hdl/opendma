@@ -521,6 +521,8 @@ begin
 
             elsif run("test_concurrent") then
                 log(ID_LOG_HDR, "TC-CO-03 both channels at the same time");
+                -- The read data arrive while S2MM writes, also where the MM2S buffers hold a whole transfer (lw8)
+                Mem_v.setLatency(MemRd_c, 50);
                 scenario("", "dr_concurrent");
                 check_value(Obs.Overlap, ERROR, "a read beat and a write beat in the same clock cycle");
 

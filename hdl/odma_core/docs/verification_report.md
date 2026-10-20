@@ -7,6 +7,10 @@ Run on 2026-10-19 in the GHDL CI of the repository, GitHub Actions run 392902237
 `python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_core_tb`, and
 `python lint/synth_check.py -j 4` in the same run.
 
+The tests of `odma_core_tb` pass in QuestaSim (Questa Pro Microchip Edition 2024.3, time resolution 1 fs), with code
+coverage and in the optimised run without it, on 2026-10-19 on commit 6252594 (sources and testbenches as in 8c32323);
+the code coverage of the core is in `docs/coverage.md`.
+
 | Testbench or check | Tests | Passed |
 | --- | --- | --- |
 | `odma_core_tb` | 104 (20 test cases in the configurations of verification plan section 2: 9 in the DR, 10 in the SG configurations, TC-CO-19 in both) | 104 |
@@ -126,4 +130,5 @@ the streams at or below 256 bits, the limit of the AXI4-Stream VVC.
 
 ## 5. Coverage
 
-Code coverage is collected with QuestaSim in the batches of phases a and b (`docs/coverage.md`).
+Code coverage of all modules is collected with QuestaSim over the full regression; the result and the
+justification of every remaining miss are in `docs/coverage.md`.

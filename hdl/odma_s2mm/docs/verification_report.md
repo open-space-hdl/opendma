@@ -6,6 +6,10 @@ Run on 2026-10-19 in the GHDL CI of the repository, GitHub Actions run 392902237
 `results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
 `python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_s2mm_tb`.
 
+The same tests pass in QuestaSim (Questa Pro Microchip Edition 2024.3, time resolution 1 fs), with code coverage and in
+the optimised run without it, on 2026-10-19 on commit 6252594 (sources and testbenches as in 8c32323); the code coverage
+of the core is in `docs/coverage.md`.
+
 | Testbench | Tests | Passed |
 | --- | --- | --- |
 | `odma_s2mm_tb` | 422 (27 test cases: 19 in all 19 configurations, TC-S2-07 and TC-S2-08 in the ten without the split, TC-S2-17 to TC-S2-19 and TC-S2-24 in the nine `s_` configurations, TC-S2-21 in four, TC-S2-25 in one) | 422 |

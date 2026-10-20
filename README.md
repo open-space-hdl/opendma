@@ -1,5 +1,7 @@
 # OpenDMA
 
+[![TRL 3](docs/img/trl-3.svg)](https://openspacehdl.org/trl/)
+
 OpenDMA is an open direct memory access (DMA) core between AXI4 memory and AXI4-Stream peripherals that is based on
 the Open Logic VHDL Library. Its register map, descriptor format and programming sequences are those of the AMD AXI
 DMA (product guide PG021, version 7.1), so that software written for that core, including its bare-metal and Linux
@@ -11,10 +13,15 @@ implementation written from the published product guide; it contains no code, te
 
 ## Status
 
-**In development.** Direct Register Mode (phase a) and Scatter/Gather Mode (phase b, with packets of several
-buffers and keyhole transfers) are implemented and verified in simulation with GHDL; the QuestaSim runs with code
-coverage are open. The control and status streams follow in phase c. The [roadmap](docs/roadmap.md) lists the
-development phases and the state of every module.
+**Technology readiness level: TRL 3** (fully verified by simulation) for Direct Register Mode (phase a) and
+Scatter/Gather Mode (phase b, with packets of several buffers and keyhole transfers). The 1009 tests of the six
+testbenches pass in GHDL and in QuestaSim, with and without code coverage. They run the programming sequences of both
+modes against an AXI memory model and stream models with random back pressure, error responses of the memory and the
+descriptor port, single and double bit errors injected into every buffer, halts, soft resets and resets at any time.
+Code coverage is closed or every remaining miss is justified ([coverage](docs/coverage.md)). The core has not been
+tested on hardware and has no flight heritage; see [what the levels mean](https://openspacehdl.org/trl/) and the steps
+to the next level in the [roadmap](docs/roadmap.md#technology-readiness). The control and status streams follow in
+phase c.
 
 ## Documentation
 
@@ -23,6 +30,8 @@ development phases and the state of every module.
 | [docs/user_guide.md](docs/user_guide.md) | User guide: sources, generics, interfaces, programming sequence, protection scope, performance, conformance |
 | [docs/architecture.md](docs/architecture.md) | Architecture: building blocks, items of the published interface they own, Open Logic usage, verification |
 | [docs/compliance.md](docs/compliance.md) | Compliance matrix: requirements and test cases of every item of the published interface (generated) |
+| [docs/coverage.md](docs/coverage.md) | Code coverage: method, result, closed gaps and the justification of every remaining miss |
+| [CHANGELOG.md](CHANGELOG.md) | Changes of every release |
 | [hdl/odma_registers/docs/register_map.md](hdl/odma_registers/docs/register_map.md) | Register map (generated; C header `sw/odma_regs.h`) |
 | [docs/roadmap.md](docs/roadmap.md) | Development phases and module status |
 | [docs/conventions.md](docs/conventions.md) | Coding, verification and repository conventions |

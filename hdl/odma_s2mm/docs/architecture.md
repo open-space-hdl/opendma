@@ -334,10 +334,12 @@ reset); feeder: `Head_s` (next job), `Feed_s` (beats to the master), `Drop_s` (b
   measured values.
 - Throughput: the channel issues one write command per chunk, once the chunk is complete in the data buffer. With
   equal memory and stream widths the write master takes low-latency commands (section 5.5) and issues the burst at
-  once: 0.91 beats per clock cycle with chunks of 16 beats (the defaults), 0.31 with chunks of 2. With a wider memory
-  it issues a burst once its data are in its own buffer, and a command costs up to about 7 clock cycles: at twice the
-  stream width 0.52 beats per clock cycle with chunks of 8 beats, 0.70 with 16 and 0.95 with 64 (S2-WR-05 requires
-  0.9 from 64 beats). Longer bursts raise it. With a memory four or more times wider than the stream the write side
-  is faster than the stream and the channel takes one beat per clock cycle. A buffer that does not start at a
-  multiple of the memory word adds a burst per chunk where the chunk plan of section 4.2 keeps full chunks; the
+  once: 0.98 beats per clock cycle with chunks of 16 beats (the defaults), 0.31 with chunks of 2. With a wider memory
+  it issues a burst once its data are in its own buffer; the at least four clock cycles of a command overlap with
+  the data of the command before: at twice the stream width 0.85 beats per clock cycle with chunks of 8 beats, 0.98
+  with 16 and 1.0 with 64 (S2-WR-05 requires 0.9 from 64 beats). Longer bursts raise it. The write master keeps at
+  most 8 bursts open (`AxiMaxOpenTransactions_g`), which covers a write response latency while 8 bursts take longer
+  on the stream than a burst waits for its response. With a memory four or more times wider than the stream the
+  write side is faster than the stream and the channel takes one beat per clock cycle. A buffer that does not start
+  at a multiple of the memory word adds a burst per chunk where the chunk plan of section 4.2 keeps full chunks; the
   verification report has the measured values.

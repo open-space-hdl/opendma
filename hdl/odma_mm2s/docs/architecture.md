@@ -157,6 +157,7 @@ beat with `TLast`). Every `when others` returns to the first state.
   the response is already buffered.
 - Throughput: one stream beat per clock cycle when a burst carries at least 8 stream beats (`BurstBeats_g` x
   `MemWidth_g` / `StreamWidth_g`) and the memory answers without wait states (MM-RD-05). The read master requests a
-  burst only when its internal FIFOs of two bursts can take it, so with fewer stream beats per burst the read
-  latency of the memory is no longer hidden: with the memory model of the bench, 2 stream beats per burst give 128
-  beats in 252 clock cycles.
+  burst only when its internal read FIFO of `ReadBursts_g` bursts can take it (section 4), so with fewer stream beats
+  per burst the read latency of the memory is no longer hidden: with the memory model of the bench, 2 stream beats per
+  burst give 128 beats in 252 clock cycles. With a read latency of L clock cycles and T >= 8 stream beats per burst
+  the channel keeps one beat per clock cycle up to L = (`ReadBursts_g` - 1) x T - 8 (MM-RD-07).

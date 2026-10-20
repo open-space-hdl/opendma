@@ -5,20 +5,22 @@ is written and its regression is green.
 
 ## Technology readiness
 
-The core is in development and has no technology readiness level yet. The
+The core is at **TRL 3** for the phases a and b: fully verified by simulation. Direct Register Mode and Scatter/Gather
+Mode pass every test in GHDL and in QuestaSim, with and without code coverage; code coverage is closed or justified
+([coverage](coverage.md)). The core is not tested on hardware and has no flight heritage. The
 [TRL page](https://openspacehdl.org/trl/) explains what the levels mean for an IP core.
 
 | Next level | What is needed | State |
 | --- | --- | --- |
-| TRL 3 | Every module of the phases below implemented and fully verified by simulation (GHDL and QuestaSim, code coverage closed), traceability matrix complete | Open |
+| TRL 3 of phase c | The control and status streams implemented and fully verified by simulation (GHDL and QuestaSim, code coverage closed), traceability matrix complete | Open |
 | TRL 4 | Synthesis and timing closure on a target FPGA; hardware test with the drivers of a processor system; hardware test plan and test report | Open |
 
 ## Development phases
 
 | Phase | Content | State |
 | --- | --- | --- |
-| a | Direct Register Mode: MM2S and S2MM channels, register bank, interrupts, errors, soft reset | Implemented, verified with GHDL; QuestaSim and code coverage open |
-| b | Scatter/Gather Mode: descriptor engine, cyclic mode, interrupt coalescing and delay, packets of several buffers, keyhole | Implemented, verified with GHDL; QuestaSim and code coverage open |
+| a | Direct Register Mode: MM2S and S2MM channels, register bank, interrupts, errors, soft reset | Done: verified with GHDL and QuestaSim, code coverage closed or justified |
+| b | Scatter/Gather Mode: descriptor engine, cyclic mode, interrupt coalescing and delay, packets of several buffers, keyhole | Done: verified with GHDL and QuestaSim, code coverage closed or justified |
 | c | Control and status streams (user application fields), micro mode | Open |
 | d | Driver tests on hardware (bare-metal and Linux on a processor system) | Open |
 
@@ -26,16 +28,9 @@ The core is in development and has no technology readiness level yet. The
 
 | Module | Blocks (architecture section 7) | Status |
 | --- | --- | --- |
-| `odma_pkg` | Common package; shared verification components (AXI memory model, sequence player) and the model of the programming sequences | Done (GHDL) |
-| `odma_registers` | RG-1 to RG-4 (register interface) | Done (GHDL), Scatter/Gather Mode included |
-| `odma_mm2s` | MM-1 to MM-3 (MM2S channel) | MM-1, MM-2 done (GHDL), with the join of packets of several buffers and keyhole; MM-3 in phase c |
-| `odma_s2mm` | S2-1 to S2-3 (S2MM channel) | S2-1, S2-2 done (GHDL), with the split of packets over several buffers, keyhole and the next buffer accepted while the write responses of the one before arrive; S2-3 in phase c |
-| `odma_sg` | SG-1 to SG-3 (Scatter/Gather engine) | Done (GHDL), integrated into the core |
-| `odma_core` | CO-1 (core top level) | DR mode and SG mode done (GHDL) |
-
-## Planned improvements
-
-| Item | Content | State |
-| --- | --- | --- |
-| Burst-aligned S2MM chunks | A chunk at a buffer address that is not a multiple of the memory word covers one memory word more than a burst and is written as two bursts. In Scatter/Gather Mode the split receives the buffer address before the data, so the first chunk of a buffer can end at the first burst boundary of the address: one extra burst per buffer instead of one per chunk | Planned (phase b) |
-| Low-latency write commands | The write master starts a burst only when all its data is buffered, 26 clock cycles after the command with the defaults. S2MM forms every chunk completely before its command; when no gap between the write beats of a burst can occur, the low-latency mode of the master starts the burst with the command and removes most of that time, also inside a buffer | Under study (phase b) |
+| `odma_pkg` | Common package; shared verification components (AXI memory model, sequence player) and the model of the programming sequences | Done |
+| `odma_registers` | RG-1 to RG-4 (register interface) | Done, Scatter/Gather Mode included |
+| `odma_mm2s` | MM-1 to MM-3 (MM2S channel) | MM-1, MM-2 done, with the join of packets of several buffers and keyhole; MM-3 in phase c |
+| `odma_s2mm` | S2-1 to S2-3 (S2MM channel) | S2-1, S2-2 done, with the split of packets over several buffers, keyhole, the next buffer accepted while the write responses of the one before arrive, chunks that follow the buffer address in Scatter/Gather Mode and low-latency writes with equal widths; S2-3 in phase c |
+| `odma_sg` | SG-1 to SG-3 (Scatter/Gather engine) | Done, integrated into the core |
+| `odma_core` | CO-1 (core top level) | DR mode and SG mode done |

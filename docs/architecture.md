@@ -256,7 +256,7 @@ interpretations that concern them.
 | I4 | S2MM packet longer than the buffer in DR mode | Table 24 calls it undefined, Table 17 defines `DMAIntErr` | D6 |
 | I5 | Buffer beyond the top of the address space | Not described | Rejected with `DMADecErr` (invalid address), no access (D7) |
 | I6 | `MM2S_LENGTH` or `S2MM_LENGTH` written while the channel is busy | Not described (the software checks the idle state first) | The write has no effect |
-| I7 | `MM2S_LENGTH` or `S2MM_LENGTH` written while halted | No effect on the DMA operation (Tables 7 and 17) | The value is stored and read back; no transfer starts, also not when `RS` is set later |
+| I7 | `MM2S_LENGTH` or `S2MM_LENGTH` written while halted or stopping after a halt request | No effect on the DMA operation (Tables 7 and 17) | The value is stored and read back; no transfer starts, also not when `RS` is set later |
 | I8 | `DMACR.RS` = 0 during a transfer | Pending transfers flushed or completed | MM2S completes the transfer in progress, including its `TLast`, then halts. S2MM writes the chunks that are complete in its buffer, discards the rest of the packet up to `TLast` and halts without IOC for that cut packet; a packet whose `TLast` was accepted and whose bytes fit into the buffer is written completely, with IOC; in SG mode a packet that needs a further buffer is cut (`odma_s2mm` S2-HA-01) |
 | I9 | S2MM stream input before the channel runs | Section "Typical System Interconnect" notes that a few beats are accepted before the core is programmed | Beats are accepted into the data buffer only while the channel runs; while it is halted `S_S2mm_Ready` is low |
 | I10 | `TKeep` of S2MM beats | Not described | `TKeep` of a beat without `TLast` is ignored (all bytes are stored); the last beat stores the bytes up to the first deasserted `TKeep` bit (P7) |
@@ -395,7 +395,7 @@ names its items of the published interface, so the traceability matrix of sectio
   buffers and descriptors and the expected memory, stream and descriptor contents. The sequence player of `tb/`
   executes the sequence through the AXI4-Lite VVC. The model is written from \[PG021\], independently of the RTL and
   without vendor driver code.
-- Simulators: GHDL for every test; QuestaSim with and without code coverage at the end of each batch of features.
+- Simulators: GHDL for every test; QuestaSim with and without code coverage on the head of every release branch.
 
 ### Rules
 

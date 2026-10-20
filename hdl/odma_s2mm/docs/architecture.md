@@ -50,8 +50,10 @@ Generics as in section 6 of the specification; the core sets `Split_g` = `Includ
 ### 4.1 Normal operation
 
 While `Run` = '1', `Drain` = '0' and the data and chunk buffers have space, the input is ready. Every beat goes into
-the data buffer. A beat ends a chunk when the chunk has `ChunkBeats_c` beats or the beat has `TLast`; in the same
-clock cycle the block writes the descriptor of the chunk into the chunk buffer:
+the data buffer. A beat ends a chunk when the beat count of the chunk reaches the register `Limit` or the beat has
+`TLast`; in the same clock cycle the block writes the descriptor of the chunk into the chunk buffer, and `Limit`
+takes the register `Rest` for the next chunk. Without `Split_g` both stay at `ChunkBeats_c` - 1, so every chunk
+has `ChunkBeats_c` beats; with `Split_g` they follow the chunk plan of the buffer (section 4.2):
 
 | Field | Width | Content |
 | --- | --- | --- |
@@ -113,6 +115,34 @@ the split is idle at every command handshake (the segment of the transfer before
 packet, or the reset has cleared it) and takes the segment in the next clock cycle, during a reset as well, since
 `Seg_Ready` is '1' while no segment is active.
 
+Chunk plan (S2-ST-04): when the split takes the segment of S2-2, S2-1 loads `Limit` and `Rest` from the address of
+the transfer (`Seg_Addr`, of which `odma_s2mm` passes the bits below the burst size BB = B x `MemWidth_g` / 8 as
+`Seg_Offset`) and its keyhole (`Seg_Keyhole`), both registers of S2-2 that belong to the transfer of the segment
+while it waits. With off = address mod BB:
+
+| Buffer | `Limit` (first chunk) | `Rest` (later chunks) | Bursts |
+| --- | --- | --- | --- |
+| Keyhole | `ChunkBeats_c` - 1 | `ChunkBeats_c` - 1 | FIXED, as without the plan |
+| off a multiple of `MemWidth_g` / 8 | `ChunkBeats_c` - 1 | `ChunkBeats_c` - 1 | A chunk covers B memory words: one burst, two where it crosses a 4 KB boundary. Chunks up to the burst boundary would cost one more chunk per buffer and save one burst only per 4 KB boundary crossed |
+| off another multiple of `StreamWidth_g` / 8 | `ChunkBeats_c` - 1 - off / (`StreamWidth_g` / 8) | `ChunkBeats_c` - 1 | The first chunk ends at the burst boundary above the address, the later chunks are aligned: one burst each |
+| off inside a stream word | `ChunkBeats_c` - 1 - S | `ChunkBeats_c` - 1 - S | S > 0: a chunk of one memory word less than a burst covers B memory words at any offset, one burst unless it crosses a 4 KB boundary (the memory word at the end of a chunk is written by two bursts with complementary strobes); S = 0: a chunk covers B + 1 memory words, two bursts |
+
+S is the generic `ShortBeats_g` of the chunk former, `shortBeats(MemWidth_g, StreamWidth_g, B)` of
+`odma_s2mm_pkg`: `MemWidth_g` / `StreamWidth_g` where the short chunks take more beats per clock cycle than two
+bursts per chunk, 0 otherwise. Measured with buffers 1 byte above a burst boundary (verification report): the
+short chunks gain with a memory wider than the stream and B of 8 or more beats, where the write master issues a
+burst only with its data (section 5.5) and each burst costs its command time; with B of 2 or 4 beats a memory
+word is a large part of a burst, and with equal widths the low-latency writes make the second burst of a chunk
+cheaper than a memory word per burst. So S = `MemWidth_g` / `StreamWidth_g` when `MemWidth_g` > `StreamWidth_g`
+and B >= 8, else 0.
+
+The plan is loaded at the segment handshake. Every beat of the buffers before has left the chunk former then:
+S2-2 offers the segment of a transfer only after it has accepted its command, which is after it has taken the
+descriptor with `Pend` of the transfer before, and S2-1 writes that descriptor with the last beat of the buffer.
+So the beat count is 0 at the load, and the first chunk has at least one beat, since off is below BB. The discard
+segments of `Discard_s` load no plan; the beats they pass are dropped. The plan does not change the addresses:
+S2-2 writes each chunk at the command address plus the bytes written, whatever its size.
+
 ### 4.3 Halt and drain
 
 | Situation | Behaviour |
@@ -148,7 +178,7 @@ buffer:
 
 | Descriptor | Action |
 | --- | --- |
-| Normal, written bytes plus `Bytes` within the buffer | Write command to the master at the command address plus the written bytes (a keyhole transfer: at the command address) with `Bytes` bytes (`CmdWr_LowLat` = '0', `CmdWr_Fixed` = keyhole of the command); feed job {ceil(`Bytes` / (`StreamWidth_g` / 8)), remaining beats}; written bytes += `Bytes` |
+| Normal, written bytes plus `Bytes` within the buffer | Write command to the master at the command address plus the written bytes (a keyhole transfer: at the command address) with `Bytes` bytes (`CmdWr_LowLat` of section 5.5, `CmdWr_Fixed` = keyhole of the command); feed job {ceil(`Bytes` / (`StreamWidth_g` / 8)), remaining beats}; written bytes += `Bytes` |
 | Normal, beyond the buffer | Overflow: a write command with the bytes that still fit (if any) and their beats, the other beats dropped; `ErrInt_c`; then flush (S2-RS-02) |
 | `Discard` = '1' | Its beats are dropped; the transfer ends without the end of packet (S2-HA-01) |
 | `Bytes` = 0 and `Pend` = '1' (a last beat without valid bytes after a full chunk) | Its beat is dropped, no write |
@@ -245,9 +275,18 @@ below 2**(`UserTransactionSizeBits_g` - 1) in any case), `AxiMaxBeats_g` = B (se
 4 KB, gap G13),
 `AxiMaxOpenTransactions_g` = 8, `DataFifoDepth_g` = 2 x `ChunkBeats_c` (the ECC-protected write data buffer in
 words of `UserDataWidth_g` bits), `UserDataWidth_g` = `StreamWidth_g`, `AxiDataWidth_g` = `MemWidth_g`,
-`ImplRead_g` = false. The master sets the write strobes of the bytes of each command (S2-WR-02), splits at 4 KB and
-B and issues a burst only when its data is in its FIFO (S2-WR-03); its fixed `AwCache` 0011 and `AwProt` 000 are
-the values of S2-IF-01.
+`ImplRead_g` = false. The master sets the write strobes of the bytes of each command (S2-WR-02) and splits at 4 KB
+and B (S2-WR-03); its fixed `AwCache` 0011 and `AwProt` 000 are the values of S2-IF-01.
+
+`CmdWr_LowLat` = '1' when `MemWidth_g` = `StreamWidth_g`, else '0' (S2-WR-03, S2-WR-07):
+
+- High latency (a wider memory): the master issues a burst only when its data is in its FIFO, so the beats of the
+  burst follow each other. With low latency the width converter of the master would form one memory word per
+  `MemWidth_g` / `StreamWidth_g` stream beats and leave W idle between them.
+- Low latency (equal widths): the master issues the bursts of a command at once, and W follows the data. S2-2
+  issues a write command only for a chunk that is complete in the data buffer (S2-ST-03), and the feeder moves the
+  beats of every issued command at one per clock cycle, also during a drain (section 5.4), so every burst gets its
+  data without a gap and no burst waits for data that does not come.
 
 ### 5.6 ECC and error injection
 
@@ -290,10 +329,12 @@ reset); feeder: `Head_s` (next job), `Feed_s` (beats to the master), `Drop_s` (b
   are outstanding, and the stream input does not wait for them, provided the command source has the next command
   ready (the engine presents it, as it fetches one descriptor ahead). The verification report of the core has the
   measured values.
-- Throughput: the channel issues one write command per chunk, and the write master accepts the next command after
-  the data of the previous one, about 7 clock cycles of overhead per command. With equal memory and stream widths
-  and chunks of C stream beats the channel takes about C / (C + 7) beats per clock cycle once its data buffer is
-  full: about 0.7 for chunks of 16 beats (the default of 16-beat bursts at 32 bits), 0.9 for chunks of 64 beats
-  (S2-WR-05), 0.97 for 256 beats. Longer bursts raise it. With a memory four or more times wider than the stream the
-  write side is faster than the stream and the channel takes one beat per clock cycle; the verification report has
-  the measured values.
+- Throughput: the channel issues one write command per chunk, once the chunk is complete in the data buffer. With
+  equal memory and stream widths the write master takes low-latency commands (section 5.5) and issues the burst at
+  once: 0.91 beats per clock cycle with chunks of 16 beats (the defaults), 0.31 with chunks of 2. With a wider memory
+  it issues a burst once its data are in its own buffer, and a command costs up to about 7 clock cycles: at twice the
+  stream width 0.52 beats per clock cycle with chunks of 8 beats, 0.70 with 16 and 0.95 with 64 (S2-WR-05 requires
+  0.9 from 64 beats). Longer bursts raise it. With a memory four or more times wider than the stream the write side
+  is faster than the stream and the channel takes one beat per clock cycle. A buffer that does not start at a
+  multiple of the memory word adds a burst per chunk where the chunk plan of section 4.2 keeps full chunks; the
+  verification report has the measured values.

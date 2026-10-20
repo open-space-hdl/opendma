@@ -2,13 +2,17 @@
 
 ## 1. Test results
 
-Run on 2026-10-18 locally, on commit 0a041f3 (its `results.xml`), with
-GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
-`python run.py -p 2 --xunit-xml results.xml`, the tests of `odma_mm2s_tb`.
+Run on 2026-10-19 in the GHDL CI of the repository, GitHub Actions run 39290223755 on commit 8c32323 (its
+`results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
+`python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_mm2s_tb`.
+
+The same tests pass in QuestaSim (Questa Pro Microchip Edition 2024.3, time resolution 1 fs), with code coverage and in
+the optimised run without it, on 2026-10-19 on commit 6252594 (sources and testbenches as in 8c32323); the code coverage
+of the core is in `docs/coverage.md`.
 
 | Testbench | Tests | Passed |
 | --- | --- | --- |
-| `odma_mm2s_tb` | 312 (19 test cases: 16 in all 18 configurations, TC-MM-16 to TC-MM-18 in the eight `j_` configurations) | 312 |
+| `odma_mm2s_tb` | 320 (20 test cases: 16 in all 18 configurations, TC-MM-16 to TC-MM-18 and TC-MM-20 in the eight `j_` configurations) | 320 |
 
 ## 2. Summary
 
@@ -96,5 +100,6 @@ at least one test case; the RTL of the repository passes all of them:
 | The keyhole bit not passed to the read master | TC-MM-19 |
 | A keyhole buffer checked against the top of the address space | TC-MM-19 |
 | The slave error code for every failed read | TC-MM-15 |
+| A drain pops an entry only together with its read response (an entry without a read stays at the head) | TC-MM-10 |
 
 The recovery branches of the state machines (`when others`) cannot be reached through the ports.

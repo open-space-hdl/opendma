@@ -29,6 +29,7 @@ library work;
     use work.odma_pkg.all;
     use work.odma_tb_memvar_pkg.all;
     use work.odma_mm2s_tb_pkg.all;
+    use work.odma_mm2s_tb_pktvar_pkg.all;
 
 ---------------------------------------------------------------------------------------------------
 -- Entity
@@ -120,7 +121,8 @@ architecture sim of odma_mm2s_th is
                               Cycle      => 0,
                              ResCount   => 0,
                              Results    => (others => (Bytes => 0, Eof => '0', Err => "00", Cycle => 0)),
-                              Beats      => 0,
+                              ResHeld    => 0,
+                             Beats      => 0,
                              Bytes      => 0,
                              FirstBeat  => 0,
                              LastBeat   => 0,
@@ -217,6 +219,8 @@ begin
         )
         port map (
             Clk     => Clk_i,
+            -- Reset with the DUT, as the reset of the core resets its interconnect
+            Rst     => DutRst,
             AwAddr  => AwAddr,
             AwLen   => AwLen,
             AwSize  => AwSize,
@@ -330,6 +334,9 @@ begin
                                                                Err => Res_Err,
                                                                Cycle => Obs_i.Cycle);
                 O_v.ResCount                               := O_v.ResCount + 1;
+            end if;
+            if Res_Valid = '1' and Res_Ready = '0' then
+                O_v.ResHeld := O_v.ResHeld + 1;
             end if;
 
             -- Stream handshakes

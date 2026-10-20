@@ -2,9 +2,13 @@
 
 ## 1. Test results
 
-Run on 2026-10-18 locally, on commit 0a041f3 (its `results.xml`), with
-GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
-`python run.py -p 2 --xunit-xml results.xml`, the tests of `odma_pkg_tb`.
+Run on 2026-10-19 in the GHDL CI of the repository, GitHub Actions run 39290223755 on commit 8c32323 (its
+`results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
+`python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_pkg_tb`.
+
+The same tests pass in QuestaSim (Questa Pro Microchip Edition 2024.3, time resolution 1 fs), with code coverage and in
+the optimised run without it, on 2026-10-19 on commit 6252594 (sources and testbenches as in 8c32323); the code coverage
+of the core is in `docs/coverage.md`.
 
 | Test ID | Test case | Status |
 | --- | --- | --- |
@@ -24,8 +28,6 @@ GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
 | `test_mem_fifo` | TC-PKG-14 | PASS |
 | `test_resp_err` | TC-PKG-15 | PASS |
 | `test_timed_waits` | TC-PKG-16 | PASS |
-
-QuestaSim runs with the next batch of features (module workflow of the repository).
 
 ## 2. Summary
 

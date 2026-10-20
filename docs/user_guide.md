@@ -40,8 +40,10 @@ bursts of at most 4096 bytes whatever the burst generic is (32 beats of 1024 bit
 
 All ports belong to `Clk`, the synchronous configuration of \[PG021\]; the core has no clock domain crossing. A
 system with other stream or memory clocks places `olo_ft_fifo_async` (with `SyncTmr_g` = true) at the ports. `Rst`
-is synchronous and high-active and resets the whole core. A soft reset (section 5.4) resets the channels and the
-registers but not the AXI4-Lite slave, so that the register access that starts it completes.
+is synchronous and high-active and resets the whole core. It is the reset of the whole AXI domain of the core
+and is asserted together with the reset of the interconnect and the slaves on the memory ports, the descriptor
+port and the streams (section 8). A soft reset (section 5.4) resets the channels and the registers but not the
+AXI4-Lite slave, so that the register access that starts it completes.
 
 ## 4. Interfaces
 
@@ -247,23 +249,25 @@ requirements of a mission is shown by a radiation test with the core in operatio
 
 MM2S sends one stream beat per clock cycle when a burst has at least 8 stream beats (burst beats x memory width /
 stream width) and the memory and the stream peer are ready; with fewer, the read latency of the memory is not hidden.
-S2MM issues one write command per chunk of one burst, and the write master accepts the next command about 7 clock
-cycles after the data of the previous one. With equal memory and stream widths a chunk of C stream beats therefore
-takes about C + 7 clock cycles; with a memory at least four times as wide as the stream the channel takes one beat
-per clock cycle. Measured with an always ready memory and a stream without gaps (verification reports of the
-channels):
+S2MM issues one write command per chunk of one burst, and only for a chunk that is complete in its data buffer. With
+equal memory and stream widths the write master issues the burst as soon as the command arrives (low-latency
+commands); with a wider memory it issues a burst once its data are in its own buffer, and the next command follows
+about 7 clock cycles after the data of the previous one. With a memory at least four times as wide as the stream the
+channel takes one beat per clock cycle. Measured with an always ready memory, a stream without gaps and buffers at
+burst boundaries (verification reports of the channels):
 
 | Memory / stream width, burst beats | MM2S beats per clock cycle | S2MM beats per clock cycle |
 | --- | --- | --- |
-| 32 / 32 bits, 16 beats (the defaults) | 1.0 | 0.76 |
+| 32 / 32 bits, 16 beats (the defaults) | 1.0 | 0.91 |
 | 128 / 64 bits, 32 beats | 1.0 | 0.95 |
 | 256 / 128 bits, 4 beats | 1.0 | 0.51 |
 | 512 / 256 bits, 8 beats | 1.0 | 0.70 |
-| 512 / 512 bits, 2 beats | 0.51 | 0.24 |
+| 512 / 512 bits, 2 beats | 0.51 | 0.31 |
 | Memory four or more times the stream width | 1.0 | 1.0 |
 
-Short bursts at equal widths cost the most: a system that needs the full S2MM rate with equal widths chooses long
-bursts (`S2mmBurstBeats_g` 64 or more gives at least 0.9 beats per clock cycle) or a wider memory port. A transfer
+Short bursts cost the most. A system that needs the full S2MM rate chooses chunks of at least 64 stream beats
+(`S2mmBurstBeats_g` x memory width / stream width, at least 0.9 beats per clock cycle), bursts of 16 beats or more
+with equal widths, or a memory port at least four times the stream width. A transfer
 takes at least four clock cycles in the AXI master for its command, and the register accesses of DR mode add the
 time of the processor for every transfer.
 
@@ -276,16 +280,16 @@ buffers runs at the descriptor rate.
 An S2MM packet over several buffers continues at a buffer boundary without waiting for the write responses of the
 full buffer: the channel accepts the next buffer once the last write command of the full buffer is issued, and the
 result of the full buffer waits for its responses meanwhile (`odma_s2mm` S2-RS-06); the engine holds the next
-descriptor, as it fetches one ahead. The write master keeps the pace it has between two bursts inside a buffer, 7
-clock cycles with the defaults and 11 with 512 / 256 bits. One result waits at a time: a buffer that takes less time
+descriptor, as it fetches one ahead. A boundary adds at most one clock cycle to the pace between two bursts inside a
+buffer. One result waits at a time: a buffer that takes less time
 to fill than the write responses of the buffer before it take to arrive waits for them at its end. Measured in the
 core bench (TC-CO-20) with packets of 16 KB, a stream without gaps and a memory that is always ready apart from the
 write response latency:
 
 | Memory / stream width, burst beats | Write response latency | Pause per buffer boundary | Beats per clock cycle, 1 KB buffers | Beats per clock cycle, 4 KB buffers | Beats per clock cycle, 4 KB buffers at unaligned addresses |
 | --- | --- | --- | --- | --- | --- |
-| 32 / 32 bits, 16 beats (the defaults) | 0 | 0 clock cycles | 0.70 | 0.70 | 0.60 |
-| 32 / 32 bits, 16 beats (the defaults) | 50 | 0 clock cycles | 0.70 | 0.70 | 0.60 |
+| 32 / 32 bits, 16 beats (the defaults) | 0 | 1 clock cycle | 0.85 | 0.85 | 0.81 |
+| 32 / 32 bits, 16 beats (the defaults) | 50 | 1 clock cycle | 0.85 | 0.85 | 0.81 |
 | 512 / 256 bits, 4 beats | 0 | 1 clock cycle | 0.48 | 0.49 | 0.40 |
 | 512 / 256 bits, 4 beats | 50 | 19 clock cycles | 0.40 | 0.49 | 0.40 |
 
@@ -293,10 +297,18 @@ With 512 / 256 bits a buffer of 1 KB fills in about 66 clock cycles; with a resp
 the buffer before are not back when it is full, so each of these boundaries waits for them.
 
 Packets that fit into one buffer do not pause; buffers of several KB keep the loss small. A buffer address that is
-not a multiple of the memory word costs time in both modes: a chunk then covers one memory word more than a burst
-holds and is written as two bursts. That adds 63 clock cycles per KB with the defaults, 14 with 512 / 256 bits and
-240 with 64 / 8 bits and 2-beat bursts (TC-CO-20). Buffers at multiples of the burst size avoid it. The MM2S join of
-several buffers costs at most one clock cycle per packet.
+not a multiple of the memory word can cost time: a full chunk then covers one memory word more than a burst holds
+and is written as two bursts. In SG mode the chunks follow the address of the buffer (`odma_s2mm` S2-ST-04):
+
+- At a multiple of the stream width the first chunk ends at the burst boundary above the address and the later
+  chunks are aligned, so the buffer takes no longer than an aligned one (0 clock cycles more per KB with 64 / 8 bits
+  and 2-beat bursts, TC-CO-20).
+- Inside a stream word the chunks are one memory word shorter, one burst each, when the memory is wider than the
+  stream and a burst has at least 8 beats. Otherwise they keep their full size: 15 clock cycles more per KB with the
+  defaults and 14 with 512 / 256 bits and 4-beat bursts (TC-CO-20).
+
+In DR mode every chunk has its full size. Buffers at multiples of the memory word avoid the cost in both modes. The
+MM2S join of several buffers costs at most one clock cycle per packet.
 
 ## 8. Integration constraints
 
@@ -305,6 +317,7 @@ several buffers costs at most one clock cycle per packet.
 | TMR of the synthesis tool enabled for the core | The core protects its FT buffers itself and relies on TMR for all other logic (section 6) |
 | The memory answers every burst in order (no ID signals) | The masters use one ID for all transactions |
 | The stream peers are reset by `Mm2s_RstOut` and `S2mm_RstOut` | A soft reset ends the packets in progress; a peer that continues a packet sends its rest as a new packet |
+| `Rst` only together with the reset of the interconnect and the slaves on `M_AxiMm2s_*`, `M_AxiS2mm_*`, `M_AxiSg_*` and the streams | `Rst` abandons the outstanding AXI transactions of the core; a slave that is not reset would still return their responses. AXI4 resets the master and the slave of an interface together (Arm AMBA AXI Protocol Specification, IHI 0022, section "Reset"). A stop that keeps the buses running is the soft reset (`DMACR.Reset`) or a halt |
 | One clock for all ports | Synchronous configuration; asynchronous stream or memory clocks need FIFOs at the ports (section 3) |
 | `StsCntrlStrm_g`, `UseRxLength_g` and `MicroDma_g` false | The control and status streams and the micro DMA follow in phase c |
 | Keyhole buffers aligned to the memory data width | The address bits below the memory width are ignored for FIXED bursts |

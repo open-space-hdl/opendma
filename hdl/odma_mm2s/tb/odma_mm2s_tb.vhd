@@ -30,6 +30,7 @@ library work;
     use work.odma_tb_mem_pkg.all;
     use work.odma_tb_memvar_pkg.all;
     use work.odma_mm2s_tb_pkg.all;
+    use work.odma_mm2s_tb_pktvar_pkg.all;
 
 ---------------------------------------------------------------------------------------------------
 -- Entity
@@ -500,6 +501,76 @@ begin
                 check_value(Obs.ArCount, Cnt_v, ERROR, "no read burst");
                 check_value(Obs.Beats, 0, ERROR, "no stream beat");
 
+                -- Drain of the entries of these commands, which have no read: popped without a result. A: both at the
+                -- head of the transfer buffer while their result is held, a transfer behind them whose read is still
+                -- outstanding (read latency 200 clock cycles)
+                Mem_v.fill(0, region(2), 65536, 26);
+                clearStream;
+                Res_v     := Obs.ResCount;
+                Cnt_v     := Obs.ArCount;
+                Res_Ready <= '0';
+                sendCmd(topAddr - Len_v + 2, Len_v);
+                sendCmd(region(2), 0);
+                Cnt2_v    := Obs.ResHeld;
+                cycles(20);
+                check_value(Obs.ResHeld - Cnt2_v >= 10, true, ERROR,
+                            "drain A: the result of the entry at the head is held");
+                check_value(Obs.ArCount, Cnt_v, ERROR, "drain A: no read burst for the error entries");
+                Mem_v.setLatency(0, 200);
+                sendCmd(region(2), Len_v);
+                if Obs.ArCount = Cnt_v then
+                    odmaWaitAtLeast(Obs.ArCount, Cnt_v + 1, 1 ms, "drain A: read of the transfer behind");
+                end if;
+                cycles(20);
+                check_value(Obs.RLastCount, Cnt_v, ERROR, "drain A: the read of the transfer behind is outstanding");
+                ChDrain   <= '1';
+                Res_Ready <= '1';
+                if Stopped = '0' then
+                    odmaWaitHigh(Stopped, 1 ms, "drain A: Stopped");
+                end if;
+                cycles(20);
+                check_value(Obs.ResCount, Res_v, ERROR, "drain A: no result of a drained entry");
+                check_value(Obs.Beats, 0, ERROR, "drain A: no stream beat");
+                check_value(Obs.RLastCount, Obs.ArCount, ERROR, "drain A: every read burst completed");
+                Mem_v.setLatency(0, 0);
+                RstIn   <= '1';
+                cycles(2);
+                RstIn   <= '0';
+                ChDrain <= '0';
+                cycles(2);
+                transfer(region(2) + 4096, Len_v, "transfer after drain A");
+
+                -- B: the same entries reach the head during the drain, behind a transfer whose packet was sent and
+                -- whose result is held
+                clearStream;
+                Res_v     := Obs.ResCount;
+                Res_Ready <= '0';
+                expect(region(2) + 8192, Len_v);
+                sendCmd(region(2) + 8192, Len_v);
+                streamDone;
+                Cnt2_v    := Obs.ResHeld;
+                cycles(20);
+                check_value(Obs.ResHeld - Cnt2_v >= 10, true, ERROR, "drain B: the result of the transfer is held");
+                Cnt_v     := Obs.ArCount;
+                sendCmd(topAddr - Len_v + 2, Len_v);
+                sendCmd(region(2), 0);
+                cycles(20);
+                check_value(Obs.ArCount, Cnt_v, ERROR, "drain B: no read burst for the error entries");
+                ChDrain   <= '1';
+                Res_Ready <= '1';
+                if Stopped = '0' then
+                    odmaWaitHigh(Stopped, 1 ms, "drain B: Stopped");
+                end if;
+                cycles(20);
+                check_value(Obs.ResCount, Res_v, ERROR, "drain B: no result of a drained entry");
+                check_value(Obs.ArCount, Cnt_v, ERROR, "drain B: no read burst during the drain");
+                RstIn   <= '1';
+                cycles(2);
+                RstIn   <= '0';
+                ChDrain <= '0';
+                cycles(2);
+                transfer(region(2) + 12288, Len_v, "transfer after drain B");
+
             elsif run("test_halt") then
                 log(ID_LOG_HDR, "TC-MM-11 halt during a transfer");
                 Mem_v.fill(0, region(1), 65536, 27);
@@ -567,6 +638,32 @@ begin
                 end loop;
 
                 Cmd_Valid <= '0';
+
+                -- Rst of the core during a packet (it also resets the memory model): the stream output stops at once,
+                -- no result, and the next transfer is correct
+                RstIn   <= '1';
+                cycles(2);
+                RstIn   <= '0';
+                ChDrain <= '0';
+                cycles(2);
+                Res_v   := Obs.ResCount;
+                Mem_v.fill(0, region(2), Len_v, 31);
+                clearStream;
+                expect(region(2), Len_v);
+                sendCmd(region(2), Len_v);
+                odmaWaitAtLeast(Obs.Beats, 10, 1 ms, "stream beats before the reset");
+                wait until rising_edge(Clk);
+                RstIn   <= '1';
+                cycles(2);
+                Cnt_v   := Obs.Beats;
+                RstIn   <= '0';
+                cycles(50);
+                check_value(Obs.Beats, Cnt_v, ERROR, "no stream beat after the reset");
+                check_value(Obs.ResCount, Res_v, ERROR, "no result of the transfer cut by the reset");
+                -- The drained and the cut packet never end
+                Expected_v := Obs.Packets;
+                clearStream;
+                transfer(region(3), minimum(3 * StreamBytes_c, MaxLen_c), "packet after the reset during a packet");
 
             elsif run("test_ecc") then
                 log(ID_LOG_HDR, "TC-MM-13 single and double errors injected into the three buffers");
@@ -790,6 +887,106 @@ begin
                 ChDrain    <= '0';
                 cycles(2);
                 transfer(region(1) + 10 * 4096, minimum(3 * StreamBytes_c, MaxLen_c), "packet after the reset");
+
+                -- Drain while the closing beat of a packet left open by a halt waits for the stream peer. The command
+                -- of 2 x B + 1 bytes gives two full beats, the join holds its last byte for the closing beat; the peer
+                -- stalls before that beat. The closing beat is not sent, Stopped, then the core reset
+                Len_v             := minimum(2 * StreamBytes_c + 1, MaxLen_c);
+                clearStream;
+                Ready.StallBeat   <= 2;
+                Ready.StallCycles <= 300;
+                expect(region(1) + 14 * 4096, Len_v, true);
+                sendCmd(region(1) + 14 * 4096, Len_v, '0');
+                ChRun             <= '0';
+                odmaWaitAtLeast(Obs.Beats, 2, 1 ms, "the beats before the closing beat");
+                cycles(40);
+                check_value(Obs.Beats, 2, ERROR, "the closing beat waits for the stream peer");
+                check_value(Stopped, '0', ERROR, "not stopped while the closing beat waits");
+                ChDrain           <= '1';
+                odmaWaitHigh(Stopped, 1 ms, "Stopped after the drain of the closing beat");
+                cycles(20);
+                check_value(Obs.Beats, 2, ERROR, "no closing beat after the drain");
+                Ready.StallBeat   <= -1;
+                RstIn             <= '1';
+                cycles(2);
+                RstIn             <= '0';
+                ChDrain           <= '0';
+                ChRun             <= '1';
+                cycles(2);
+                -- The drained packets never end
+                Expected_v := Obs.Packets;
+                clearStream;
+                transfer(region(1) + 11 * 4096, minimum(3 * StreamBytes_c, MaxLen_c),
+                         "packet after the drain of the closing beat");
+
+                -- Halt and drain in the same clock cycle (a soft reset of the core) while a packet is open between
+                -- two of its commands: the peer has taken the two full beats of the first command, the join holds its
+                -- last byte. No closing beat, Stopped, then the core reset
+                clearStream;
+                expect(region(1) + 15 * 4096, Len_v, true);
+                sendCmd(region(1) + 15 * 4096, Len_v, '0');
+                odmaWaitAtLeast(Obs.Beats, 2, 1 ms, "the full beats of the first command");
+                cycles(40);
+                check_value(Stopped, '0', ERROR, "not stopped while the packet is open");
+                wait until rising_edge(Clk);
+                ChRun      <= '0';
+                ChDrain    <= '1';
+                odmaWaitHigh(Stopped, 1 ms, "Stopped after the halt and the drain of an open packet");
+                cycles(20);
+                check_value(Obs.Beats, 2, ERROR, "no closing beat after the halt and the drain");
+                RstIn      <= '1';
+                cycles(2);
+                RstIn      <= '0';
+                ChDrain    <= '0';
+                ChRun      <= '1';
+                cycles(2);
+                Expected_v := Obs.Packets;
+                clearStream;
+                transfer(region(1) + 12 * 4096, minimum(3 * StreamBytes_c, MaxLen_c),
+                         "packet after the halt and the drain");
+
+            elsif run("test_join_halt_sweep") then
+                log(ID_LOG_HDR, "TC-MM-20 halt at every clock cycle after the second command of a packet is accepted");
+                Mem_v.fill(0, region(1), 65536, 43);
+                Len_v  := minimum(2 * StreamBytes_c + 1, MaxLen_c);
+                Len2_v := minimum(StreamBytes_c + 3, MaxLen_c);
+
+                for e in 0 to 1 loop
+
+                    for d in 0 to 8 loop
+                        -- The first command of a packet has passed the stream (its result is returned, the join holds
+                        -- its last byte); the second, with (e = 1) or without the end of packet, is accepted and Run
+                        -- falls d clock cycles after its handshake, before or after its entry reaches the stream
+                        Eof_v := '1' when e = 1 else '0';
+                        Res_v := Obs.ResCount;
+                        clearStream;
+                        expect(region(1) + 2 * 4096, Len_v, false);
+                        expect(region(1) + 3 * 4096 + 1, Len2_v, true);
+                        sendCmd(region(1) + 2 * 4096, Len_v, '0');
+                        waitRes(Res_v + 1);
+                        sendCmd(region(1) + 3 * 4096 + 1, Len2_v, Eof_v);
+                        cycles(d);
+                        ChRun <= '0';
+                        -- Both commands complete; the packet ends with TLast on the last byte of the second (its end of
+                        -- packet or the closing beat after the halt); one result each, no further command
+                        streamDone;
+                        waitRes(Res_v + 2);
+                        checkRes(Res_v, Len_v, '0', ErrNone_c, "first command, halt after " & to_string(d));
+                        checkRes(Res_v + 1, Len2_v, Eof_v, ErrNone_c, "second command, halt after " & to_string(d));
+                        if Stopped = '0' then
+                            odmaWaitHigh(Stopped, 1 ms, "Stopped after the halt after " & to_string(d));
+                        end if;
+                        check_value(Stopped, '1', ERROR, "Stopped after the halt after " & to_string(d));
+                        cycles(50);
+                        check_value(Obs.ResCount, Res_v + 2, ERROR, "no further result, halt after " & to_string(d));
+                        check_value(Obs.Packets, Expected_v, ERROR, "one packet, halt after " & to_string(d));
+                        -- Run again: a fresh packet is complete
+                        ChRun <= '1';
+                        transfer(region(1) + 5 * 4096, minimum(3 * StreamBytes_c, MaxLen_c),
+                                 "packet after the halt after " & to_string(d));
+                    end loop;
+
+                end loop;
 
             elsif run("test_keyhole") then
                 log(ID_LOG_HDR, "TC-MM-19 keyhole reads with FIXED bursts");

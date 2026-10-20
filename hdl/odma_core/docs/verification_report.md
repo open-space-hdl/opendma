@@ -2,10 +2,14 @@
 
 ## 1. Test results
 
-Run on 2026-10-18 locally, on commit 0a041f3 (its `results.xml`), with
-GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
-`python run.py -p 2 --xunit-xml results.xml`, the tests of `odma_core_tb`, and
-`python lint/synth_check.py -j 2` on the same commit.
+Run on 2026-10-19 in the GHDL CI of the repository, GitHub Actions run 39290223755 on commit 8c32323 (its
+`results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
+`python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_core_tb`, and
+`python lint/synth_check.py -j 4` in the same run.
+
+The tests of `odma_core_tb` pass in QuestaSim (Questa Pro Microchip Edition 2024.3, time resolution 1 fs), with code
+coverage and in the optimised run without it, on 2026-10-19 on commit 6252594 (sources and testbenches as in 8c32323);
+the code coverage of the core is in `docs/coverage.md`.
 
 | Testbench or check | Tests | Passed |
 | --- | --- | --- |
@@ -17,14 +21,21 @@ latency 0 / 50 clock cycles, buffers at multiples of 64 bytes unless stated):
 
 | Configuration | Pause per buffer boundary | Beats per clock cycle, 1 KB buffers | Beats per clock cycle, 4 KB buffers | Beats per clock cycle, 4 KB buffers at unaligned addresses | Cycles per KB added by unaligned buffers |
 | --- | --- | --- | --- | --- | --- |
-| `sg`, `sg_s2mm_only` (32 / 32 bits, 16 beats) | 0 / 0 | 0.70 / 0.70 | 0.70 / 0.70 | 0.60 / 0.60 | 63 / 63 |
+| `sg`, `sg_s2mm_only` (32 / 32 bits, 16 beats) | 1 / 1 | 0.85 / 0.85 | 0.85 / 0.85 | 0.81 / 0.81 | 15 / 15 |
 | `sg_aw64` (512 / 256 bits, 4 beats) | 1 / 19 | 0.48 / 0.40 | 0.49 / 0.49 | 0.40 / 0.40 | 14 / 14 |
-| `sg_lw8` (64 / 8 bits, 2 beats; buffers of at most 255 bytes, so no boundary figure) | - | 0.64 / 0.64 | 0.64 / 0.64 | 0.56 / 0.56 | 240 / 240 |
+| `sg_lw8` (64 / 8 bits, 2 beats; buffers of at most 255 bytes, so no boundary figure) | - | 0.64 / 0.64 | 0.64 / 0.64 | 0.64 / 0.64 | 0 / 0 |
 
 The S2MM channel accepts the next buffer once the last write command of the full buffer is issued, while the
-result of the full buffer waits for its write responses (`odma_s2mm` S2-RS-06), so a boundary costs no time with
-the defaults at either latency. With 512 / 256 bits a buffer of 1 KB fills in about 66 clock cycles, and with a
+result of the full buffer waits for its write responses (`odma_s2mm` S2-RS-06), so a boundary costs one clock cycle
+with the defaults at either latency. With 512 / 256 bits a buffer of 1 KB fills in about 66 clock cycles, and with a
 response latency of 50 it waits at its end for the responses of the buffer before (one result waits at a time).
+
+The unaligned buffers start 1 byte above a multiple of 64 bytes. With 64 / 8 bits that is a multiple of the stream
+width: the first chunk ends at the burst boundary and the later chunks are aligned (`odma_s2mm` S2-ST-04), so the
+buffers take no longer than aligned ones. With 32 / 32 and 512 / 256 bits the address is inside a stream word, where
+the chunks keep their full size and each is written as two bursts. The defaults write with low-latency commands
+(equal widths, `odma_s2mm` S2-WR-03): 8192 beats in 9667 clock cycles with 1 KB buffers, 11657 with high-latency
+commands (a variant of the sources, `odma_s2mm` verification report).
 
 ## 2. Summary
 
@@ -45,7 +56,8 @@ Findings of the verification:
 | The S2MM channel gave a descriptor of length 0 the start of packet (`RXSOF` in its status, scenario `sg_errors`) | A result without bytes and without the end of packet belongs to no packet (`odma_s2mm` S2-SG-02, interpretation SGI-14) |
 | TC-CO-18 hung after the S2MM write error: `Halted` is set while the channel still discards the rest of the failed packet (documented behaviour), so the soft reset came while the stream VVC was still sending it. The VVC does not follow `S2mm_RstOut`, and the rest of the packet filled the first buffer of the new chain | The sequence command `T` waits until one stream packet is sent while the next one stays queued (`odma_pkg` architecture, section 3.3); the scenario waits for the failed packet before the soft reset, so the next packet still follows it directly. The step is now TC-CO-21, with the next buffer of the failed packet written before the error arrives |
 | With the next S2MM buffer accepted while the write responses of the full buffer arrive (`odma_s2mm` S2-RS-06), the write-error step of TC-CO-18 failed in the four configurations with S2MM: its failing buffer was one chunk with responses without latency, and the next buffer of the packet now took a number of bytes before the error arrived that depends on the timing of the stream and the memory, while the scenario expected it unwritten | The step moves to TC-CO-21, whose write responses come 400 clock cycles late, so that the next buffer is written completely before the error: the scenario expects its bytes and its status (interpretation SGI-15), the third descriptor unchanged, and the next packet sent directly after the failed one complete after the soft reset |
-| The first TC-CO-20 figures (69 clock cycles per boundary) mixed in a second effect: a chunk at an address that is not a multiple of the memory word covers one word more than a burst and is written as two bursts, and the runs with 1 KB and 4 KB buffers had different shares of such buffers. The buffers of the two runs also overlapped | TC-CO-20 places its buffers at multiples of 64 bytes in a region per buffer length and measures unaligned 4 KB buffers separately; the user guide (section 7) gives both effects. Shorter boundary pauses and burst-aligned chunks are planned (roadmap) |
+| The first TC-CO-20 figures (69 clock cycles per boundary) mixed in a second effect: a chunk at an address that is not a multiple of the memory word covers one word more than a burst and is written as two bursts, and the runs with 1 KB and 4 KB buffers had different shares of such buffers. The buffers of the two runs also overlapped | TC-CO-20 places its buffers at multiples of 64 bytes in a region per buffer length and measures unaligned 4 KB buffers separately; the user guide (section 7) gives both effects. The chunk plan of `odma_s2mm` (S2-ST-04) removes the second effect for buffers at a multiple of the stream width (0 instead of 240 clock cycles more per KB with 64 / 8 bits) |
+| A first chunk plan of `odma_s2mm` that also shortened the first chunk of buffers at a multiple of the memory word raised the pause per buffer boundary of `sg_aw64` from 1 to 8 clock cycles: the TC-CO-20 buffers lie at multiples of 64 bytes, one memory word at 512 bits, below the burst size of 256 bytes | At a multiple of the memory word the chunks keep their full size (`odma_s2mm` S2-ST-04) |
 | A mutation check of the Scatter/Gather integration found three faults that passed: every stream beat taken as a packet start, `Stopped` of the S2MM channel without its engine (and without the channel), and the indices 6 to 9 rotated. The first is visible only when a packet starts before the completion of the one before; the second only when a soft reset meets an outstanding descriptor access or data burst of the channel alone; the third not at all while every index is injected at once | TC-CO-16 runs two packets back to back so that the delay timer must run during the second (interpretation R10), TC-CO-17 resets once with a descriptor access and once with only data bursts outstanding, TC-CO-15 injects one index at a time |
 | TC-CO-19 did not check that the S2MM keyhole writes nothing outside the backing range of the FIFO window | The scenario `keyhole` expects the window word and 16 bytes on each side of it, 16 bytes before and after the backing range and the rest of the last word of each transfer unwritten |
 
@@ -118,4 +130,5 @@ the streams at or below 256 bits, the limit of the AXI4-Stream VVC.
 
 ## 5. Coverage
 
-Code coverage is collected with QuestaSim in the batches of phases a and b (`docs/coverage.md`).
+Code coverage of all modules is collected with QuestaSim over the full regression; the result and the
+justification of every remaining miss are in `docs/coverage.md`.

@@ -227,6 +227,8 @@ begin
         variable SecBase_v : natural;
         variable DedBase_v : natural;
         variable ExpErr_v  : std_logic_vector(1 downto 0);
+        variable Cyc_v     : natural;
+        variable Ev_v      : natural;
 
         -- Random test: descriptors prepared and checked, packets, expected status words
         type Status_a is array (0 to Total_c - 1) of Word_t;
@@ -994,6 +996,28 @@ begin
                                 C_TB_SCOPE_DEFAULT, HEX);
                 end if;
 
+                -- A fetched descriptor waits for the channel when the result of D1 fails (one command at a time, results
+                -- 80 clock cycles after the command): it is not issued and keeps its status, CURDESC at D1
+                for ch in 0 to 1 loop
+                    if Incl_c(ch) then
+                        resetAll;
+                        chain(ch, 4);
+                        Cfg(ch).ResDelay                   <= 80;
+                        Cfg(ch).MaxCmds                    <= 1;
+                        Cfg(ch).Results(CmdBase_v(ch) + 1) <= (true, 33, '1', '0', ErrSlv_c);
+                        start(ch, descAddr(ch, 0));
+                        tail(ch, descAddr(ch, 3));
+                        waitErrs(ch, 1, "error of D1 with D2 fetched");
+                        halt(ch, "error of D1 with D2 fetched");
+                        check_value(Obs.ArCount - ArBase_v >= 3, ERROR, "D2 fetched before the error");
+                        check_value(Obs.CmdCount(ch) - CmdBase_v(ch), 2, ERROR, "the fetched D2 not issued after the error");
+                        checkDesc(ch, 1, true, statusExp(ch, 33, '1', '0', ErrSlv_c), "status of D1");
+                        checkDesc(ch, 2, false, Img_v(ch)(2)(7), "the fetched D2 keeps its status");
+                        check_value(Obs.CurPtr(ch), descAddr(ch, 1), ERROR, "CURDESC at D1 with D2 fetched",
+                                    C_TB_SCOPE_DEFAULT, HEX);
+                    end if;
+                end loop;
+
             elsif run("test_error_codes") then
                 log(ID_LOG_HDR, "TC-SG-18 error codes of descriptor accesses");
 
@@ -1088,6 +1112,32 @@ begin
                         halt(ch, "transfer and status write error");
                         check_value(Obs.Errs(ch)(ErrBase_v(ch)).Xfer, ErrDec_c, ERROR, "transfer error in the event");
                         check_value(Obs.Errs(ch)(ErrBase_v(ch)).Sg, ErrSlv_c, ERROR, "engine error in the same event");
+                        -- A fetch error while the channel stops at a transfer error: the fetch of D2 is in flight
+                        -- (memory latency 100 clock cycles) when the result of D1 fails, then it gets DECERR. Both
+                        -- events, nothing issued after D1, CURDESC at D1, the descriptor of the first error (SG-FE-07)
+                        resetAll;
+                        chain(ch, 4);
+                        Mem_v.setLatency(MemSg_c, 100);
+                        Mem_v.setError(MemSg_c, 0, unsigned(descAddr(ch, 2)), unsigned(descAddr(ch, 2)) + 31, ErrDec_c,
+                                       TbDirRead);
+                        Cfg(ch).Results(CmdBase_v(ch) + 1) <= (true, 33, '1', '0', ErrSlv_c);
+                        start(ch, descAddr(ch, 0));
+                        tail(ch, descAddr(ch, 3));
+                        waitErrs(ch, 2, "transfer error of D1, fetch error of D2");
+                        halt(ch, "transfer error of D1, fetch error of D2");
+                        check_value(Obs.ArCount - ArBase_v, 3, ERROR, "D2 fetched");
+                        check_value(Obs.CmdCount(ch) - CmdBase_v(ch), 2, ERROR, "no command after the error of D1");
+                        check_value((Obs.Errs(ch)(ErrBase_v(ch)).Xfer = ErrSlv_c and Obs.Errs(ch)(ErrBase_v(ch)).Sg = ErrNone_c and
+                                     Obs.Errs(ch)(ErrBase_v(ch) + 1).Xfer = ErrNone_c and
+                                     Obs.Errs(ch)(ErrBase_v(ch) + 1).Sg = ErrDec_c) or
+                                    (Obs.Errs(ch)(ErrBase_v(ch)).Xfer = ErrNone_c and Obs.Errs(ch)(ErrBase_v(ch)).Sg = ErrDec_c and
+                                     Obs.Errs(ch)(ErrBase_v(ch) + 1).Xfer = ErrSlv_c and
+                                     Obs.Errs(ch)(ErrBase_v(ch) + 1).Sg = ErrNone_c), ERROR,
+                                    "one event with the transfer error of D1, one with the engine error of the fetch of D2");
+                        checkDesc(ch, 1, true, statusExp(ch, 33, '1', '0', ErrSlv_c), "status of D1");
+                        checkDesc(ch, 2, false, Img_v(ch)(2)(7), "D2 not processed");
+                        check_value(Obs.CurPtr(ch), descAddr(ch, 1), ERROR, "CURDESC at D1, the first error",
+                                    C_TB_SCOPE_DEFAULT, HEX);
                     end if;
                 end loop;
 
@@ -1248,6 +1298,34 @@ begin
                     end if;
                 end loop;
 
+                -- Both channels: Run of S2MM falls while its fetch waits for the descriptor port, which serves the fetch
+                -- of MM2S (memory latency 200 clock cycles): the request is withdrawn, nothing is fetched or issued for
+                -- S2MM, and MM2S completes its chain
+                if IncludeMm2s_g and IncludeS2mm_g then
+                    resetAll;
+                    chain(Mm2s_c, 4);
+                    chain(S2mm_c, 4);
+                    Mem_v.setLatency(MemSg_c, 200);
+                    start(Mm2s_c, descAddr(Mm2s_c, 0));
+                    tail(Mm2s_c, descAddr(Mm2s_c, 3));
+                    odmaWaitAtLeast(Obs.ArCount, ArBase_v + 1, 10 us, "fetch of MM2S D0");
+                    start(S2mm_c, descAddr(S2mm_c, 0));
+                    tail(S2mm_c, descAddr(S2mm_c, 3));
+                    cycles(20);
+                    halt(S2mm_c, "halt of S2MM with its fetch waiting for the port");
+                    waitIdle(Mm2s_c, "MM2S chain after the halt of S2MM");
+                    check_value(Obs.CmdCount(S2mm_c) - CmdBase_v(S2mm_c), 0, ERROR, "nothing issued for S2MM");
+
+                    for k in 0 to Obs.ArCount - ArBase_v - 1 loop
+                        check_value(Obs.Ars(ArBase_v + k).Addr /= descAddr(S2mm_c, 0), ERROR,
+                                    "no fetch for S2MM: fetch " & to_string(k));
+                    end loop;
+
+                    check_value(Obs.CurPtr(S2mm_c), descAddr(S2mm_c, 0), ERROR, "CURDESC of S2MM at D0",
+                                C_TB_SCOPE_DEFAULT, HEX);
+                    checkDesc(S2mm_c, 0, false, Img_v(S2mm_c)(0)(7), "S2MM D0 not started");
+                end if;
+
             elsif run("test_drain") then
                 log(ID_LOG_HDR, "TC-SG-12 drain");
 
@@ -1277,6 +1355,135 @@ begin
                         check_value(Obs.ArCount, N_v, ERROR, "no fetch after the drain completed");
                         check_value(Obs.BCount - BBase_v, Obs.AwCount - AwBase_v, ERROR, "every status write answered");
                         check_value(Obs.PktCount(ch) - PktBase_v(ch), 0, ERROR, "no event during the drain");
+                    end if;
+                end loop;
+
+                -- Both channels: Drain while the status write of one channel waits for the descriptor port, which
+                -- writes the status of the other (memory latency 200 clock cycles): the waiting status write is not
+                -- requested, the granted one completes
+                if IncludeMm2s_g and IncludeS2mm_g then
+                    resetAll;
+                    chain(Mm2s_c, 4);
+                    chain(S2mm_c, 4);
+                    Mem_v.setLatency(MemSg_c, 200);
+                    Cfg(Mm2s_c).Hold    <= '1';
+                    Cfg(S2mm_c).Hold    <= '1';
+                    Cfg(Mm2s_c).MaxCmds <= 1;
+                    start(Mm2s_c, descAddr(Mm2s_c, 0));
+                    start(S2mm_c, descAddr(S2mm_c, 0));
+                    tail(Mm2s_c, descAddr(Mm2s_c, 3));
+                    tail(S2mm_c, descAddr(S2mm_c, 3));
+                    waitCmds(Mm2s_c, 1, "MM2S D0 issued");
+                    waitCmds(S2mm_c, 1, "S2MM D0 issued");
+                    -- Both results at once: one status write gets the port, the other waits for it
+                    wait until rising_edge(Clk);
+                    Cfg(Mm2s_c).Hold  <= '0';
+                    Cfg(S2mm_c).Hold  <= '0';
+                    odmaWaitAtLeast(Obs.AwCount, AwBase_v + 1, 10 us, "first status write");
+                    cycles(20);
+                    check_value(Obs.AwCount - AwBase_v, 1, ERROR, "the second status write waits for the port");
+                    wait until rising_edge(Clk);
+                    Reg(Mm2s_c).Drain <= '1';
+                    Reg(S2mm_c).Drain <= '1';
+                    waitStopped(Mm2s_c, "drain with a status write waiting");
+                    waitStopped(S2mm_c, "drain with a status write waiting");
+                    cycles(300);
+                    check_value(Obs.AwCount - AwBase_v, 1, ERROR, "the waiting status write is not requested");
+                    check_value(Obs.BCount - BBase_v, 1, ERROR, "the granted status write answered");
+                    check_value(Obs.PktCount(Mm2s_c) - PktBase_v(Mm2s_c) + Obs.PktCount(S2mm_c) - PktBase_v(S2mm_c), 0,
+                                ERROR, "no event during the drain");
+                end if;
+
+                -- Drain while a fetched descriptor waits at the head of the buffer. Fresh: D1 waits for the channel,
+                -- which holds the result of D0 and takes one command at a time, and may take more once Drain is '1':
+                -- no command, no fetch, no status write, no event, CURDESC at the issued D0, no descriptor written
+                for ch in 0 to 1 loop
+                    if Incl_c(ch) then
+                        resetAll;
+                        chain(ch, 4);
+                        Cfg(ch).Hold    <= '1';
+                        Cfg(ch).MaxCmds <= 1;
+                        start(ch, descAddr(ch, 0));
+                        tail(ch, descAddr(ch, 3));
+                        waitCmds(ch, 1, "D1 waiting: D0 issued");
+                        cycles(100);
+                        check_value(Obs.ArCount - ArBase_v >= 2, ERROR, "D1 waiting: D1 fetched");
+                        wait until rising_edge(Clk);
+                        Reg(ch).Drain   <= '1';
+                        Cfg(ch).MaxCmds <= 8;
+                        waitStopped(ch, "D1 waiting");
+                        N_v             := Obs.ArCount;
+                        cycles(300);
+                        check_value(Obs.CmdCount(ch) - CmdBase_v(ch), 1, ERROR, "D1 waiting: no command during the drain");
+                        check_value(Obs.ArCount, N_v, ERROR, "D1 waiting: no fetch after the drain completed");
+                        check_value(Obs.AwCount - AwBase_v, 0, ERROR, "D1 waiting: no status write");
+                        check_value(Obs.ErrCount(ch) - ErrBase_v(ch) + Obs.PktCount(ch) - PktBase_v(ch), 0, ERROR,
+                                    "D1 waiting: no event");
+                        check_value(Obs.CurPtr(ch), descAddr(ch, 0), ERROR, "D1 waiting: CURDESC at the issued D0",
+                                    C_TB_SCOPE_DEFAULT, HEX);
+
+                        for i in 0 to 3 loop
+                            checkDesc(ch, i, false, Img_v(ch)(i)(7), "D1 waiting");
+                        end loop;
+
+                    end if;
+                end loop;
+
+                -- Stale: D1 has its Complete bit set, and Drain rises 0 to 40 clock cycles after the handshake of its
+                -- fetch (memory latency 20 clock cycles), before its data, while it enters the buffer and after it has
+                -- reached the head. A stale descriptor at the head before the drain gives its event (SGIntErr, CURDESC
+                -- at it, SG-FE-05); its data during the drain is discarded, and at the head during the drain it gives
+                -- no event (CURDESC at the issued D0). Both outcomes occur in the sweep; never a command after D0, a
+                -- status write or a descriptor written
+                for ch in 0 to 1 loop
+                    if Incl_c(ch) then
+                        K_v := 0;
+
+                        for d in 0 to 40 loop
+                            resetAll;
+                            chain(ch, 4);
+                            D_v(ch)(1).Cmplt := '1';
+                            writeDesc(ch, 1, true);
+                            Mem_v.setLatency(MemSg_c, 20);
+                            Cfg(ch).Hold     <= '1';
+                            start(ch, descAddr(ch, 0));
+                            tail(ch, descAddr(ch, 3));
+                            -- From the clock cycle after the handshake of the fetch of D1
+                            odmaWaitAtLeast(Obs.ArCount, ArBase_v + 2, 10 us, "stale sweep: fetch of D1");
+                            cycles(d);
+                            Reg(ch).Drain <= '1';
+                            Cyc_v         := Obs.Cycle;
+                            waitStopped(ch, "stale sweep " & to_string(d));
+                            cycles(100);
+                            Ev_v          := Obs.ErrCount(ch) - ErrBase_v(ch);
+                            check_value(Ev_v <= 1, ERROR, "stale sweep " & to_string(d) & ": at most one event");
+                            check_value(Obs.CmdCount(ch) - CmdBase_v(ch), 1, ERROR,
+                                        "stale sweep " & to_string(d) & ": only D0 issued");
+                            check_value(Obs.AwCount - AwBase_v, 0, ERROR,
+                                        "stale sweep " & to_string(d) & ": no status write");
+                            if Ev_v = 1 then
+                                K_v := K_v + 1;
+                                check_value(Obs.Errs(ch)(ErrBase_v(ch)).Sg, ErrInt_c, ERROR,
+                                            "stale sweep " & to_string(d) & ": SGIntErr");
+                                check_value(Obs.Errs(ch)(ErrBase_v(ch)).Cycle <= Cyc_v + 1, ERROR,
+                                            "stale sweep " & to_string(d) & ": event before the drain");
+                                check_value(Obs.CurPtr(ch), descAddr(ch, 1), ERROR,
+                                            "stale sweep " & to_string(d) & ": CURDESC at the stale descriptor",
+                                            C_TB_SCOPE_DEFAULT, HEX);
+                            else
+                                check_value(Obs.CurPtr(ch), descAddr(ch, 0), ERROR,
+                                            "stale sweep " & to_string(d) & ": CURDESC at the issued D0",
+                                            C_TB_SCOPE_DEFAULT, HEX);
+                            end if;
+
+                            for i in 0 to 3 loop
+                                checkDesc(ch, i, false, Img_v(ch)(i)(7), "stale sweep " & to_string(d));
+                            end loop;
+
+                        end loop;
+
+                        log(ID_SEQUENCER, "stale sweep: event in " & to_string(K_v) & " of 41 drain times");
+                        check_value(K_v > 0 and K_v < 41, ERROR, "stale sweep: drain times before and after the event");
                     end if;
                 end loop;
 
@@ -1508,6 +1715,45 @@ begin
                         end if;
                     end loop;
 
+                end loop;
+
+            elsif run("test_hard_reset") then
+                log(ID_LOG_HDR, "TC-SG-19 Rst at every clock cycle around a status write");
+
+                for ch in 0 to 1 loop
+                    if Incl_c(ch) then
+
+                        -- Rst d clock cycles after the DUT takes the result of D0: its status write not yet requested,
+                        -- waiting for the port, given to the master, issued or answered. After Rst the chain runs from
+                        -- its start as after the first reset
+                        for d in 0 to 12 loop
+                            resetAll;
+                            chain(ch, 3);
+                            Cfg(ch).Hold <= '1';
+                            start(ch, descAddr(ch, 0));
+                            tail(ch, descAddr(ch, 2));
+                            waitCmds(ch, 1, "D0 issued");
+                            wait until rising_edge(Clk);
+                            Cfg(ch).Hold <= '0';
+                            waitRes(ch, 1, "result of D0");
+                            cycles(d);
+                            resetAll;
+                            chain(ch, 3);
+                            start(ch, descAddr(ch, 0));
+                            tail(ch, descAddr(ch, 2));
+                            waitCmds(ch, 3, "chain after Rst " & to_string(d) & " clock cycles after the result");
+                            waitIdle(ch, "chain after Rst " & to_string(d) & " clock cycles after the result");
+                            check_value(Obs.ErrCount(ch) - ErrBase_v(ch), 0, ERROR, "no error after Rst");
+
+                            for i in 0 to 2 loop
+                                checkCmd(ch, i, i, "chain after Rst " & to_string(d));
+                                checkDesc(ch, i, true, statusExp(ch, D_v(ch)(i).Len, '1', '1', ErrNone_c),
+                                          "chain after Rst " & to_string(d));
+                            end loop;
+
+                        end loop;
+
+                    end if;
                 end loop;
 
             end if;

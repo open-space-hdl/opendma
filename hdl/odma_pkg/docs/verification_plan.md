@@ -3,10 +3,13 @@
 ## 1. Overview
 
 The functions of the package are checked against values computed independently in the testbench (loops over all
-lane patterns, boundary addresses). The AXI memory model is driven by the UVVM AXI4 VVC with INCR and FIXED bursts,
-error ranges, backpressure and latency, and every one of its protocol checks is provoked once (negative tests). The
-sequence player executes hand-written sequence files against a register stub; its failure paths are provoked as
-well. The model of the programming sequences is checked against hand-written golden files of a reference scenario.
+lane patterns, boundary addresses). `beyondTop` and `coreConfigError` take their arguments through variables of
+the bench, so that every call runs in the simulation: a call with literal arguments is evaluated when the bench
+is compiled and is not part of the code coverage. The AXI memory model is driven by the UVVM AXI4 VVC with INCR
+and FIXED bursts, error ranges, backpressure and latency, and every one of its protocol checks is provoked once
+(negative tests). The sequence player executes hand-written sequence files against a register stub; its failure
+paths are provoked as well. The model of the programming sequences is checked against hand-written golden files of a
+reference scenario.
 
 ## 2. Test configuration
 
@@ -23,7 +26,7 @@ Simulator: GHDL; QuestaSim for the coverage batch. Clock 100 MHz.
 | `test_last_keep` (TC-PKG-01) | `lastKeep` for streams of 1, 2, 4, 8, 64 and 128 bytes and lengths 1 to three beats, multiples of the width and 0 | PKG-01 |
 | `test_keep_bytes` (TC-PKG-02) | `keepBytes` for all 256 patterns of 8 lanes against a loop of the bench, and for 128 lanes with the first '0' at every position | PKG-02 |
 | `test_beyond_top` (TC-PKG-03) | `beyondTop` at 32 and 64 address bits: buffers ending at the top fit, one byte more does not; start at 0; length 1 and the largest length; length 0 at address 0, in the middle and at the top is never beyond the top | PKG-03 |
-| `test_config` (TC-PKG-04) | `coreConfigError` accepts the default and the boundary configurations and names the generic of each inconsistent one (memory width 24 and 2048, stream width above the memory width, burst beats 3 and 512, length width 7 and 27, address width 31 and 65, data buffer of one burst) | PKG-04 |
+| `test_config` (TC-PKG-04) | `coreConfigError` accepts the default and the boundary configurations and names the generic of each inconsistent one (memory width 24, 48 and 2048, stream width 4, 24 and 2048 and above the memory width, burst beats 1, 3 and 512, length width 7 and 27, address width 31 and 65, data buffer of one burst; memory width, stream width and data buffer of the S2MM channel) | PKG-04 |
 | `test_err_codes` (TC-PKG-05) | Values of the error codes: SLVERR and DECERR equal the AXI response codes | PKG-05 |
 | `test_resp_err` (TC-PKG-15) | `respErr` of SLVERR, DECERR and EXOKAY: the slave error, the decode error and the slave error | PKG-13 |
 | `test_flip_pattern` (TC-PKG-13) | `flipPattern` for codewords of 8 and 39 bits in the four combinations of single or double error and parity or data mode: exactly the bits 0, 0 and 1, 3, 3 and 5 | PKG-11 |

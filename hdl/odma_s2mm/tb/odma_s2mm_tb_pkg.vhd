@@ -38,7 +38,7 @@ package odma_s2mm_tb_pkg is
         KeepGapLast   -- The last beat has the valid bytes, a deasserted lane, then asserted lanes (not counted)
     );
 
-    constant MaxPackets_c : positive := 16;
+    constant MaxPackets_c : positive := 64;
 
     type PktQueue_t is protected
 
@@ -58,8 +58,6 @@ package odma_s2mm_tb_pkg is
         procedure pop;
 
     end protected;
-
-    shared variable Pkts_v : PktQueue_t;
 
     -- TValid of the stream generator
     type GenCfg_r is record
@@ -103,6 +101,7 @@ package odma_s2mm_tb_pkg is
         AwFixed   : natural; -- AW handshakes of FIXED bursts
         AwFixLong : natural; -- FIXED bursts of more than 16 beats
         AwFixAddr : natural; -- FIXED bursts at another address than FixedAddr of the harness
+        AwCross   : natural; -- INCR bursts across a multiple of the burst size (B x MemWidth_g / 8 bytes)
         WGaps     : natural; -- Clock cycles between two data beats of a burst with WReady high and WValid low
         EccSec    : Nat3_a;  -- Pulses per buffer
         EccDed    : Nat3_a;

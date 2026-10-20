@@ -2,13 +2,17 @@
 
 ## 1. Test results
 
-Run on 2026-10-18 locally, on commit 0a041f3 (its `results.xml`), with
-GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
-`python run.py -p 2 --xunit-xml results.xml`, the tests of `odma_s2mm_tb`.
+Run on 2026-10-19 in the GHDL CI of the repository, GitHub Actions run 39290223755 on commit 8c32323 (its
+`results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
+`python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_s2mm_tb`.
+
+The same tests pass in QuestaSim (Questa Pro Microchip Edition 2024.3, time resolution 1 fs), with code coverage and in
+the optimised run without it, on 2026-10-19 on commit 6252594 (sources and testbenches as in 8c32323); the code coverage
+of the core is in `docs/coverage.md`.
 
 | Testbench | Tests | Passed |
 | --- | --- | --- |
-| `odma_s2mm_tb` | 354 (23 test cases: 17 in all 18 configurations, TC-S2-07 and TC-S2-08 in the ten without the split, TC-S2-17 to TC-S2-19 in the eight `s_` configurations, TC-S2-21 in four) | 354 |
+| `odma_s2mm_tb` | 422 (27 test cases: 19 in all 19 configurations, TC-S2-07 and TC-S2-08 in the ten without the split, TC-S2-17 to TC-S2-19 and TC-S2-24 in the nine `s_` configurations, TC-S2-21 in four, TC-S2-25 in one) | 422 |
 
 ## 2. Summary
 
@@ -17,27 +21,95 @@ The sources analyse with `ghdl -a --std=08` without `-frelaxed` and without warn
 `ghdl --synth` without warnings and without latches in the configurations
 of section 4.
 
-Measured throughput of TC-S2-06 (64 chunks or the longest length, memory always ready, stream without gaps):
+Every test checks at its end that no write burst had a clock cycle without write data (S2-WR-07).
 
-| Configuration | Beats per chunk | Memory width / stream width | Beats | Clock cycles from the first to the last beat |
-| --- | --- | --- | --- | --- |
-| `w32_s32` | 16 | 1 | 1024 | 1353 |
-| `w64_s8` | 128 | 8 | 8192 | 8192 |
-| `w128_s32` | 1024 | 4 | 65536 | 65536 |
-| `w128_s64` | 64 | 2 | 4096 | 4299 |
-| `w256_s16` | 128 | 16 | 8192 | 8192 |
-| `w256_s128` | 8 | 2 | 512 | 995 |
-| `w512_s256` | 16 | 2 | 1024 | 1467 |
-| `w512_s512` | 2 | 1 | 128 | 527 |
-| `w1024_s8` | 256 | 128 | 255 | 255 |
-| `w1024_s1024` | 32 | 1 | 32 | 32 (the packet fits into the data buffer) |
+Measured throughput of TC-S2-06 (64 chunks or the longest length, memory always ready, stream without gaps): the
+clock cycles from the first to the last beat for a buffer at a burst boundary, one at the stream width above a burst
+boundary and one 1 byte above (with 8-bit streams the two offsets are the same):
+
+| Configuration | Beats per chunk | Memory width / stream width | Beats | Aligned | Stream width above | 1 byte above |
+| --- | --- | --- | --- | --- | --- | --- |
+| `w32_s32` | 16 | 1 | 1024 | 1125 | 1125 | 1182 |
+| `w64_s8` | 128 | 8 | 8192 | 8192 | 8303 | 8303 |
+| `w128_s32` | 1024 | 4 | 65536 | 65536 | 65536 | 65536 |
+| `w128_s64` | 64 | 2 | 4096 | 4299 | 4527 | 4527 |
+| `w256_s16` | 128 | 16 | 8192 | 8192 | 8303 | 8303 |
+| `w256_s128` | 8 | 2 | 512 | 995 | 1223 | 1223 |
+| `w512_s256` | 16 | 2 | 1024 | 1467 | 1695 | 1695 |
+| `w512_s512` | 2 | 1 | 128 | 412 | 416 | 640 |
+| `w1024_s8` | 256 | 128 | 255 | 255 | 255 | 255 |
+| `w1024_s1024` | 32 | 1 | 32 | 32 | 32 | 32 (the packet fits into the data buffer) |
+| `s_w32_s32` | 16 | 1 | 1024 | 1125 | 1125 | 1182 |
+| `s_w64_s8` | 128 | 8 | 8192 | 8192 | 8192 | 8192 |
+| `s_w128_s64` | 64 | 2 | 4096 | 4299 | 4298 | 4378 |
+| `s_w256_s16` | 128 | 16 | 8192 | 8192 | 8192 | 8238 |
+| `s_w256_s128` | 8 | 2 | 512 | 995 | 994 | 1223 |
+| `s_w512_s256` | 16 | 2 | 1024 | 1467 | 1466 | 1620 |
+| `s_w512_s512` | 2 | 1 | 128 | 407 | 411 | 631 |
+| `s_w1024_s8` | 256 | 128 | 255 | 255 | 255 | 255 |
+| `s_w1024_s1024` | 32 | 1 | 32 | 32 | 32 | 32 (the packet fits into the data buffer) |
+
+With `Split_g` a buffer at the stream width above a burst boundary takes the beats at the rate of the aligned buffer:
+its first chunk ends at the burst boundary (S2-ST-04), and TC-S2-06 checks the rate within 2 % when the packet has at
+least 16 chunks. Without the split every chunk of such a buffer is written as two bursts. A buffer at a multiple of
+the memory word (the stream-width offset with equal widths) costs nothing in either mode.
+
+The chunk plan and the write command mode were measured by variants of the sources of commit b6d359e (GHDL 6.0.0,
+TC-S2-06 and the core test TC-CO-20; each variant changes the sources by a text substitution, the rest of the design
+stays). Beats per clock cycle, buffers of the configurations with the split at the stream width above a burst
+boundary, without and with the first chunk up to the burst boundary:
+
+| Configuration | Burst beats B | Without | With |
+| --- | --- | --- | --- |
+| `s_w64_s8` | 16 | 0.987 | 1.000 |
+| `s_w128_s64` | 32 | 0.905 | 0.953 |
+| `s_w256_s16` | 8 | 0.987 | 1.000 |
+| `s_w256_s128` | 4 | 0.419 | 0.515 |
+| `s_w512_s256` | 8 | 0.604 | 0.698 |
+| Core `sg_lw8` (64 / 8 bits, 2 beats), 4 KB buffers 1 byte above a multiple of 64 bytes | 2 | 240 clock cycles more per KB | 0 clock cycles more per KB |
+
+Buffers 1 byte above a burst boundary (inside a stream word), without and with chunks one memory word shorter; the
+last column is the rule of S2-ST-04:
+
+| Configuration | Memory width / stream width | Burst beats B | Without | With | Short chunks |
+| --- | --- | --- | --- | --- | --- |
+| `s_w32_s32` | 1 | 16 | 0.866 | 0.854 | no |
+| `s_w128_s64` | 2 | 32 | 0.905 | 0.936 | yes |
+| `s_w256_s16` | 16 | 8 | 0.987 | 0.994 | yes |
+| `s_w256_s128` | 2 | 4 | 0.419 | 0.408 | no |
+| `s_w512_s256` | 2 | 8 | 0.604 | 0.632 | yes |
+| `s_w512_s512` | 1 | 2 | 0.203 | 0.156 | no |
+| Core `sg` (32 / 32 bits), 4 KB buffers 1 byte above a multiple of 64 bytes | 1 | 16 | 15 clock cycles more per KB | 20 clock cycles more per KB | no |
+| Core `sg_aw64` (512 / 256 bits), the same buffers | 2 | 4 | 14 clock cycles more per KB | 18 clock cycles more per KB | no |
+
+A short chunk is written as one burst instead of two but carries one memory word less, so a buffer needs more chunks.
+With bursts of 2 or 4 beats that word is a large part of a burst, and with equal widths the low-latency writes make
+the second burst of a chunk cheaper than the shorter chunks (architecture section 4.2).
+
+Equal memory and stream widths, aligned buffers, with high-latency and with low-latency write commands of the write
+master (S2-WR-03):
+
+| Configuration | Burst beats B | High latency | Low latency |
+| --- | --- | --- | --- |
+| `w32_s32`, `s_w32_s32` | 16 | 0.757 | 0.910 |
+| `w32_s32`, `s_w32_s32`, 1 byte above a burst boundary | 16 | 0.648 | 0.866 |
+| `w512_s512` | 2 | 0.243 | 0.311 |
+| `s_w512_s512` | 2 | 0.246 | 0.314 |
+| Core `sg` (32 / 32 bits), 1 KB buffers | 16 | 0.70 (8192 beats in 11657 clock cycles) | 0.85 (in 9667 clock cycles) |
+
+With a wider memory the channel keeps the high-latency mode, and the variant with high-latency writes for every
+width gives the same values there.
 
 Findings:
 
 | Finding | Resolution |
 | --- | --- |
 | The write path of `olo_axi_master_full` of Open Logic 4.7.0-ft.6 counts the user data words of a write command at the width of the size field without its low bits; for the sizes in the last user data word below 2**`UserTransactionSizeBits_g` the count wraps to 0 and the master issues no further burst: with 1024-bit stream words and a length width of 12 a transfer of 4000 to 4095 bytes left the channel without its next result (reproduced with two transfers back to back, also with 512-bit words, independent of the address width) | Both masters run with `UserTransactionSizeBits_g` = `LengthWidth_g` + 1 (gap G14 of the architecture). TC-S2-16 transfers the longest length back to back and fails with a timeout of 2 ms, not a hang, when the master runs with `LengthWidth_g` size bits |
-| The channel issues one write command per chunk, and the write master accepts the next command after the data of the previous one, about 7 clock cycles per command; with equal memory and stream widths and chunks of 16 beats the channel takes about 0.7 beats per clock cycle | S2-WR-05 requires at least 0.9 beats per clock cycle with chunks of at least 64 beats; the throughput is measured in every configuration (table above). With a memory four or more times wider than the stream the write side is faster than the stream and the channel takes one beat per clock cycle |
+| The channel issues one write command per chunk, and the write master accepted the next command after the data of the previous one, about 7 clock cycles per command; with equal memory and stream widths and chunks of 16 beats the channel took about 0.76 beats per clock cycle | With equal widths the write master runs with low-latency write commands (S2-WR-03): S2-2 issues a command only for a chunk complete in the data buffer, so the burst follows at once and its data at one beat per clock cycle; 0.91 beats per clock cycle with chunks of 16 beats (tables above). S2-WR-05 requires at least 0.9 beats per clock cycle with chunks of at least 64 beats; the throughput is measured in every configuration. With a memory four or more times wider than the stream the write side is faster than the stream and the channel takes one beat per clock cycle |
+| With `Split_g` every chunk of a buffer at a multiple of the stream width that is not a multiple of the memory word covered parts of two bursts and was written as two: 0.60 instead of 0.70 beats per clock cycle with 512 / 256 bits, 240 clock cycles more per KB in the core with 64 / 8 bits | The chunk plan ends the first chunk of such a buffer at the burst boundary above its address, and the later chunks are aligned (S2-ST-04). TC-S2-24 checks the bursts of ten offsets against a model of the plan and of the burst split of the master, TC-S2-06 the rate within 2 % of the aligned buffer |
+| The first chunk plan ended the first chunk at the burst boundary for every address that is not a multiple of the burst size, also at multiples of the memory word, where a full chunk is one burst anyway: it only added a chunk per buffer, and in the core with 512 / 256 bits and 4-beat bursts the pause per buffer boundary rose from 1 to 8 clock cycles (TC-CO-20) | At a multiple of the memory word the chunks keep their full size (S2-ST-04); TC-S2-24 includes such offsets |
+| Chunks one memory word shorter for buffers that start inside a stream word (one burst per chunk instead of two) gain with a wider memory and bursts of 8 beats or more, but lose with equal widths and with bursts of 2 or 4 beats (tables above) | S2-ST-04 applies them when `MemWidth_g` is above `StreamWidth_g` and the burst has at least 8 beats (`shortBeats` of `odma_s2mm_pkg`); TC-S2-25 checks the rule for the 264 configurations of the generic ranges |
+| Low-latency write commands with a memory wider than the stream leave clock cycles without write data inside a burst: the master issues the burst before it has assembled its memory words, which then follow at the stream rate (a variant with low-latency writes for every width, section 5) | The high-latency mode stays with a wider memory (S2-WR-03, S2-WR-07); every test checks the W gaps at its end |
 | A second beat counter in `olo_base_chunker` counted the same beats as the counter of the descriptor; in a delta cycle the two disagreed | The chunk end follows from the counter of the descriptor; `olo_base_chunker` is not instantiated (architecture section 2) |
 | A result with a write error carried the end of packet when the packet ended in the failing chunk | A result with an error carries no end of packet (S2-RS-03) |
 | A command of length 0 had no defined behaviour; in Scatter/Gather Mode a buffer length of 0 is an internal error | No write, no stream data taken, result with the internal error code (S2-WR-06, interpretation S4); TC-S2-10 |
@@ -136,5 +208,14 @@ at least one test case; the RTL of the repository passes all of them:
 | The stopped transfer returns its result before the halt | TC-S2-23 |
 | The end of packet of a stopped transfer reported | TC-S2-23 |
 | The next buffer of a continued packet starts a packet | TC-S2-17, TC-S2-22, TC-S2-23 (configurations with the split) |
+| The chunk plan ignores the address: full chunks for every buffer | TC-S2-06, TC-S2-24 |
+| A keyhole buffer gets the chunk plan of its address | TC-S2-20 |
+| The first chunk ends at the burst boundary also at a multiple of the memory word | TC-S2-24 |
+| Short chunks for every buffer that is neither a keyhole nor at a multiple of the memory word | TC-S2-06, TC-S2-24 |
+| Short chunks in no configuration | TC-S2-24 |
+| Short chunks in every configuration | TC-S2-24 |
+| The size of the first chunk for every chunk of the buffer | TC-S2-06, TC-S2-24 |
+| The plan of the buffer before (loaded at its last beat) | TC-S2-06, TC-S2-24 |
+| Low-latency write commands with every width | TC-S2-01, TC-S2-05, TC-S2-06, by the W-gap check, in the 13 configurations with a memory wider than the stream |
 
 The recovery branches of the state machines (`when others`) cannot be reached through the ports.

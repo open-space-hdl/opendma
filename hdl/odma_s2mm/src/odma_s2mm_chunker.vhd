@@ -9,7 +9,8 @@
 -- Chunk former of the S2MM channel (S2-1): takes the S2MM stream into the data buffer, cuts each
 -- packet into chunks of one burst and writes a descriptor per chunk; discards the rest of a packet
 -- that a halt interrupts. With Split_g the stream passes a stream split that cuts every packet at
--- the end of the buffer of each command, so that each buffer starts in lane 0.
+-- the end of the buffer of each command, so that each buffer starts in lane 0, and the chunks
+-- follow the bursts of the buffer address.
 --
 -- Documentation: hdl/odma_s2mm/docs/architecture.md
 
@@ -21,6 +22,7 @@ library ieee;
     use ieee.numeric_std.all;
 
 library olo;
+    use olo.olo_base_pkg_math.all;
 
 library work;
     use work.odma_pkg.all;
@@ -32,9 +34,12 @@ library work;
 entity odma_s2mm_chunker is
     generic (
         StreamWidth_g : positive;
+        MemWidth_g    : positive;
         ChunkBeats_g  : positive;
         LengthWidth_g : positive := 14;
-        Split_g       : boolean  := false
+        Split_g       : boolean  := false;
+        -- Split_g: beats by which every chunk of a buffer that starts inside a stream word is shorter (shortBeats)
+        ShortBeats_g  : natural  := 0
     );
     port (
         -- Control Signals
@@ -48,12 +53,15 @@ entity odma_s2mm_chunker is
         S_S2mm_Last  : in    std_logic;
         S_S2mm_Valid : in    std_logic;
         S_S2mm_Ready : out   std_logic;
-        -- Segment of the stream split (Split_g): the buffer length of the accepted command
-        Seg_Valid    : in    std_logic                                    := '0';
-        Seg_Size     : in    std_logic_vector(LengthWidth_g - 1 downto 0) := (others => '0');
+        -- Segment of the stream split (Split_g): the buffer length of the accepted command, the address bits of its
+        -- buffer below the burst size (a chunk of ChunkBeats_g beats) and its keyhole
+        Seg_Valid    : in    std_logic                                                             := '0';
+        Seg_Size     : in    std_logic_vector(LengthWidth_g - 1 downto 0)                          := (others => '0');
         Seg_Ready    : out   std_logic;
+        Seg_Offset   : in    std_logic_vector(log2(ChunkBeats_g * StreamWidth_g / 8) - 1 downto 0) := (others => '0');
+        Seg_Keyhole  : in    std_logic                                                             := '0';
         -- Split_g: S2-2 flushes the rest of a packet after a write error
-        FlushReq     : in    std_logic                                    := '0';
+        FlushReq     : in    std_logic                                                             := '0';
         -- Data buffer (write side)
         Data_Data    : out   std_logic_vector(StreamWidth_g - 1 downto 0);
         Data_Valid   : out   std_logic;
@@ -73,8 +81,12 @@ end entity;
 architecture rtl of odma_s2mm_chunker is
 
     constant StreamBytes_c : positive := StreamWidth_g / 8;
+    constant MemBytes_c    : positive := MemWidth_g / 8;
     -- Discard segments: the largest segment of the split
     constant MaxSeg_c      : positive := 2**LengthWidth_g - 1;
+    -- Last beat of a full chunk and of a short chunk (Split_g, a buffer that starts inside a stream word)
+    constant FullLast_c    : natural := ChunkBeats_g - 1;
+    constant ShortLast_c   : natural := ChunkBeats_g - 1 - ShortBeats_g;
 
     -- Lanes 0 to n - 1 set
     function thermo (
@@ -97,6 +109,8 @@ architecture rtl of odma_s2mm_chunker is
     type TwoProcess_r is record
         State    : ChunkerFsm_t;
         Beats    : natural range 0 to ChunkBeats_g - 1;     -- Beats of the chunk in progress in the data buffer
+        Limit    : natural range 0 to ChunkBeats_g - 1;     -- Index of the last beat of the chunk in progress
+        Rest     : natural range 0 to ChunkBeats_g - 1;     -- Split_g: Limit of the later chunks of the buffer
         InPacket : std_logic;                               -- A packet passed the chunk logic without its end
         StrmOpen : std_logic;                               -- Split_g: a packet entered the split without its end
         EndPend  : std_logic;                               -- Split_g: the end of a packet is in the split
@@ -148,6 +162,7 @@ begin
     p_comb : process (all) is
         variable v      : TwoProcess_r;
         variable Desc_v : Desc_r;
+        variable Off_v  : natural;
     begin
         v := r;
 
@@ -192,7 +207,7 @@ begin
                     v.InPacket := not In_PktEnd;
                     -- End of a chunk: the chunk is full or the transfer ends (the cut of olo_base_chunker, from the
                     -- beat count that the descriptor needs anyway)
-                    if r.Beats = ChunkBeats_g - 1 or In_Last = '1' then
+                    if r.Beats >= r.Limit or In_Last = '1' then
                         -- Descriptor of the chunk: the full beats and the valid bytes of the last beat of a transfer
                         Desc_v.Beats := to_unsigned(r.Beats + 1, 16);
                         Desc_v.Bytes := to_unsigned(r.Beats * StreamBytes_c, 16);
@@ -205,6 +220,7 @@ begin
                         Desc_v.PktEnd := In_PktEnd;
                         Desc_Valid    <= '1';
                         v.Beats       := 0;
+                        v.Limit       := r.Rest;
                     else
                         v.Beats := r.Beats + 1;
                     end if;
@@ -234,6 +250,26 @@ begin
 
         end case;
 
+        -- Split_g: the chunk plan of the buffer whose segment the split takes (architecture section 4.2). Every beat of
+        -- the buffers before has left the split then, since S2-2 offers a segment only after the descriptor with the
+        -- last beat of the buffer before. A keyhole buffer and a buffer at a multiple of the memory word (a full chunk
+        -- covers B memory words) have full chunks; at another multiple of the stream width the first chunk ends at the
+        -- burst boundary above the address and the later chunks are aligned; inside a stream word every chunk is
+        -- ShortBeats_g beats shorter
+        Off_v := to_integer(unsigned(Seg_Offset));
+        if Split_g and SegTaken = '1' and r.State = Normal_s then
+            if Seg_Keyhole = '1' or Off_v mod MemBytes_c = 0 then
+                v.Limit := FullLast_c;
+                v.Rest  := FullLast_c;
+            elsif Off_v mod StreamBytes_c = 0 then
+                v.Limit := FullLast_c - Off_v / StreamBytes_c;
+                v.Rest  := FullLast_c;
+            else
+                v.Limit := ShortLast_c;
+                v.Rest  := ShortLast_c;
+            end if;
+        end if;
+
         Desc_Data <= toSlv(Desc_v);
         r_next    <= v;
     end process;
@@ -251,6 +287,8 @@ begin
             if Rst = '1' then
                 r.State    <= Normal_s;
                 r.Beats    <= 0;
+                r.Limit    <= FullLast_c;
+                r.Rest     <= FullLast_c;
                 r.InPacket <= '0';
                 r.StrmOpen <= '0';
                 r.EndPend  <= '0';

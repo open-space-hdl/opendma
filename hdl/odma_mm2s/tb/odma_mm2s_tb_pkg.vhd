@@ -55,8 +55,6 @@ package odma_mm2s_tb_pkg is
 
     end protected;
 
-    shared variable Pkts_v : PktQueue_t;
-
     -- TReady of the stream checker
     type ReadyCfg_r is record
         Percent     : natural;   -- Percentage of clock cycles with TReady high
@@ -83,6 +81,7 @@ package odma_mm2s_tb_pkg is
         Cycle      : natural;
         ResCount   : natural;
         Results    : Results_a;
+        ResHeld    : natural; -- Clock cycles with Res_Valid high and Res_Ready low
         Beats      : natural; -- Stream handshakes
         Bytes      : natural; -- Stream bytes
         FirstBeat  : natural; -- Clock cycle of the first stream handshake

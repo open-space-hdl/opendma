@@ -19,6 +19,10 @@ document. This page lists the rules and the few OpenDMA-specific additions.
   `to_integer(...)` or a concatenation: declare a signal or constant of the port's subtype and associate it.
   QuestaSim with full optimisation can give the implicit signal of an expression actual a range that matches neither
   the port nor the expression and stop the simulation.
+- A record field that is an array of arrays uses a fully constrained array type (`type T is array (0 to N - 1) of
+  E`), not an index constraint on an unconstrained array type (`U : T(0 to N - 1)`): through an alias of an element
+  of an array of records, xsim 2025.2 can give such a field the element constraint of another field. Vectors of
+  scalars (`std_logic_vector`, `unsigned`, `signed`) have no element constraint and are not affected.
 - Every data path between blocks is a valid / ready stream (AXI4-Stream handshake semantics) or a valid-only stream
   of one-cycle events where the receiver is never slower than the source.
 - Packet streams carry the first byte of a packet in byte lane 0 (`TData(7:0)`). All bytes of a beat are valid
@@ -121,8 +125,8 @@ testbench. `hdl/<module>/README.md` links the four documents and explains how to
   condition that may hold already is tested before the wait, as the wait itself waits for an event. A bounded delay
   after which either outcome is fine says so in a comment.
 - Tests observe ports and management interfaces only, never internal signals.
-- GHDL is the default simulator; QuestaSim (`python run.py --questa`) is used for code coverage. Every test passes in
-  both simulators.
+- GHDL is the default simulator; QuestaSim (`python run.py --questa`) runs at the time resolution of GHDL (1 fs) and
+  collects the code coverage. Every test passes in both simulators.
 - `run.py` gives every GHDL simulation its own copy of the option `ghdl.sim_flags` and stops when a simulation command
   does not carry exactly the generics of its configuration (VUnit 5.0.0.dev7 shares that list between configurations).
 - A side effect is never obtained by calling an impure function and discarding its result: QuestaSim may remove such
@@ -136,6 +140,10 @@ testbench. `hdl/<module>/README.md` links the four documents and explains how to
 
 ## Git
 
-- `main` holds the integrated state. Every module or change is developed on a branch `feature/<module>` or
-  `bugfix/<topic>` and merged through a pull request once its regression is green.
+- `develop` holds the integrated state and `main` the released state. Every module or change is developed on a branch
+  `feature/<module>` or `bugfix/<topic>` from `develop` and merged into `develop` through a pull request once its
+  regression is green.
+- `main` receives only release branches `release/x.y.z` cut from `develop` and hotfix branches `hotfix/x.y.z`. The
+  full regression in QuestaSim, with and without code coverage, runs on the head of the release branch. Releases are
+  tagged `vX.Y.Z` with semantic versioning, below 1.0.0 until the hardware test.
 - Commit messages: imperative subject line, body explains what and why.

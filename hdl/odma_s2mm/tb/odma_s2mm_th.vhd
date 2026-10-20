@@ -25,6 +25,7 @@ library work;
     use work.odma_pkg.all;
     use work.odma_tb_mem_pkg.all;
     use work.odma_s2mm_tb_pkg.all;
+    use work.odma_s2mm_tb_pktvar_pkg.all;
 
 ---------------------------------------------------------------------------------------------------
 -- Entity
@@ -66,8 +67,10 @@ end entity;
 ---------------------------------------------------------------------------------------------------
 architecture sim of odma_s2mm_th is
 
-    constant KeepWidth_c : positive := StreamWidth_g / 8;
-    constant Log2Bytes_c : natural  := olo.olo_base_pkg_math.log2(MemWidth_g / 8);
+    constant KeepWidth_c  : positive := StreamWidth_g / 8;
+    constant Log2Bytes_c  : natural  := olo.olo_base_pkg_math.log2(MemWidth_g / 8);
+    -- Bytes of the longest burst of the channel, at most 4 KB (specification S2-ST-03)
+    constant BurstBytes_c : positive := minimum(BurstBeats_g, 4096 / (MemWidth_g / 8)) * MemWidth_g / 8;
 
     signal Clk_i   : std_logic := '0';
     signal Rst     : std_logic := '1';
@@ -133,6 +136,7 @@ architecture sim of odma_s2mm_th is
                              AwFixed   => 0,
                              AwFixLong => 0,
                              AwFixAddr => 0,
+                             AwCross   => 0,
                              WGaps     => 0,
                              EccSec    => (others => 0),
                               EccDed    => (others => 0)
@@ -339,6 +343,7 @@ begin
     -----------------------------------------------------------------------------------------------
     p_monitor : process (Clk_i) is
         variable O_v        : Obs_r;
+        variable First_v    : natural;
         variable ClearOld_v : std_logic := '0';
         variable InW_v      : boolean   := false; -- Between the first and the last data beat of a write burst
     begin
@@ -398,6 +403,14 @@ begin
                     end if;
                     if AwAddr /= FixedAddr(AddrWidth_g - 1 downto 0) then
                         O_v.AwFixAddr := O_v.AwFixAddr + 1;
+                    end if;
+                end if;
+                -- An INCR burst from its first to its last byte within one multiple of the burst size of the page
+                if AwBurst = "01" then
+                    First_v := to_integer(unsigned(AwAddr(11 downto 0)));
+                    if First_v / BurstBytes_c /= (First_v + (to_integer(unsigned(AwLen)) + 1) * (MemWidth_g / 8) - 1) /
+                       BurstBytes_c then
+                        O_v.AwCross := O_v.AwCross + 1;
                     end if;
                 end if;
                 if to_integer(unsigned(AwSize)) /= Log2Bytes_c or (AwBurst /= "01" and AwBurst /= "00") or AwLock /= '0' or

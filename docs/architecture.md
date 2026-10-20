@@ -55,7 +55,7 @@ masters, the data interfaces AXI4-Stream and the register interface AXI4-Lite. T
 
 OpenDMA is an open DMA core based on the Open Logic VHDL Library. The code lives in
 [open-space-hdl/opendma](https://github.com/open-space-hdl/opendma) under the PSI HDL Library License, Version 1.0,
-the licence of Open Logic. Open Logic is pinned to the tag `4.7.0-ft.8` (f9e7f59) of the branch `fault-tolerant` of
+the licence of Open Logic. Open Logic is pinned to the tag `4.7.0-ft.10` (dc32368) of the branch `fault-tolerant` of
 open-space-hdl/open-logic-ft, the fault-tolerant fork of Open Logic.
 
 OpenDMA is an independent implementation written from the published product guide. The repository contains no
@@ -69,7 +69,7 @@ only to state the compatibility.
 | \[PG021\] | AMD, AXI DMA LogiCORE IP Product Guide, PG021 | v7.1, 24 June 2025 |
 | \[AXI\] | Arm, AMBA AXI Protocol Specification, IHI 0022 | AXI4 and AXI4-Lite |
 | \[AXIS\] | Arm, AMBA AXI-Stream Protocol Specification, IHI 0051 | AXI4-Stream |
-| \[OLO\] | [Open Logic, fault-tolerant fork, branch fault-tolerant](https://github.com/open-space-hdl/open-logic-ft/tree/fault-tolerant) | 4.7.0-ft.8 (f9e7f59) |
+| \[OLO\] | [Open Logic, fault-tolerant fork, branch fault-tolerant](https://github.com/open-space-hdl/open-logic-ft/tree/fault-tolerant) | 4.7.0-ft.10 (dc32368) |
 
 ### Conventions
 

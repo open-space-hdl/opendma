@@ -2,7 +2,7 @@
 
 ## 1. Test results
 
-Run on 2026-10-20 in the GHDL CI of the repository, GitHub Actions run 39420555763 on commit 6e8ac73 (its
+Run on 2026-10-20 in the GHDL CI of the repository, GitHub Actions run 39442539964 on commit 7dac757 (its
 `results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
 `python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_mm2s_tb`.
 
@@ -21,20 +21,26 @@ The sources analyse with `ghdl -a --std=08` without `-frelaxed` and without warn
 `ghdl --synth` without warnings and without latches in the configurations
 of section 4.
 
-Measured throughput of TC-MM-05 (64 bursts or the longest length, memory and stream peer always ready):
+Measured throughput of TC-MM-05 (64 bursts or the longest length, stream peer always ready; the memory takes every
+read burst at once and returns its first beat after the read latency, the further beats without wait states; the
+`j_` configurations give the same figures):
 
-| Configuration | Stream beats per burst | Beats | Clock cycles from the first to the last beat |
-| --- | --- | --- | --- |
-| `w32_s32` | 16 | 1024 | 1024 |
-| `w64_s8` | 128 | 8192 | 8192 |
-| `w128_s32` | 1024 | 65536 | 65536 |
-| `w128_s64` | 64 | 4096 | 4096 |
-| `w256_s16` | 128 | 8192 | 8192 |
-| `w256_s128` | 8 | 512 | 512 |
-| `w512_s256` | 16 | 1024 | 1024 |
-| `w512_s512` | 2 | 128 | 252 |
-| `w1024_s8` | 256 | 255 | 255 |
-| `w1024_s1024` | 32 (bursts of 4 KB) | 32 | 32 |
+| Configuration | Stream beats per burst | Beats | Clock cycles from the first to the last beat, read latency 0 / 20 / 50 / 100 | Beats per clock cycle, read latency 20 / 50 / 100 |
+| --- | --- | --- | --- | --- |
+| `w32_s32` | 16 | 1024 | 1024 / 1334 / 2264 / 3814 | 0.77 / 0.45 / 0.27 |
+| `w64_s8` | 128 | 8192 | 8192 / 8192 / 8192 / 8192 | 1.00 / 1.00 / 1.00 |
+| `w128_s32` | 1024 | 65536 | 65536 / 65536 / 65536 / 65536 | 1.00 / 1.00 / 1.00 |
+| `w128_s64` | 64 | 4096 | 4096 / 4096 / 4096 / 5367 | 1.00 / 1.00 / 0.76 |
+| `w256_s16` | 128 | 8192 | 8192 / 8192 / 8192 / 8192 | 1.00 / 1.00 / 1.00 |
+| `w256_s128` | 8 | 512 | 512 / 1039 / 1969 / 3519 | 0.49 / 0.26 / 0.15 |
+| `w512_s256` | 16 | 1024 | 1024 / 1303 / 2233 / 3783 | 0.79 / 0.46 / 0.27 |
+| `w512_s512` | 2 | 128 | 252 / 872 / 1802 / 3352 | 0.15 / 0.07 / 0.04 |
+| `w1024_s8` | 256 | 255 | 255 / 255 / 255 / 255 | 1.00 / 1.00 / 1.00 |
+| `w1024_s1024` | 32 (bursts of 4 KB) | 32 | 32 / 32 / 32 / 32 | 1.00 / 1.00 / 1.00 |
+
+The read master keeps two bursts in flight (its internal FIFOs), so with T stream beats per burst and a read
+latency of L clock cycles the channel sends about min(1, 2 x T / (L + T + 5)) beats per clock cycle. `w1024_s8` and
+`w1024_s1024` move one burst, whose latency lies before the first beat.
 
 Findings:
 

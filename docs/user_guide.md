@@ -28,6 +28,7 @@ top level is `opendma.odma_core`. Open Logic is the submodule `open-logic/` (ope
 | `StsCntrlStrm_g`, `UseRxLength_g` | `c_sg_include_stscntrl_strm`, `c_sg_use_stsapp_length` | false until phase c | false |
 | `MicroDma_g` | `c_micro_dma` | false until phase c | false |
 | `Mm2sBufferBeats_g`, `S2mmBufferBeats_g` | none: depth of the data buffer of a channel in stream beats | at least two bursts (2 x burst x memory width / stream width) | 64 |
+| `Mm2sReadBursts_g` | none: MM2S read bursts in flight | 2 to 8 | 6 |
 | `ExtRegs_g` | none: extension register window 0x100 to 0x1FF | boolean | true |
 
 An inconsistent configuration stops the elaboration with a message that names the generic. The defaults of
@@ -35,6 +36,22 @@ An inconsistent configuration stops the elaboration with a message that names th
 system with the vendor core sets them explicitly. Bursts never cross 4 KB, so a channel with a wide memory issues
 bursts of at most 4096 bytes whatever the burst generic is (32 beats of 1024 bits). The verification report of
 `odma_core` lists the simulated and the synthesised values of every generic.
+
+`Mm2sReadBursts_g` sets how many MM2S read bursts are in flight: the read master requests a burst only when its
+internal FIFO can hold all its beats, and that FIFO holds `Mm2sReadBursts_g` bursts. With T stream beats per burst
+(`Mm2sBurstBeats_g` x memory width / stream width, at least 8) MM2S sends one stream beat per clock cycle up to a
+memory read latency of (`Mm2sReadBursts_g` - 1) x T - 8 clock cycles; with the defaults (T = 16) and 6 bursts that
+is 72 clock cycles. A burst is at most 4 KB. The internal FIFO is built from registers, which the TMR of the
+synthesis tool protects (section 6): `Mm2sReadBursts_g` x burst beats x (memory width + 1) bits.
+
+| Memory width, burst beats | 2 bursts | 6 bursts (default) | 8 bursts |
+| --- | --- | --- | --- |
+| 32 bits, 16 beats (the defaults) | 1056 bits | 3168 bits | 4224 bits |
+| 512 bits, 8 beats | 8208 bits | 24624 bits | 32832 bits |
+| 512 bits, 16 beats | 16416 bits | 49248 bits | 65664 bits |
+
+The figures are before TMR. With a wide memory port choose the smallest value that covers the read latency L of the
+memory: `Mm2sReadBursts_g` >= (L + 8) / T + 1; 2 gives the behaviour of OpenDMA 0.1.0.
 
 ## 3. Clock and reset
 
@@ -50,7 +67,7 @@ AXI4-Lite slave, so that the register access that starts it completes.
 | Interface | Ports | Content |
 | --- | --- | --- |
 | Register port | `S_AxiLite_*` | AXI4-Lite slave, 10 address bits, 32 data bits. Every access gets OKAY; a write uses all 32 bits whatever `WStrb` holds; offsets without a register read 0 |
-| MM2S memory port | `M_AxiMm2s_Ar*`, `M_AxiMm2s_R*` | AXI4 read master: INCR bursts of full-width beats (FIXED bursts of at most 16 beats for keyhole), `ArCache` 0011, `ArProt` 000, no ID signals; up to 8 bursts outstanding |
+| MM2S memory port | `M_AxiMm2s_Ar*`, `M_AxiMm2s_R*` | AXI4 read master: INCR bursts of full-width beats (FIXED bursts of at most 16 beats for keyhole), `ArCache` 0011, `ArProt` 000, no ID signals; up to `Mm2sReadBursts_g` bursts outstanding |
 | MM2S stream | `M_Mm2s_Data`, `_Keep`, `_Last`, `_Valid`, `_Ready` | AXI4-Stream master: one packet per transfer, first byte in lane 0, `TKeep` contiguous from lane 0 in the last beat |
 | S2MM stream | `S_S2mm_Data`, `_Keep`, `_Last`, `_Valid`, `_Ready` | AXI4-Stream slave: packets of any length; the bytes of the last beat are those up to the first lane whose `TKeep` bit is clear; `TKeep` of the other beats is not used |
 | S2MM memory port | `M_AxiS2mm_Aw*`, `M_AxiS2mm_W*`, `M_AxiS2mm_B*` | AXI4 write master: INCR bursts with write strobes (FIXED bursts of at most 16 beats for keyhole), `AwCache` 0011, `AwProt` 000, no ID signals; a burst is requested only when all its data is in the core |
@@ -229,7 +246,7 @@ TMR for all other logic:
 | The FT buffers: MM2S read data, transfer and response buffers; S2MM data, chunk and write data buffers; in SG mode the descriptor buffers of both channels and the read and write data buffers of the descriptor port | SECDED ECC of the Open Logic ft entities: a single error is corrected, a double error is detected and counted; the word of a double error is passed on as read (corrupted data, length, result code or descriptor field of the transfer it belongs to), and the core does not turn the double error into a transfer error | `ECC_COUNT_0` to `ECC_COUNT_9`, `ECC_STATUS`, `Ecc_Irq` with `ECC_ENABLE`; error injection through `ECC_INJECT` (parity mode non-destructive, data mode corrupts data with a double error, section 5.6) |
 | Clock domain crossings and reset synchronisers | The core has none (one clock domain); an `olo_ft_fifo_async` placed at a port by the integrator uses triplicated synchronisers (`SyncTmr_g` = true) | none |
 | State machines | Recovery state through the `when others` branch and the reset | none |
-| All other logic: registers of the control and data paths, counters, pointers, pipeline registers | TMR of the synthesis tool (for example `syn_radhardlevel` = `tmr` with Synplify, or the equivalent setting of the tool chain). The core adds no protection of its own for this logic; without TMR, an upset in it is not covered | synthesis report |
+| All other logic: registers of the control and data paths, counters, pointers, pipeline registers, the internal read FIFO of the MM2S read master (`Mm2sReadBursts_g` bursts) | TMR of the synthesis tool (for example `syn_radhardlevel` = `tmr` with Synplify, or the equivalent setting of the tool chain). The core adds no protection of its own for this logic; without TMR, an upset in it is not covered | synthesis report |
 
 The integrator:
 

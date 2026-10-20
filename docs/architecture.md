@@ -211,6 +211,7 @@ transactions of a port use the same ID, as \[AXI\] allows for masters without re
 | `UseRxLength_g` | `c_sg_use_stsapp_length` | boolean | false | c |
 | `MicroDma_g` | `c_micro_dma` | boolean | false | c |
 | `Mm2sBufferBeats_g`, `S2mmBufferBeats_g` | none: depth of the data buffer of a channel in stream beats | at least two bursts | four bursts | a |
+| `Mm2sReadBursts_g` | none: MM2S read bursts in flight (the internal FIFO of the read master) | 2 to 8 | 6 | a |
 | `ExtRegs_g` | none: extension register window (D12) | boolean | true | a |
 
 The parameters of \[PG021\] Table 44 that have no generic: `c_enable_multi_channel`, `c_num_mm2s_channels` and

@@ -65,13 +65,16 @@ which has the same depth.
 The read master runs with `UserTransactionSizeBits_g` = `LengthWidth_g` + 1 (the setting of the write master of
 `odma_s2mm`, gap G14 of the architecture), `AxiMaxBeats_g` = the smaller of `BurstBeats_g` and the beats of 4 KB
 (4096 / (`MemWidth_g` / 8); no AXI burst crosses 4 KB, so the bursts are the same, gap G13),
-`AxiMaxOpenTransactions_g` = 8, `DataFifoDepth_g` = `BufferBeats_g` (in stream beats), `UserDataWidth_g` =
-`StreamWidth_g`, `AxiDataWidth_g` = `MemWidth_g`, `ImplWrite_g` = false. Its fixed `ArCache` 0011 and `ArProt` 000
-are the values of MM-IF-01. In `olo_ft_axi_master_full`, `DataFifoDepth_g` is the depth of its ECC-protected read
-buffer in words of `UserDataWidth_g` bits (stream beats, with `Rd_Last`); the wrapped `olo_axi_master_full` has
-internal FIFOs of two bursts of `AxiDataWidth_g` bits, and its high-latency mode requests a burst only when these can
-take it. A stream peer that holds `TReady` low therefore fills the read buffer and then the internal FIFOs and stops
-further bursts, but never holds the R channel (MM-RD-03).
+`AxiMaxOpenTransactions_g` = 8, `DataFifoDepth_g` = `BufferBeats_g` (in stream beats), `IntFifoDepth_g` =
+`ReadBursts_g` x `AxiMaxBeats_g` (in memory words), `UserDataWidth_g` = `StreamWidth_g`, `AxiDataWidth_g` =
+`MemWidth_g`, `ImplWrite_g` = false. Its fixed `ArCache` 0011 and `ArProt` 000 are the values of MM-IF-01. In
+`olo_ft_axi_master_full`, `DataFifoDepth_g` is the depth of its ECC-protected read buffer in words of
+`UserDataWidth_g` bits (stream beats, with `Rd_Last`); the wrapped `olo_axi_master_full` has an internal read FIFO of
+`ReadBursts_g` bursts of `AxiDataWidth_g` + 1 bits (registers), and its high-latency mode requests a burst only when
+this FIFO can take it, so at most `ReadBursts_g` bursts are in flight: with T stream beats per burst and a read
+latency L the channel sends about min(1, `ReadBursts_g` x T / (L + T + 5)) beats per clock cycle, one per clock cycle
+up to L = (`ReadBursts_g` - 1) x T - 8 (MM-RD-07). A stream peer that holds `TReady` low therefore fills the read
+buffer and then the internal FIFO and stops further bursts, but never holds the R channel (MM-RD-03).
 
 ## 5. Stream output (MM-2, `odma_mm2s_stream`)
 

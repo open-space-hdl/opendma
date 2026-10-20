@@ -217,5 +217,6 @@ at least one test case; the RTL of the repository passes all of them:
 | The size of the first chunk for every chunk of the buffer | TC-S2-06, TC-S2-24 |
 | The plan of the buffer before (loaded at its last beat) | TC-S2-06, TC-S2-24 |
 | Low-latency write commands with every width | TC-S2-01, TC-S2-05, TC-S2-06, by the W-gap check, in the 13 configurations with a memory wider than the stream |
+| A descriptor taken while the stage of the feed jobs is full (its job is lost) | TC-S2-28 |
 
 The recovery branches of the state machines (`when others`) cannot be reached through the ports.

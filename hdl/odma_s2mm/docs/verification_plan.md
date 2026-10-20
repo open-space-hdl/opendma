@@ -45,8 +45,11 @@ tests of Scatter/Gather Mode (TC-S2-17 to TC-S2-19 and TC-S2-24) run in the `s_`
 `w32_s32` only, since it calls the package function for every configuration of the generic ranges; the halt sweep
 TC-S2-21 runs in `w32_s32` and `w512_s512` (2-beat chunks) and in `s_w64_s8` and `s_w512_s512`, the narrowest and
 the widest lag of the split (two beats of 8 and of 512 bits); TC-S2-22, TC-S2-23, TC-S2-26 and TC-S2-27 run in
-every configuration, their steps with packets over several buffers with `Split_g`; lengths are limited to
-2**`LengthWidth_g` - 1.
+every configuration, their steps with packets over several buffers with `Split_g`; TC-S2-28 needs its packets in
+the data buffer before their commands and runs without `Split_g`, in the seven configurations where two chunks and
+a byte fit into the longest length and the feeder needs more clock cycles for a chunk than the command part for
+the start of the next transfer (all except `w512_s512` with chunks of two beats, `w1024_s8` and `w1024_s1024`);
+lengths are limited to 2**`LengthWidth_g` - 1.
 
 Every test case ends with the check of the W monitor: no clock cycle with `WReady` '1' and `WValid` '0' between two
 data beats of a burst (S2-WR-07), in every configuration, with the high-latency writes of a memory wider than the
@@ -95,6 +98,7 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | `test_short_rule` (TC-S2-25) | `shortBeats` of `odma_s2mm_pkg` for every memory width, every stream width up to it and every burst length of the generic ranges (B limited by 4 KB), against the table of section 2 | S2-ST-04 |
 | `test_result_stall` (TC-S2-26) | The receiver of the results holds `Res_Ready` low in runs of 1 to 32 clock cycles, 50 to 95 % of the time: 16 packets of one buffer, with `Split_g` of one to four buffers, commanded back to back, every result in order with its bytes, start and end of packet, every buffer in memory. `Res_Ready` low while a queued result waits and the next transfer ends (with `Split_g` the full first buffer of a packet of two): both results in order when it rises. `Drain` while a queued result and one behind it wait: neither is returned, also not when `Res_Ready` rises; the core reset recovers the channel. Results that are not queued, under the same random runs: six transfers with SLVERR on their first burst (the error code, no end of packet, the rest of the packet flushed) and six transfers halted before their packet (0 bytes, no end of packet), then a complete packet. A packet cut by a halt whose first burst answers SLVERR only after the cut, while the result of the packet before is held (write responses 300 clock cycles late): both results in order, the error code and no end of packet for the cut packet, no flush (the packet after the restart is complete), in the configurations whose longest buffer holds two chunks | S2-RS-03, S2-RS-04, S2-RS-06, S2-HA-01, S2-HA-02, S2-SG-02 |
 | `test_chunk_full` (TC-S2-27) | 40 packets of one beat before any command: without `Split_g` they enter until the chunk buffer (32 descriptors) or the data buffer is full, then the stream waits for 500 clock cycles; with `Split_g` no beat enters (S2-SG-03). One command per packet, a buffer of two beats each: every packet once with its bytes and the end of packet, the bytes around each buffer unchanged, one result per packet. Without `Split_g` and with a data buffer of more than 40 beats: the packets before fill all but one descriptor of the chunk buffer, a longer packet the last one with its first chunk and waits open; `Run` falls: the stored packets and the rest of the open packet are discarded up to its `TLast`, no write, no result, `Stopped`, and the next packet after the restart is complete in its buffer | S2-ST-01, S2-HA-01, S2-HA-03, S2-SG-03 |
+| `test_job_stage` (TC-S2-28) | A packet of two full chunks with a last beat without valid bytes and a packet of one chunk, both in the data buffer before their commands, commanded back to back: the write master takes the write commands of both chunks while the feeder still moves the first one, the job of the empty beat fills the stage of the feed jobs, the first transfer queues its result, and the next transfer takes its chunk when the stage has space again: both results in command order with their bytes and the end of packet, the bytes in and around both buffers. The same with `Run` falling when the second command is accepted, while the stage is full: the stored packet is written completely with the end of packet, then `Stopped`; after the restart the next packet is complete | S2-RS-06, S2-ST-02, S2-HA-01, S2-HA-03 |
 
 ## 4. Requirement coverage
 
@@ -104,7 +108,7 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | S2-IF-02 | TC-S2-01 |
 | S2-IF-03 | TC-S2-07, TC-S2-22 |
 | S2-ST-01 | TC-S2-07, TC-S2-11, TC-S2-18, TC-S2-27 |
-| S2-ST-02 | TC-S2-03 |
+| S2-ST-02 | TC-S2-03, TC-S2-28 |
 | S2-ST-03 | TC-S2-01, TC-S2-05, TC-S2-14, TC-S2-17, TC-S2-24 |
 | S2-ST-04 | TC-S2-06, TC-S2-24, TC-S2-25 |
 | S2-WR-01 | TC-S2-01, TC-S2-02, TC-S2-05, TC-S2-14, TC-S2-16 |
@@ -119,8 +123,8 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | S2-RS-03 | TC-S2-09, TC-S2-19, TC-S2-23, TC-S2-26 |
 | S2-RS-05 | TC-S2-15 |
 | S2-RS-04 | TC-S2-08, TC-S2-09, TC-S2-23, TC-S2-26 |
-| S2-RS-06 | TC-S2-22, TC-S2-23, TC-S2-26 |
-| S2-HA-01, S2-HA-03 | TC-S2-09, TC-S2-11, TC-S2-19, TC-S2-21, TC-S2-23, TC-S2-26, TC-S2-27 |
+| S2-RS-06 | TC-S2-22, TC-S2-23, TC-S2-26, TC-S2-28 |
+| S2-HA-01, S2-HA-03 | TC-S2-09, TC-S2-11, TC-S2-19, TC-S2-21, TC-S2-23, TC-S2-26, TC-S2-27, TC-S2-28 |
 | S2-HA-02 | TC-S2-09, TC-S2-12, TC-S2-19, TC-S2-21, TC-S2-22, TC-S2-26 |
 | S2-FT-01 | TC-S2-13 |
 | S2-SG-01, S2-SG-02 | TC-S2-17, TC-S2-19, TC-S2-26 |

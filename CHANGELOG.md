@@ -4,6 +4,12 @@ The notable changes of OpenDMA. The versions follow semantic versioning: 0.y.z w
 version for an incompatible change of ports, generics or the register map, a minor version for a feature and a patch
 version for a fix.
 
+## [Unreleased]
+
+### Changed
+
+- Open Logic 4.7.0-ft.10 (from 4.7.0-ft.8); no port, generic or register of OpenDMA changes.
+
 ## [0.1.0] - 2026-10-20
 
 First release: Direct Register Mode and Scatter/Gather Mode of a DMA core between AXI4 memory and AXI4-Stream

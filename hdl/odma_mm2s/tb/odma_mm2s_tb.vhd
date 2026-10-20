@@ -65,6 +65,11 @@ architecture sim of odma_mm2s_tb is
     -- stream side needs for a burst
     constant Quiet_c       : positive := 4 * BurstStream_c + 1000;
 
+    -- Read latencies of the memory model for the logged rates of TC-MM-05
+    type Latencies_t is array (0 to 2) of natural;
+
+    constant RdLatencies_c : Latencies_t := (20, 50, 100);
+
     -- Longest FIXED burst: 16 beats, at most the bursts of the read master (MM-SG-03)
     constant FixedBeats_c : positive := minimum(16, minimum(BurstBeats_g, 4096 / MemBytes_c));
 
@@ -393,6 +398,20 @@ begin
                     check_value(Cnt2_v <= Cnt_v + 2, ERROR, "clock cycles from the first to the last of " &
                                 to_string(Cnt_v) & " beats: " & to_string(Cnt2_v));
                 end if;
+
+                -- The same transfer with a read latency in the memory model: the rates are logged and listed in
+                -- the verification report
+                for k in RdLatencies_c'range loop
+                    Mem_v.setLatency(0, RdLatencies_c(k));
+                    clearStream;
+                    transfer(region(1), Len_v, "transfer of 64 bursts, read latency " &
+                             to_string(RdLatencies_c(k)));
+                    Cnt2_v := Obs.LastBeat - Obs.FirstBeat + 1;
+                    log(ID_SEQUENCER, "throughput at read latency " & to_string(RdLatencies_c(k)) & ": " &
+                        to_string(Cnt_v) & " beats in " & to_string(Cnt2_v) & " clock cycles");
+                end loop;
+
+                Mem_v.setLatency(0, 0);
 
             elsif run("test_bus_not_held") then
                 log(ID_LOG_HDR, "TC-MM-06 a stopped stream peer never holds the R channel");

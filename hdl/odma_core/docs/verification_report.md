@@ -2,7 +2,7 @@
 
 ## 1. Test results
 
-Run on 2026-10-20 in the GHDL CI of the repository, GitHub Actions run 39420555763 on commit 6e8ac73 (its
+Run on 2026-10-20 in the GHDL CI of the repository, GitHub Actions run 39442539964 on commit 7dac757 (its
 `results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
 `python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_core_tb`, and
 `python lint/synth_check.py -j 4` in the same run.
@@ -17,19 +17,24 @@ of them passed; the code coverage of the core is in `docs/coverage.md`.
 | `lint/synth_check.py` (TC-CO-09) | 31 (23 configurations synthesised, 7 of them in SG mode; 8 inconsistent ones rejected) | 31 |
 
 Pause per S2MM buffer boundary and rate (TC-CO-20, two packets of 16 KB, a stream without gaps, write response
-latency 0 / 50 clock cycles, buffers at multiples of 64 bytes unless stated):
+latency 0 / 50 / 100 clock cycles, buffers at multiples of 64 bytes unless stated):
 
 | Configuration | Pause per buffer boundary | Beats per clock cycle, 1 KB buffers | Beats per clock cycle, 4 KB buffers | Beats per clock cycle, 4 KB buffers at unaligned addresses | Cycles per KB added by unaligned buffers |
 | --- | --- | --- | --- | --- | --- |
-| `sg`, `sg_s2mm_only` (32 / 32 bits, 16 beats) | 1 / 1 | 0.94 / 0.94 | 0.95 / 0.95 | 0.90 / 0.90 | 14 / 14 |
-| `sg_aw64` (512 / 256 bits, 4 beats) | 6 / 38 | 0.71 / 0.47 | 0.80 / 0.80 | 0.68 / 0.56 | 7 / 16 |
-| `sg_lw8` (64 / 8 bits, 2 beats; buffers of at most 255 bytes, so no boundary figure) | - | 0.94 / 0.94 | 0.94 / 0.94 | 0.94 / 0.94 | -3 / -4 |
+| `sg`, `sg_s2mm_only` (32 / 32 bits, 16 beats) | 1 / 1 / 1 | 0.94 / 0.94 / 0.94 | 0.95 / 0.95 / 0.95 | 0.90 / 0.90 / 0.54 | 14 / 14 / 207 |
+| `sg_aw64` (512 / 256 bits, 4 beats) | 6 / 38 / 51 | 0.71 / 0.47 / 0.34 | 0.80 / 0.80 / 0.59 | 0.68 / 0.56 / 0.31 | 7 / 16 / 49 |
+| `sg_lw8` (64 / 8 bits, 2 beats; buffers of at most 255 bytes, so no boundary figure) | - | 0.94 / 0.94 / 0.94 | 0.94 / 0.94 / 0.94 | 0.94 / 0.94 / 0.94 | -3 / -4 / -4 |
 
 The S2MM channel accepts the next buffer once the last write command of the full buffer is issued, while the
-result of the full buffer waits for its write responses (`odma_s2mm` S2-RS-06), so a boundary costs one clock cycle
-with the defaults at either latency. With 512 / 256 bits a buffer of 1 KB fills in about 40 clock cycles and waits
-at its end for the write responses of the buffer before (one result waits at a time): 6 clock cycles per boundary
-at a latency of 0, 38 at 50.
+result of the full buffer waits for its write responses (`odma_s2mm` S2-RS-06). The Scatter/Gather engine keeps a
+window of two descriptors per channel: it fetches the descriptor of buffer n + 2 once the result of buffer n has been
+taken (`odma_sg` architecture section 4.3). With the defaults a boundary costs one clock cycle at every latency. With
+512 / 256 bits a buffer of 1 KB fills in about 40 clock cycles; with a write response latency the result of the
+buffer before comes later, and the channel waits at the end of the buffer for its next descriptor: 6 clock cycles per
+boundary at a latency of 0, 38 at 50 and 51 at 100. At a latency of 100 the 8 open write bursts of the write master
+(`odma_s2mm` architecture section 5) no longer cover the latency: with 4-beat bursts of 512 bits the 4 KB buffers of
+`sg_aw64` reach 0.59 beats per clock cycle, and the unaligned buffers of the defaults, whose chunks are written as two
+bursts each, 0.54.
 
 The unaligned buffers start 1 byte above a multiple of 64 bytes. With 64 / 8 bits that is a multiple of the stream
 width: the first chunk ends at the burst boundary and the later chunks are aligned (`odma_s2mm` S2-ST-04), so the

@@ -2491,6 +2491,49 @@ begin
                     Len_v := minimum(2 * ChunkBytes_c + 5, MaxLen_c);
                     transfer(region(8), Len_v, source(8), Len_v, "packet after the halt with the chunk buffer full");
                 end if;
+
+            elsif run("test_job_stage") then
+                log(ID_LOG_HDR, "TC-S2-28 the stage of the feed jobs full when the next transfer starts");
+                -- A packet of two full chunks with a last beat without valid bytes and a packet of one chunk, both in
+                -- the data buffer before their commands, the commands back to back. The write master takes the write
+                -- command of the second chunk while the feeder still moves the first one, the job of the empty beat
+                -- fills the stage of the feed jobs, the first transfer queues its result, and the next transfer takes
+                -- its chunk only when the feeder has freed the stage. In the second round Run falls when the next
+                -- command is accepted: its packet is complete in the data buffer and is written completely
+                check_value(2 * ChunkBytes_c + 1 <= MaxLen_c, ERROR, "two chunks and a byte within the longest length");
+                Len_v := 2 * ChunkBytes_c;
+
+                for k in 0 to 1 loop
+                    Res_v  := Obs.ResCount;
+                    Pkts_v := Obs.Packets;
+                    Mem_v.setWindow(0, region(1), region(2) + ChunkBytes_c - 1);
+                    Mem_v.fill(0, region(1) - Guard_c, Len_v + 1 + 2 * Guard_c, DstSeed_c);
+                    Mem_v.fill(0, region(2) - Guard_c, ChunkBytes_c + 2 * Guard_c, DstSeed_c);
+                    send(source(1 + 2 * k), Len_v, KeepZeroLast);
+                    send(source(2 + 2 * k), ChunkBytes_c);
+                    waitPackets(Pkts_v + 2);
+                    cycles(50);
+                    sendCmd(region(1), Len_v + 1);
+                    sendCmd(region(2), ChunkBytes_c);
+                    if k = 1 then
+                        ChRun <= '0';
+                    end if;
+                    waitRes(Res_v + 2);
+                    checkRes(Res_v, Len_v, '1', ErrNone_c, "round " & to_string(k) &
+                             ": the packet with the empty last beat");
+                    checkRes(Res_v + 1, ChunkBytes_c, '1', ErrNone_c, "round " & to_string(k) & ": the next packet");
+                    checkMem(region(1), Len_v + 1, Len_v, source(1 + 2 * k), "round " & to_string(k) &
+                             ": the packet with the empty last beat");
+                    checkMem(region(2), ChunkBytes_c, ChunkBytes_c, source(2 + 2 * k), "round " & to_string(k) &
+                             ": the next packet");
+                end loop;
+
+                if Stopped = '0' then
+                    odmaWaitHigh(Stopped, 1 ms, "Stopped after the halt");
+                end if;
+                ChRun <= '1';
+                Len_v := minimum(ChunkBytes_c + 3, MaxLen_c);
+                transfer(region(3), Len_v, source(5), Len_v, "packet after the restart");
             end if;
 
             -- Every test case: no clock cycle without write data inside a burst while the memory is ready (S2-WR-07)

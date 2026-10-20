@@ -33,8 +33,14 @@ SG_TESTS = ("test_split", "test_split_wait", "test_split_halt", "test_chunk_alig
 DR_TESTS = ("test_early_data", "test_overflow")
 # Tests in the configurations listed only: the halt sweep in the default and the 2-beat chunks without the split, and
 # with the split the narrowest lag (two bytes of an 8-bit stream) and the widest (two beats of 512 bits, a whole
-# chunk); the rule of the short chunks, which covers every configuration of the generic ranges itself, in the default
-SWEEP = {"test_halt_sweep": ("w32_s32", "w512_s512", "s_w64_s8", "s_w512_s512"), "test_short_rule": ("w32_s32",)}
+# chunk); the rule of the short chunks, which covers every configuration of the generic ranges itself, in the default;
+# the full stage of the feed jobs without the split (packets stored before their commands) where two chunks and a byte
+# fit into the longest length and the feeder takes longer for a chunk than the command part for the next transfer
+SWEEP = {
+    "test_halt_sweep": ("w32_s32", "w512_s512", "s_w64_s8", "s_w512_s512"),
+    "test_short_rule": ("w32_s32",),
+    "test_job_stage": ("w32_s32", "w64_s8", "w128_s32", "w128_s64", "w256_s16", "w256_s128", "w512_s256"),
+}
 
 
 def configure(lib):

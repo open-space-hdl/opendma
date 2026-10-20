@@ -2,14 +2,14 @@
 
 ## 1. Test results
 
-Run on 2026-10-19 in the GHDL CI of the repository, GitHub Actions run 39290223755 on commit 8c32323 (its
+Run on 2026-10-20 in the GHDL CI of the repository, GitHub Actions run 39420555763 on commit 6e8ac73 (its
 `results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
 `python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_core_tb`, and
 `python lint/synth_check.py -j 4` in the same run.
 
-The tests of `odma_core_tb` pass in QuestaSim (Questa Pro Microchip Edition 2024.3, time resolution 1 fs), with code
-coverage and in the optimised run without it, on 2026-10-19 on commit 6252594 (sources and testbenches as in 8c32323);
-the code coverage of the core is in `docs/coverage.md`.
+QuestaSim (Questa Pro Microchip Edition 2024.3, time resolution 1 fs) ran the tests of `odma_core_tb` of release
+0.1.0 on commit 6252594 with Open Logic 4.7.0-ft.8, with code coverage and in the optimised run without it, and all
+of them passed; the code coverage of the core is in `docs/coverage.md`.
 
 | Testbench or check | Tests | Passed |
 | --- | --- | --- |
@@ -21,21 +21,23 @@ latency 0 / 50 clock cycles, buffers at multiples of 64 bytes unless stated):
 
 | Configuration | Pause per buffer boundary | Beats per clock cycle, 1 KB buffers | Beats per clock cycle, 4 KB buffers | Beats per clock cycle, 4 KB buffers at unaligned addresses | Cycles per KB added by unaligned buffers |
 | --- | --- | --- | --- | --- | --- |
-| `sg`, `sg_s2mm_only` (32 / 32 bits, 16 beats) | 1 / 1 | 0.85 / 0.85 | 0.85 / 0.85 | 0.81 / 0.81 | 15 / 15 |
-| `sg_aw64` (512 / 256 bits, 4 beats) | 1 / 19 | 0.48 / 0.40 | 0.49 / 0.49 | 0.40 / 0.40 | 14 / 14 |
-| `sg_lw8` (64 / 8 bits, 2 beats; buffers of at most 255 bytes, so no boundary figure) | - | 0.64 / 0.64 | 0.64 / 0.64 | 0.64 / 0.64 | 0 / 0 |
+| `sg`, `sg_s2mm_only` (32 / 32 bits, 16 beats) | 1 / 1 | 0.94 / 0.94 | 0.95 / 0.95 | 0.90 / 0.90 | 14 / 14 |
+| `sg_aw64` (512 / 256 bits, 4 beats) | 6 / 38 | 0.71 / 0.47 | 0.80 / 0.80 | 0.68 / 0.56 | 7 / 16 |
+| `sg_lw8` (64 / 8 bits, 2 beats; buffers of at most 255 bytes, so no boundary figure) | - | 0.94 / 0.94 | 0.94 / 0.94 | 0.94 / 0.94 | -3 / -4 |
 
 The S2MM channel accepts the next buffer once the last write command of the full buffer is issued, while the
 result of the full buffer waits for its write responses (`odma_s2mm` S2-RS-06), so a boundary costs one clock cycle
-with the defaults at either latency. With 512 / 256 bits a buffer of 1 KB fills in about 66 clock cycles, and with a
-response latency of 50 it waits at its end for the responses of the buffer before (one result waits at a time).
+with the defaults at either latency. With 512 / 256 bits a buffer of 1 KB fills in about 40 clock cycles and waits
+at its end for the write responses of the buffer before (one result waits at a time): 6 clock cycles per boundary
+at a latency of 0, 38 at 50.
 
 The unaligned buffers start 1 byte above a multiple of 64 bytes. With 64 / 8 bits that is a multiple of the stream
 width: the first chunk ends at the burst boundary and the later chunks are aligned (`odma_s2mm` S2-ST-04), so the
-buffers take no longer than aligned ones. With 32 / 32 and 512 / 256 bits the address is inside a stream word, where
-the chunks keep their full size and each is written as two bursts. The defaults write with low-latency commands
-(equal widths, `odma_s2mm` S2-WR-03): 8192 beats in 9667 clock cycles with 1 KB buffers, 11657 with high-latency
-commands (a variant of the sources, `odma_s2mm` verification report).
+buffers take no longer than aligned ones (3 to 4 clock cycles per KB less). With 32 / 32 and 512 / 256 bits the
+address is inside a stream word, where the chunks keep their full size and each is written as two bursts. The defaults
+write with low-latency commands (equal widths, `odma_s2mm` S2-WR-03): 8192 beats in 8680 clock cycles with 1 KB
+buffers. With Open Logic 4.7.0-ft.8 a variant of the sources with high-latency commands took 11657 clock cycles
+against 9667 (`odma_s2mm` verification report).
 
 ## 2. Summary
 

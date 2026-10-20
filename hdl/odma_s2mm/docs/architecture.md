@@ -270,7 +270,7 @@ drain clears the buffers.
 `UserTransactionSizeBits_g` = `LengthWidth_g` + 1 (gap G14 of the architecture: up to Open Logic 4.7.0-ft.6,
 `olo_axi_master_full` counted the user data words of a write command at the width of the size field without its
 low bits, so the count wrapped for the sizes in the last user data word below 2**`UserTransactionSizeBits_g`, and
-the master issued no further burst; 4.7.0-ft.8 corrects the count, and with one more size bit every command stays
+the master issued no further burst; 4.7.0-ft.7 corrects the count, and with one more size bit every command stays
 below 2**(`UserTransactionSizeBits_g` - 1) in any case), `AxiMaxBeats_g` = B (section 3; no AXI burst crosses
 4 KB, gap G13),
 `AxiMaxOpenTransactions_g` = 8, `DataFifoDepth_g` = 2 x `ChunkBeats_c` (the ECC-protected write data buffer in

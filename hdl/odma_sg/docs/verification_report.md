@@ -6,9 +6,9 @@ Run on 2026-10-20 in the GHDL CI of the repository, GitHub Actions run 394676139
 `results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
 `python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_sg_tb`.
 
-QuestaSim (Questa Pro Microchip Edition 2024.3, time resolution 1 fs) ran the tests of release 0.1.0 on commit
-6252594 with Open Logic 4.7.0-ft.8, with code coverage and in the optimised run without it, and all of them passed;
-the code coverage of the core is in `docs/coverage.md`.
+QuestaSim (Questa Pro Microchip Edition 2024.3, time resolution 1 fs) ran the tests of release 0.2.0 on commit ad726b1
+with Open Logic 4.7.0-ft.10 (sources and testbenches as in fee4598), with code coverage and in the optimised run without
+it, and all of them passed; the code coverage of the core is in `docs/coverage.md`.
 
 | Testbench | Tests | Passed |
 | --- | --- | --- |

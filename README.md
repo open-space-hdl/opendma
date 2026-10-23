@@ -14,7 +14,7 @@ implementation written from the published product guide; it contains no code, te
 ## Status
 
 **Technology readiness level: TRL 3** (fully verified by simulation) for Direct Register Mode (phase a) and
-Scatter/Gather Mode (phase b, with packets of several buffers and keyhole transfers). The 1009 tests of the six
+Scatter/Gather Mode (phase b, with packets of several buffers and keyhole transfers). The 1048 tests of the six
 testbenches pass in GHDL and in QuestaSim, with and without code coverage. They run the programming sequences of both
 modes against an AXI memory model and stream models with random back pressure, error responses of the memory and the
 descriptor port, single and double bit errors injected into every buffer, halts, soft resets and resets at any time.

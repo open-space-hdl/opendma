@@ -29,9 +29,9 @@ Closure rules:
 
 ## 2. Result
 
-The complete regression of 1009 tests on commit 6252594 with Open Logic 4.7.0-ft.8 passes in QuestaSim, as in GHDL:
-with code coverage (1 h 54 min) and in the optimised run without it (1 h 51 min), both started on 2026-10-19. The
-merged result over all tests:
+The complete regression of 1048 tests on commit ad726b1 with Open Logic 4.7.0-ft.10 passes in QuestaSim, as in GHDL:
+with code coverage (2 h 29 min) and in the optimised run without it (2 h 13 min), both started on 2026-10-20. The merged
+result over all tests:
 
 | File | Statements | Branches | FSM states | FSM transitions | Conditions | Expressions |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -39,7 +39,7 @@ merged result over all tests:
 | `odma_mm2s.vhd` | 13 / 13 |  |  |  |  | **19 / 24** |
 | `odma_mm2s_command.vhd` | 27 / 27 | 25 / 25 | 3 / 3 | 4 / 4 | 8 / 8 | 2 / 2 |
 | `odma_mm2s_stream.vhd` | 48 / 48 | 52 / 52 | 4 / 4 | 7 / 7 | **36 / 40** | 7 / 7 |
-| `odma_pkg.vhd` | 33 / 33 | 24 / 24 |  |  | 17 / 17 |  |
+| `odma_pkg.vhd` | 34 / 34 | 25 / 25 |  |  | 19 / 19 |  |
 | `odma_extension.vhd` | 73 / 73 | 35 / 35 |  |  |  | 10 / 10 |
 | `odma_interrupt.vhd` | 45 / 45 | 34 / 34 |  |  |  | 6 / 6 |
 | `odma_registers.vhd` | 254 / 254 | 118 / 118 |  |  | **51 / 53** | **16 / 20** |
@@ -47,15 +47,14 @@ merged result over all tests:
 | `odma_s2mm.vhd` | 12 / 12 | 2 / 2 |  |  |  | **8 / 12** |
 | `odma_s2mm_chunker.vhd` | 80 / 80 | 49 / 49 | 2 / 2 | 2 / 2 | **41 / 45** | 15 / 15 |
 | `odma_s2mm_pkg.vhd` | 10 / 10 | 2 / 2 |  |  | 2 / 2 |  |
-| `odma_s2mm_write.vhd` | 155 / 155 | **131 / 132** | **4 / 10** | **5 / 25** | **66 / 73** | **5 / 8** |
+| `odma_s2mm_write.vhd` | 155 / 155 | **131 / 132** | **4 / 10** | **5 / 25** | **68 / 73** | **5 / 8** |
 | `odma_sg.vhd` | 41 / 41 |  |  |  |  | 2 / 2 |
 | `odma_sg_channel.vhd` | 183 / 183 | 127 / 127 |  |  | 67 / 67 | 18 / 18 |
 | `odma_sg_port.vhd` | 79 / 79 | 51 / 51 | **4 / 6** | **4 / 8** | **23 / 30** | **12 / 16** |
-| Total | 1189 / 1189 (100.0 %) | 675 / 676 (99.9 %) | 20 / 28 (71.4 %) | 26 / 50 (52.0 %) | 321 / 345 (93.0 %) | 124 / 144 (86.1 %) |
+| Total | 1190 / 1190 (100.0 %) | 676 / 677 (99.9 %) | 20 / 28 (71.4 %) | 26 / 50 (52.0 %) | 325 / 347 (93.7 %) | 124 / 144 (86.1 %) |
 
-Bold marks a metric with misses; section 4 gives the reason for each of them, except the condition row of
-`odma_s2mm_write.vhd` line 265, which TC-S2-28 tests (section 3). The totals of the state machines
-contain the two machines of section 4.1.
+Bold marks a metric with misses; section 4 gives the reason for each of them. The totals of the state machines contain
+the two machines of section 4.1.
 
 ## 3. Gaps found and closed
 
@@ -83,7 +82,7 @@ the design.
 | S2MM: the chunk buffer full while the data buffer has space, and a halt while it is full and a packet is open | TC-S2-27 (new: 40 packets of one beat before the commands) |
 | SG engine: a drain while a fetched descriptor waits at the head of the buffer, fresh or stale | TC-SG-12 (extended: a fresh descriptor; a stale one with the drain 0 to 40 clock cycles after its fetch) |
 | MM2S: a drain while transfer entries without a read (a buffer beyond the top of the address space, a command of length 0) wait at the head of the transfer buffer or reach it | TC-MM-10 (extended) |
-| S2MM: a transfer that starts while the stage of the feed jobs is full (`odma_s2mm_write` line 265): the write master holds the commands of two chunks whose data the feeder has not moved yet, then a job without a write follows (a last beat without valid bytes); also with `Run` falling then | TC-S2-28 (new) |
+| S2MM: a transfer that starts while the stage of the feed jobs is full (`odma_s2mm_write` line 265): the write master holds the commands of two chunks whose data the feeder has not moved yet, then a job without a write follows (a last beat without valid bytes); also with `Run` falling then (line 305) | TC-S2-28 (new) |
 
 ## 4. Remaining misses
 
@@ -107,14 +106,16 @@ machines is reached. All other state machines are covered completely.
 ### 4.3 Conditions and expressions
 
 The rows below are combinations of the input terms that the design cannot produce. The row names are those of the
-QuestaSim report (`<term>_0`, `<term>_1`: the term decides the result with the value 0 or 1). The totals of section 2
-count input terms: a term is covered when both of its rows are hit.
+QuestaSim report (`<term>_0`, `<term>_1`: the term decides the result with the value 0 or 1). QuestaSim evaluates the
+condition of an `if` from left to right: a row in which the term ends the evaluation (0 in an `and`, 1 in an `or`) needs
+only the terms to its left, while the rows of a `std_logic` expression need every other term at the value that lets the
+term decide the result. The totals of section 2 count input terms: a term is covered when both of its rows are hit.
 
 | Location | Rows not hit | Reason |
 | --- | --- | --- |
-| `odma_mm2s.vhd` lines 340, 341 (ECC events of the transfer buffer) | `Xfer_OutValid_0` | The flags of `olo_ft_fifo_sync` are not gated with `Out_Valid`; the row needs `Xfer_OutReady` without an entry at the output. The stream pops the transfer buffer only in `Result_s`, which it enters with the entry at the head of the buffer. |
-| `odma_mm2s.vhd` lines 342, 343 (ECC events of the response buffer) | `Resp_OutValid_0` | `Resp_Ready` is the pop of an entry with a read, which needs `Resp_Valid` = '1'. |
-| `odma_mm2s.vhd` line 349 (`Stopped`) | `Resp_Empty_0` | A response belongs to a transfer entry with a read. The entry is written before the read is issued and popped together with its response, so the response buffer is empty whenever the transfer buffer is. |
+| `odma_mm2s.vhd` lines 344, 345 (ECC events of the transfer buffer) | `Xfer_OutValid_0` | The flags of `olo_ft_fifo_sync` are not gated with `Out_Valid`; the row needs `Xfer_OutReady` without an entry at the output. The stream pops the transfer buffer only in `Result_s`, which it enters with the entry at the head of the buffer. |
+| `odma_mm2s.vhd` lines 346, 347 (ECC events of the response buffer) | `Resp_OutValid_0` | `Resp_Ready` is the pop of an entry with a read, which needs `Resp_Valid` = '1'. |
+| `odma_mm2s.vhd` line 353 (`Stopped`) | `Resp_Empty_0` | A response belongs to a transfer entry with a read. The entry is written before the read is issued and popped together with its response, so the response buffer is empty whenever the transfer buffer is. |
 | `odma_mm2s_stream.vhd` line 200 (`ResValid`) | `(Xfer_Code /= ErrNone_c)_0`, `(Resp_Valid = '1')_0` | Both need `Result_s` with an entry with a read and no response. `olo_axi_master_full` reports the response of a read (`Rd_Done`, `Rd_Error`) no later than it outputs the last beat, and the read data and the response pass buffers of the same latency; the stream enters `Result_s` after the last beat of the entry, so the response is there. |
 | `odma_mm2s_stream.vhd` line 203 (`Pop`) | `(Xfer_Code /= ErrNone_c)_0`, `(Resp_Valid = '1')_0` | As line 200, during a drain. |
 | `odma_registers.vhd` lines 311, 312 (`Stopped`) | `Included(0)_0`, `Included(1)_0` | `Included` is set from the generics `IncludeMm2s_g` and `IncludeS2mm_g` and is constant; the core drives the stopped status of a channel that is not included to '1'. |
@@ -125,7 +126,6 @@ count input terms: a term is covered when both of its rows are hit.
 | `odma_s2mm_chunker.vhd` lines 191, 195, 260 | `Split_g_0` | `Split_g` is a generic: in the configurations without the split the expression is constant. Both values are simulated (the `s_` configurations of the S2MM bench). |
 | `odma_s2mm_chunker.vhd` line 334 (`SplitRst`) | `(r.State = Normal_s)_0` | The row needs `Discard_s` without an open packet. With `Split_g` a packet is open (`Open_i`) from its first beat at the stream port until its last beat leaves the split; `Discard_s` is entered while a packet is open and left in the clock cycle in which the last beat of that packet is dropped. |
 | `odma_s2mm_write.vhd` line 201 (queued result) | `(r.State /= Drained_s)_0` | The row needs `Drained_s` after the drain has ended. `Drained_s` is left only with `Rst`, and the soft reset holds the drain through its reset phase (`odma_soft_reset`). |
-| `odma_s2mm_write.vhd` line 305 | `(Desc_Valid = '0')_0` | The row needs a descriptor at the output of the chunk buffer while `Desc_Stored` = '0'. `Desc_Stored` is the write level of the chunk buffer (`In_Level` of `olo_ft_fifo_sync`), and `olo_base_fifo_sync` behind it counts an entry in the write level until the clock cycle after its read, while its output is valid only with a read level above 0, which never exceeds the write level: `Desc_Valid` = '1' implies `Desc_Stored` = '1'. The reason depends on `olo_base_fifo_sync` and is checked again with each change of the Open Logic version. |
 | `odma_s2mm_write.vhd` line 328 | `(r.FlushPend = '0')_0` | `FlushPend` is set only together with an error of the transfer (lines 258, 350) or with `Stop` (line 426), which mask it in this condition. |
 | `odma_s2mm_write.vhd` lines 336, 340, 363 | `r.Disc_1`, `(r.Disc = '0')_0` | The rows need `Cont` and `Disc` together. Both are set by the chunk descriptor that ends the transfer, `Cont` by the last chunk of a full buffer and `Disc` by the descriptor of a discarded packet, and both are cleared when the next transfer starts. |
 | `odma_s2mm_write.vhd` line 457 | `(Buf_Valid = '1')_0` | `Feed_s` with `Buf_Valid` = '0', for the reason of section 4.2. |

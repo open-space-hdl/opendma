@@ -4,7 +4,10 @@ The notable changes of OpenDMA. The versions follow semantic versioning: 0.y.z w
 version for an incompatible change of ports, generics or the register map, a minor version for a feature and a patch
 version for a fix.
 
-## [Unreleased]
+## [0.2.0] - 2026-10-23
+
+Throughput: the MM2S read bursts in flight as a generic, the rates over the memory latency in the user guide, and
+Open Logic 4.7.0-ft.10. Technology readiness level 3 for Direct Register Mode and Scatter/Gather Mode, unchanged.
 
 ### Added
 
@@ -24,8 +27,8 @@ version for a fix.
   compares the alert counters of every level from WARNING to TB_FAILURE with the expected alerts and ends the
   simulation with a failure. Before, a test that had raised the TB_ERROR stop limit passed when an expected TB_ERROR
   alert did not occur: TC-PKG-10 is the only such test, and its alert occurs.
-- `docs/coverage.md` of 0.1.0 gave a wrong reason for rows 265 and 305 of `odma_s2mm_write`: row 265 is reachable and
-  is now tested (TC-S2-28); row 305 is unreachable for the reason now stated. The behaviour was correct.
+- `docs/coverage.md` of 0.1.0 gave a wrong reason for rows 265 and 305 of `odma_s2mm_write`: both are reachable and
+  are now tested (TC-S2-28). The behaviour was correct.
 - User guide section 7 of 0.1.0 named one waiting S2MM result as the cause of the pause at an S2MM buffer boundary
   in Scatter/Gather Mode; the cause is the window of two descriptors per channel of the engine. Section 7 now also
   gives the rates over the read latency and over the write response latency.

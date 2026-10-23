@@ -10,6 +10,9 @@ QuestaSim (Questa Pro Microchip Edition 2024.3, time resolution 1 fs) ran the te
 with Open Logic 4.7.0-ft.10 (sources and testbenches as in fee4598), with code coverage and in the optimised run without
 it, and all of them passed; the code coverage of the core is in `docs/coverage.md`.
 
+The test end changed after this run (`odmaTestEnd`, see the verification report of `odma_pkg`); the tests of this bench
+expect no alerts, so their results are unchanged.
+
 | Testbench | Tests | Passed |
 | --- | --- | --- |
 | `odma_sg_tb` | 107 (19 test cases: 17 in all six configurations, TC-SG-10 in the four with both channels, TC-SG-17 in `default`) | 107 |

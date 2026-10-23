@@ -20,6 +20,10 @@ version for a fix.
 
 ### Fixed
 
+- Verification: the test end fails on a missing or an extra expected alert, whatever the stop limits of the test. It
+  compares the alert counters of every level from WARNING to TB_FAILURE with the expected alerts and ends the
+  simulation with a failure. Before, a test that had raised the TB_ERROR stop limit passed when an expected TB_ERROR
+  alert did not occur: TC-PKG-10 is the only such test, and its alert occurs.
 - `docs/coverage.md` of 0.1.0 gave a wrong reason for rows 265 and 305 of `odma_s2mm_write`: row 265 is reachable and
   is now tested (TC-S2-28); row 305 is unreachable for the reason now stated. The behaviour was correct.
 - User guide section 7 of 0.1.0 named one waiting S2MM result as the cause of the pause at an S2MM buffer boundary

@@ -4,7 +4,7 @@ The notable changes of OpenDMA. The versions follow semantic versioning: 0.y.z w
 version for an incompatible change of ports, generics or the register map, a minor version for a feature and a patch
 version for a fix.
 
-## [0.2.0] - 2026-10-21
+## [0.2.0] - 2026-10-23
 
 Throughput: the MM2S read bursts in flight as a generic, the rates over the memory latency in the user guide, and
 Open Logic 4.7.0-ft.10. Technology readiness level 3 for Direct Register Mode and Scatter/Gather Mode, unchanged.

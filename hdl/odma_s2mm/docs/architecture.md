@@ -165,7 +165,10 @@ to the master and passes a feed job {beats to the master, beats to drop} per des
 `olo_base_pl_stage` to the feeder. The feeder moves the beats of a job from the data buffer to `Wr_Data` and then
 drops the other beats of the chunk (a last beat without valid bytes, the beats beyond the buffer, the beats of a
 discarded chunk). The stage holds up to two jobs, so the command part issues the next write command while the
-feeder still moves the data of the previous chunk.
+feeder still moves the data of the previous chunk. The command part takes a descriptor only when the stage has space
+for its job. The stage can be full when the next transfer takes its first descriptor: the write master has taken the
+commands of two chunks whose data the feeder has not moved yet, and a job without a write follows them (a last beat
+without valid bytes).
 
 ### 5.2 Transfer
 
@@ -270,7 +273,7 @@ drain clears the buffers.
 `UserTransactionSizeBits_g` = `LengthWidth_g` + 1 (gap G14 of the architecture: up to Open Logic 4.7.0-ft.6,
 `olo_axi_master_full` counted the user data words of a write command at the width of the size field without its
 low bits, so the count wrapped for the sizes in the last user data word below 2**`UserTransactionSizeBits_g`, and
-the master issued no further burst; 4.7.0-ft.8 corrects the count, and with one more size bit every command stays
+the master issued no further burst; 4.7.0-ft.7 corrects the count, and with one more size bit every command stays
 below 2**(`UserTransactionSizeBits_g` - 1) in any case), `AxiMaxBeats_g` = B (section 3; no AXI burst crosses
 4 KB, gap G13),
 `AxiMaxOpenTransactions_g` = 8, `DataFifoDepth_g` = 2 x `ChunkBeats_c` (the ECC-protected write data buffer in
@@ -331,10 +334,12 @@ reset); feeder: `Head_s` (next job), `Feed_s` (beats to the master), `Drop_s` (b
   measured values.
 - Throughput: the channel issues one write command per chunk, once the chunk is complete in the data buffer. With
   equal memory and stream widths the write master takes low-latency commands (section 5.5) and issues the burst at
-  once: 0.91 beats per clock cycle with chunks of 16 beats (the defaults), 0.31 with chunks of 2. With a wider memory
-  it issues a burst once its data are in its own buffer, and a command costs up to about 7 clock cycles: at twice the
-  stream width 0.52 beats per clock cycle with chunks of 8 beats, 0.70 with 16 and 0.95 with 64 (S2-WR-05 requires
-  0.9 from 64 beats). Longer bursts raise it. With a memory four or more times wider than the stream the write side
-  is faster than the stream and the channel takes one beat per clock cycle. A buffer that does not start at a
-  multiple of the memory word adds a burst per chunk where the chunk plan of section 4.2 keeps full chunks; the
+  once: 0.98 beats per clock cycle with chunks of 16 beats (the defaults), 0.31 with chunks of 2. With a wider memory
+  it issues a burst once its data are in its own buffer; the at least four clock cycles of a command overlap with
+  the data of the command before: at twice the stream width 0.85 beats per clock cycle with chunks of 8 beats, 0.98
+  with 16 and 1.0 with 64 (S2-WR-05 requires 0.9 from 64 beats). Longer bursts raise it. The write master keeps at
+  most 8 bursts open (`AxiMaxOpenTransactions_g`), which covers a write response latency while 8 bursts take longer
+  on the stream than a burst waits for its response. With a memory four or more times wider than the stream the
+  write side is faster than the stream and the channel takes one beat per clock cycle. A buffer that does not start
+  at a multiple of the memory word adds a burst per chunk where the chunk plan of section 4.2 keeps full chunks; the
   verification report has the measured values.

@@ -46,6 +46,8 @@ def configs():
     # Different configurations of the two channels, data buffers of two bursts
     cfg += [({**channels(1024, 8, 256, "Mm2s"), **channels(32, 32, 2, "S2mm")}, None),
             ({"Mm2sBufferBeats_g": "32", "S2mmBufferBeats_g": "32"}, None)]
+    # The ends of the range of the MM2S read bursts in flight
+    cfg += [({"Mm2sReadBursts_g": "2"}, None), ({"Mm2sReadBursts_g": "8"}, None)]
     # Channels and the extension window
     cfg += [({"IncludeMm2s_g": "false"}, None), ({"IncludeS2mm_g": "false"}, None), ({"ExtRegs_g": "false"}, None)]
     # Scatter/Gather Mode: the ends of the address and length ranges, each single-channel build
@@ -65,7 +67,8 @@ def configs():
             ({"Mm2sMemWidth_g": "48"}, "Mm2sMemWidth_g must be a power of 2"),
             ({"S2mmStreamWidth_g": "64"}, "S2mmStreamWidth_g must not be larger than S2mmMemWidth_g"),
             ({"Mm2sBurstBeats_g": "3"}, "Mm2sBurstBeats_g must be a power of 2"),
-            ({"S2mmBufferBeats_g": "31"}, "S2mmBufferBeats_g must hold at least two bursts")]
+            ({"S2mmBufferBeats_g": "31"}, "S2mmBufferBeats_g must hold at least two bursts"),
+            ({"Mm2sReadBursts_g": "9"}, "Mm2sReadBursts_g must be 2 to 8")]
     return cfg
 
 

@@ -42,6 +42,7 @@ entity odma_mm2s_th is
         StreamWidth_g : positive;
         BurstBeats_g  : positive;
         BufferBeats_g : positive;
+        ReadBursts_g  : positive;
         Join_g        : boolean
     );
     port (
@@ -162,6 +163,7 @@ begin
             StreamWidth_g => StreamWidth_g,
             BurstBeats_g  => BurstBeats_g,
             BufferBeats_g => BufferBeats_g,
+            ReadBursts_g  => ReadBursts_g,
             Join_g        => Join_g
         )
         port map (

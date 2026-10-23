@@ -157,6 +157,11 @@ architecture sim of odma_core_tb is
     signal S2mmIrq    : std_logic;
     signal EccIrq     : std_logic;
     signal Mm2sRstOut : std_logic;
+    -- Write response latencies of TC-CO-20
+    type Latencies_t is array (0 to 2) of natural;
+
+    constant WrLatencies_c : Latencies_t := (0, 50, 100);
+
     signal S2mmRstOut : std_logic;
     signal PeerBytes  : natural                       := 0;
     signal PeerEmpty  : std_logic                     := '0';
@@ -516,6 +521,8 @@ begin
 
             elsif run("test_concurrent") then
                 log(ID_LOG_HDR, "TC-CO-03 both channels at the same time");
+                -- The read data arrive while S2MM writes, also where the MM2S buffers hold a whole transfer (lw8)
+                Mem_v.setLatency(MemRd_c, 50);
                 scenario("", "dr_concurrent");
                 check_value(Obs.Overlap, ERROR, "a read beat and a write beat in the same clock cycle");
 
@@ -936,8 +943,8 @@ begin
             elsif run("test_sg_boundary_rate") then
                 log(ID_LOG_HDR, "TC-CO-20 S2MM packets over buffers of 1 KB and 4 KB");
 
-                for lat in 0 to 1 loop
-                    Mem_v.setLatency(MemWr_c, 50 * lat);
+                for lat in WrLatencies_c'range loop
+                    Mem_v.setLatency(MemWr_c, WrLatencies_c(lat));
 
                     -- Buffers of 1 KB and of 4 KB at multiples of 64 bytes, buffers of 4 KB 1 byte above
                     for b in 0 to 2 loop
@@ -954,7 +961,7 @@ begin
                             CycU_v := Obs.S2Last - Obs.S2First + 1;
                         end if;
                         log(ID_SEQUENCER, "TC-CO-20 buffers of " & to_string(4 ** minimum(b, 1)) & " KB" &
-                            choose(b = 2, " (unaligned)", "") & ", write response latency " & to_string(50 * lat) &
+                            choose(b = 2, " (unaligned)", "") & ", write response latency " & to_string(WrLatencies_c(lat)) &
                             ": " & to_string(Obs.S2Beats) & " beats in " & to_string(Obs.S2Last - Obs.S2First + 1) &
                             " clock cycles");
                         RateBeats_v := Obs.S2Beats;
@@ -967,11 +974,12 @@ begin
                     Len_v := minimum(4096, MaxLen_c);
                     Cnt_v := Cnt_v - 2 * ((16384 + Len_v - 1) / Len_v - 1);
                     if Cnt_v > 0 then
-                        log(ID_SEQUENCER, "TC-CO-20 write response latency " & to_string(50 * lat) & ": " &
+                        log(ID_SEQUENCER, "TC-CO-20 write response latency " & to_string(WrLatencies_c(lat)) &
+                            ": " &
                             to_string((Cyc1k_v - Cyc4k_v) / Cnt_v) & " clock cycles per buffer boundary, " &
                             to_string(RateBeats_v * 100 / Cyc4k_v) & " beats per 100 clock cycles with 4 KB");
                     end if;
-                    log(ID_SEQUENCER, "TC-CO-20 write response latency " & to_string(50 * lat) &
+                    log(ID_SEQUENCER, "TC-CO-20 write response latency " & to_string(WrLatencies_c(lat)) &
                         ": unaligned buffers of 4 KB take " & to_string((CycU_v - Cyc4k_v) / 32) &
                         " clock cycles more per KB");
                 end loop;

@@ -34,3 +34,9 @@ Mode pass every test in GHDL and in QuestaSim, with and without code coverage; c
 | `odma_s2mm` | S2-1 to S2-3 (S2MM channel) | S2-1, S2-2 done, with the split of packets over several buffers, keyhole, the next buffer accepted while the write responses of the one before arrive, chunks that follow the buffer address in Scatter/Gather Mode and low-latency writes with equal widths; S2-3 in phase c |
 | `odma_sg` | SG-1 to SG-3 (Scatter/Gather engine) | Done, integrated into the core |
 | `odma_core` | CO-1 (core top level) | DR mode and SG mode done |
+
+## Open items
+
+| Item | State |
+| --- | --- |
+| S2MM in SG mode with short buffers and a write response latency | Open: the engine keeps a window of two descriptors per channel, so a buffer that fills faster than the write responses of the buffer before arrive waits at its end ([user guide](user_guide.md#7-performance)). A result queue of two transfers in the S2MM channel together with a window of three S2MM descriptors in the engine raises 512 / 256 bits with 4-beat bursts and 1 KB buffers at a write response latency of 50 clock cycles from 0.47 to 0.69 beats per clock cycle (measured). It needs a window generic per channel in the engine, a queue of issued descriptors of any depth with their statuses in order, a descriptor buffer of three entries for S2MM and an S2MM channel that accepts a third command before the first result |

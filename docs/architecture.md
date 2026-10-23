@@ -55,7 +55,7 @@ masters, the data interfaces AXI4-Stream and the register interface AXI4-Lite. T
 
 OpenDMA is an open DMA core based on the Open Logic VHDL Library. The code lives in
 [open-space-hdl/opendma](https://github.com/open-space-hdl/opendma) under the PSI HDL Library License, Version 1.0,
-the licence of Open Logic. Open Logic is pinned to the tag `4.7.0-ft.8` (f9e7f59) of the branch `fault-tolerant` of
+the licence of Open Logic. Open Logic is pinned to the tag `4.7.0-ft.10` (dc32368) of the branch `fault-tolerant` of
 open-space-hdl/open-logic-ft, the fault-tolerant fork of Open Logic.
 
 OpenDMA is an independent implementation written from the published product guide. The repository contains no
@@ -69,7 +69,7 @@ only to state the compatibility.
 | \[PG021\] | AMD, AXI DMA LogiCORE IP Product Guide, PG021 | v7.1, 24 June 2025 |
 | \[AXI\] | Arm, AMBA AXI Protocol Specification, IHI 0022 | AXI4 and AXI4-Lite |
 | \[AXIS\] | Arm, AMBA AXI-Stream Protocol Specification, IHI 0051 | AXI4-Stream |
-| \[OLO\] | [Open Logic, fault-tolerant fork, branch fault-tolerant](https://github.com/open-space-hdl/open-logic-ft/tree/fault-tolerant) | 4.7.0-ft.8 (f9e7f59) |
+| \[OLO\] | [Open Logic, fault-tolerant fork, branch fault-tolerant](https://github.com/open-space-hdl/open-logic-ft/tree/fault-tolerant) | 4.7.0-ft.10 (dc32368) |
 
 ### Conventions
 
@@ -211,6 +211,7 @@ transactions of a port use the same ID, as \[AXI\] allows for masters without re
 | `UseRxLength_g` | `c_sg_use_stsapp_length` | boolean | false | c |
 | `MicroDma_g` | `c_micro_dma` | boolean | false | c |
 | `Mm2sBufferBeats_g`, `S2mmBufferBeats_g` | none: depth of the data buffer of a channel in stream beats | at least two bursts | four bursts | a |
+| `Mm2sReadBursts_g` | none: MM2S read bursts in flight (the internal FIFO of the read master) | 2 to 8 | 6 | a |
 | `ExtRegs_g` | none: extension register window (D12) | boolean | true | a |
 
 The parameters of \[PG021\] Table 44 that have no generic: `c_enable_multi_channel`, `c_num_mm2s_channels` and
@@ -356,8 +357,8 @@ wrapper of `olo_axi_master_simple`, instead.
 | G10 | Packets of several buffers with any lengths and addresses (Tables 30 and 37) | Every command delivers its data starting in lane 0; Open Logic has no entity that joins or splits a byte stream | New in open-logic-ft: `olo_base_stream_join` packs the valid bytes of consecutive beats into full beats (MM-2 joins the buffers of a packet), `olo_base_stream_split` cuts the packets into segments of a size given per segment, each starting in lane 0 (S2-1 cuts a packet at the end of each buffer) | b |
 | G11 | Descriptor fetch and update of 8 to 13 words | `olo_axi_master_simple` moves whole words of the AXI width in bursts of any beat count | No gap: SG-3 uses `olo_ft_axi_master_simple` with 32 data bits; descriptors are aligned to 64 bytes, so no alignment logic is needed | b |
 | G12 | Stream width at most the memory width, both powers of two; up to 16 outstanding bursts | `AxiDataWidth_g` an integer multiple of `UserDataWidth_g`; at most 8 open transactions | No gap: every width pair of \[PG021\] Table 44 is valid; 8 open transactions per direction | a |
-| G13 | Bursts of up to 256 beats at every data width (`c_mm2s_burst_size`, `c_s2mm_burst_size` up to 256 with up to 1024 bits) | `olo_axi_master_simple` does not elaborate when `AxiMaxBeats_g` exceeds the beats of 4 KB (`4096 / (AxiDataWidth_g / 8)`): a slice of its 4 KB beat count is out of range | No change needed: MM-1 and S2-2 run the masters with at most the beats of 4 KB; no AXI burst crosses 4 KB, so the bursts are the same. The defect is corrected in open-logic-ft 4.7.0-ft.8 | a |
-| G14 | Write commands of every length up to 2**`LengthWidth_g` - 1 bytes | `olo_axi_master_full` computes the number of user data words of a write command (size / B + 1, B = `UserDataWidth_g` / 8) at the width of the size field without its low log2(B) bits, so the number wraps to 0 for sizes from 2**`UserTransactionSizeBits_g` - B + 1 to 2**`UserTransactionSizeBits_g` - 1; the master then accepts the next command and its data but issues no further burst (for example a command of 4000 to 4095 bytes with 128-byte user words and `UserTransactionSizeBits_g` 12) | No change needed: MM-1 and S2-2 run the masters with `UserTransactionSizeBits_g` = `LengthWidth_g` + 1, so no command reaches that word count; the rule `UserTransactionSizeBits_g` < `AxiAddrWidth_g` - 1 still holds. The defect is corrected in open-logic-ft 4.7.0-ft.8 | a |
+| G13 | Bursts of up to 256 beats at every data width (`c_mm2s_burst_size`, `c_s2mm_burst_size` up to 256 with up to 1024 bits) | `olo_axi_master_simple` does not elaborate when `AxiMaxBeats_g` exceeds the beats of 4 KB (`4096 / (AxiDataWidth_g / 8)`): a slice of its 4 KB beat count is out of range | No change needed: MM-1 and S2-2 run the masters with at most the beats of 4 KB; no AXI burst crosses 4 KB, so the bursts are the same. The defect is corrected in open-logic-ft 4.7.0-ft.7 | a |
+| G14 | Write commands of every length up to 2**`LengthWidth_g` - 1 bytes | `olo_axi_master_full` computes the number of user data words of a write command (size / B + 1, B = `UserDataWidth_g` / 8) at the width of the size field without its low log2(B) bits, so the number wraps to 0 for sizes from 2**`UserTransactionSizeBits_g` - B + 1 to 2**`UserTransactionSizeBits_g` - 1; the master then accepts the next command and its data but issues no further burst (for example a command of 4000 to 4095 bytes with 128-byte user words and `UserTransactionSizeBits_g` 12) | No change needed: MM-1 and S2-2 run the masters with `UserTransactionSizeBits_g` = `LengthWidth_g` + 1, so no command reaches that word count; the rule `UserTransactionSizeBits_g` < `AxiAddrWidth_g` - 1 still holds. The defect is corrected in open-logic-ft 4.7.0-ft.7 | a |
 
 G1, G5 and G10 are additions to open-logic-ft, available from tag 4.7.0-ft.8 (G5 from 4.7.0-ft.7): the ports
 `CmdRd_Fixed` and `CmdWr_Fixed` of the masters (G1), `Rd_ErrorResp` and `Wr_ErrorResp` (G5), and the entities

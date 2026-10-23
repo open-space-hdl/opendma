@@ -112,7 +112,7 @@ architecture rtl of odma_s2mm is
     constant DescDepth_c   : positive  := 32;
     -- Size bits of the write master: one more than the length, so that no command reaches the last user word
     -- below 2**size bits, where the word count of olo_axi_master_full wrapped up to Open Logic 4.7.0-ft.6 (gap G14,
-    -- corrected in 4.7.0-ft.8)
+    -- corrected in 4.7.0-ft.7)
     constant SizeBits_c    : positive := LengthWidth_g + 1;
 
     -- Chunk former to the buffers

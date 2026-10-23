@@ -213,6 +213,21 @@ begin
             end if;
         end procedure;
 
+        -- The default generics with reads MM2S read bursts in flight; exp as for checkConfig
+        procedure checkReads (
+            reads : natural;
+            exp   : string) is
+            variable C_v : NatArray_t(0 to 9) := (32, 14, 32, 32, 16, 64, 32, 32, 16, 64);
+        begin
+            if exp = "" then
+                check_value(coreConfigError(C_v(0), C_v(1), C_v(2), C_v(3), C_v(4), C_v(5), C_v(6), C_v(7), C_v(8),
+                                            C_v(9), reads) = "", ERROR, "consistent read bursts in flight");
+            else
+                checkMsg(coreConfigError(C_v(0), C_v(1), C_v(2), C_v(3), C_v(4), C_v(5), C_v(6), C_v(7), C_v(8), C_v(9),
+                                         reads), exp);
+            end if;
+        end procedure;
+
         -- Compares two text files line by line
         procedure compareFiles (
             got : string;
@@ -411,6 +426,11 @@ begin
                 checkConfig((32, 14, 32, 32, 16, 64, 24, 8, 16, 64), "S2mmMemWidth_g");
                 checkConfig((32, 14, 32, 32, 16, 64, 32, 4, 16, 64), "S2mmStreamWidth_g must be a power of 2");
                 checkConfig((32, 14, 32, 32, 16, 64, 32, 32, 16, 31), "S2mmBufferBeats_g");
+                -- The MM2S read bursts in flight: the ends of the range and one value outside each end
+                checkReads(2, "");
+                checkReads(8, "");
+                checkReads(1, "Mm2sReadBursts_g must be 2 to 8");
+                checkReads(9, "Mm2sReadBursts_g must be 2 to 8");
 
             elsif run("test_err_codes") then
                 log(ID_LOG_HDR, "TC-PKG-05 error codes");

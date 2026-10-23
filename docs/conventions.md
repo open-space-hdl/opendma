@@ -117,8 +117,9 @@ testbench. `hdl/<module>/README.md` links the four documents and explains how to
 - The harness (`_th`) contains clocks, reset, the DUT and the VVCs, the testbench (`_tb`) contains one
   `if run("<test id>") then` block per test case of the verification plan. The test IDs of the plan and the names
   in `run(...)` are identical.
-- A test passes only when UVVM reports no unexpected alerts and every expected alert occurred (the test end
-  procedure of `odma_tb_pkg`).
+- A test passes only when the alert counters of every level from WARNING to TB_FAILURE equal the expected alerts,
+  whatever the stop limits of the test: the test end procedure of `odma_tb_pkg` compares them and ends the
+  simulation with a failure on a difference.
 - A timed wait (`wait until <condition> for <timeout>`) ends with a check of its condition, so that a missing event
   fails the test instead of timing out silently: the procedures `odmaWaitHigh`, `odmaWaitHighAtEdge` and
   `odmaWaitAtLeast` of `odma_tb_pkg` wait and check that the condition ended the wait before the timeout. A

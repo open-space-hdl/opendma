@@ -2,17 +2,20 @@
 
 ## 1. Test results
 
-Run on 2026-10-19 in the GHDL CI of the repository, GitHub Actions run 39290223755 on commit 8c32323 (its
+Run on 2026-10-20 in the GHDL CI of the repository, GitHub Actions run 39467613918 on commit fee4598 (its
 `results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
 `python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_mm2s_tb`.
 
-The same tests pass in QuestaSim (Questa Pro Microchip Edition 2024.3, time resolution 1 fs), with code coverage and in
-the optimised run without it, on 2026-10-19 on commit 6252594 (sources and testbenches as in 8c32323); the code coverage
-of the core is in `docs/coverage.md`.
+QuestaSim (Questa Pro Microchip Edition 2024.3, time resolution 1 fs) ran the tests of release 0.2.0 on commit ad726b1
+with Open Logic 4.7.0-ft.10 (sources and testbenches as in fee4598), with code coverage and in the optimised run without
+it, and all of them passed; the code coverage of the core is in `docs/coverage.md`.
+
+The test end changed after this run (`odmaTestEnd`, see the verification report of `odma_pkg`); the tests of this bench
+expect no alerts, so their results are unchanged.
 
 | Testbench | Tests | Passed |
 | --- | --- | --- |
-| `odma_mm2s_tb` | 320 (20 test cases: 16 in all 18 configurations, TC-MM-16 to TC-MM-18 and TC-MM-20 in the eight `j_` configurations) | 320 |
+| `odma_mm2s_tb` | 352 (20 test cases: 16 in all 20 configurations, TC-MM-16 to TC-MM-18 and TC-MM-20 in the eight `j_` configurations) | 352 |
 
 ## 2. Summary
 
@@ -21,26 +24,36 @@ The sources analyse with `ghdl -a --std=08` without `-frelaxed` and without warn
 `ghdl --synth` without warnings and without latches in the configurations
 of section 4.
 
-Measured throughput of TC-MM-05 (64 bursts or the longest length, memory and stream peer always ready):
+Measured throughput of TC-MM-05 (64 bursts or the longest length, stream peer always ready; the memory takes every
+read burst at once and returns its first beat after the read latency, the further beats without wait states; the
+`j_` configurations give the same figures):
 
-| Configuration | Stream beats per burst | Beats | Clock cycles from the first to the last beat |
-| --- | --- | --- | --- |
-| `w32_s32` | 16 | 1024 | 1024 |
-| `w64_s8` | 128 | 8192 | 8192 |
-| `w128_s32` | 1024 | 65536 | 65536 |
-| `w128_s64` | 64 | 4096 | 4096 |
-| `w256_s16` | 128 | 8192 | 8192 |
-| `w256_s128` | 8 | 512 | 512 |
-| `w512_s256` | 16 | 1024 | 1024 |
-| `w512_s512` | 2 | 128 | 252 |
-| `w1024_s8` | 256 | 255 | 255 |
-| `w1024_s1024` | 32 (bursts of 4 KB) | 32 | 32 |
+| Configuration | Stream beats per burst | `ReadBursts_g` | Beats | Clock cycles from the first to the last beat, read latency 0 / 20 / 50 / 100 | Beats per clock cycle, read latency 20 / 50 / 100 |
+| --- | --- | --- | --- | --- | --- |
+| `w32_s32` | 16 | 6 | 1024 | 1024 / 1024 / 1024 / 1284 | 1.00 / 1.00 / 0.80 |
+| `w32_s32_r2` | 16 | 2 | 1024 | 1024 / 1334 / 2264 / 3814 | 0.77 / 0.45 / 0.27 |
+| `w64_s8` | 128 | 6 | 8192 | 8192 / 8192 / 8192 / 8192 | 1.00 / 1.00 / 1.00 |
+| `w128_s32` | 1024 | 6 | 65536 | 65536 / 65536 / 65536 / 65536 | 1.00 / 1.00 / 1.00 |
+| `w128_s64` | 64 | 6 | 4096 | 4096 / 4096 / 4096 / 4096 | 1.00 / 1.00 / 1.00 |
+| `w256_s16` | 128 | 6 | 8192 | 8192 / 8192 / 8192 / 8192 | 1.00 / 1.00 / 1.00 |
+| `w256_s128` | 8 | 6 | 512 | 512 / 512 / 662 / 1162 | 1.00 / 0.77 / 0.44 |
+| `w256_s128_r8` | 8 | 8 | 512 | 512 / 512 / 512 / 855 | 1.00 / 1.00 / 0.60 |
+| `w512_s256` | 16 | 6 | 1024 | 1024 / 1024 / 1024 / 1274 | 1.00 / 1.00 / 0.80 |
+| `w512_s512` | 2 | 6 | 128 | 252 / 292 / 592 / 1092 | 0.44 / 0.22 / 0.12 |
+| `w1024_s8` | 256 | 6 | 255 | 255 / 255 / 255 / 255 | 1.00 / 1.00 / 1.00 |
+| `w1024_s1024` | 32 (bursts of 4 KB) | 6 | 32 | 32 / 32 / 32 / 32 | 1.00 / 1.00 / 1.00 |
+
+The read master keeps `ReadBursts_g` bursts in flight (its internal read FIFO), so with T stream beats per burst
+and a read latency of L clock cycles the channel sends about min(1, `ReadBursts_g` x T / (L + T + 5)) beats per
+clock cycle; where MM-RD-07 applies (T >= 8, L <= (`ReadBursts_g` - 1) x T - 8) TC-MM-05 checks one beat per
+clock cycle. `w1024_s8` and `w1024_s1024` move one burst, whose latency lies before the first beat.
 
 Findings:
 
 | Finding | Resolution |
 | --- | --- |
-| With fewer than 8 stream beats per burst the channel does not reach one beat per clock cycle: the read master requests a burst only when its internal FIFOs of two bursts can take it, which does not hide the read latency of the memory for short bursts | MM-RD-05 applies from 8 stream beats per burst; the architecture (section 8) states the measured throughput below |
+| With fewer than 8 stream beats per burst the channel does not reach one beat per clock cycle: the read master requests a burst only when its internal read FIFO (`ReadBursts_g` bursts) can take it, which does not hide the read latency of the memory for short bursts | MM-RD-05 applies from 8 stream beats per burst; the architecture (section 8) states the measured throughput below |
+| With a read latency the read master kept two bursts in flight, the default depth of its internal FIFO: 0.77, 0.45 and 0.27 beats per clock cycle at read latencies of 20, 50 and 100 clock cycles with 16 stream beats per burst | `ReadBursts_g` sets the depth of the internal read FIFO in bursts (default 6 in the core): one beat per clock cycle up to a read latency of (`ReadBursts_g` - 1) x T - 8 (MM-RD-07), checked by TC-MM-05; with the depth not passed to the read master TC-MM-05 fails |
 | The result was specified after the handshake of the last beat at the input of the output register stage, before the stream peer had taken the beat | The result waits until the register stage is empty (MM-ST-03, architecture section 5); TC-MM-08 delays the last beat by 40 clock cycles |
 | The transfer and response buffers are `olo_ft_fifo_sync` instances without an index in the ECC counters of the extension window | Indices 4 and 5 of the extension window; `Ecc_Sec`, `Ecc_Ded` and `EccInj_Valid` have one bit per buffer; TC-MM-13 injects into all three buffers |
 | A command of length 0 had no defined behaviour; in Scatter/Gather Mode a buffer length of 0 is an internal error | No read, no beat, result with the internal error code (MM-RD-06, interpretation M3); TC-MM-10 |
@@ -69,6 +82,7 @@ read.
 | `StreamWidth_g` | 8 to 1024, powers of 2, at most `MemWidth_g` | all | 8, 1024 |
 | `BurstBeats_g` | 2 to 256, powers of 2 | 2, 4, 8, 16, 32, 256 | 2, 256 |
 | `BufferBeats_g` | at least 2 x `BurstBeats_g` x `MemWidth_g` / `StreamWidth_g` | four bursts | two bursts, four bursts |
+| `ReadBursts_g` | 2 to 8 | 2 (`w32_s32_r2`), 6, 8 (`w256_s128_r8`) | 2, 6, 8 (in the core, `Mm2sReadBursts_g`); 9 rejected |
 | `Join_g` | boolean | false, true (the `j_` configurations) | false, true (in the core, Scatter/Gather Mode) |
 
 ## 5. Checks of the testbench

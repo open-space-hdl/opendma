@@ -143,7 +143,7 @@ Assertions of severity failure stop the elaboration of an inconsistent configura
 
 | Check | Message |
 | --- | --- |
-| `coreConfigError` of `odma_pkg` (address and length width, power-of-two widths, stream not wider than the memory, burst sizes, buffers of at least two bursts) | The prefix `odma_core:` followed by the message of the function, which names the generic |
+| `coreConfigError` of `odma_pkg` (address and length width, power-of-two widths, stream not wider than the memory, burst sizes, buffers of at least two bursts, MM2S read bursts in flight) | The prefix `odma_core:` followed by the message of the function, which names the generic |
 | `IncludeMm2s_g` or `IncludeS2mm_g` | `IncludeMm2s_g or IncludeS2mm_g must be true` |
 | not `StsCntrlStrm_g` and not `UseRxLength_g` | `StsCntrlStrm_g and UseRxLength_g must be false, the control and status streams are not implemented` |
 | not `MicroDma_g` | `MicroDma_g must be false, the micro DMA configuration is not implemented` |

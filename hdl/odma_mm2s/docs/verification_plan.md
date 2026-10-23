@@ -24,11 +24,13 @@ memory contents, never by the RTL. The AXI4-Stream VVC of UVVM is not used: its 
 | VUnit configuration | `MemWidth_g`, `StreamWidth_g`, `BurstBeats_g`, `AddrWidth_g`, `LengthWidth_g` | Purpose |
 | --- | --- | --- |
 | `w32_s32` | 32, 32, 16, 32, 26 | Default of PG021 |
+| `w32_s32_r2` | 32, 32, 16, 32, 26; `ReadBursts_g` 2 | The fewest read bursts in flight |
 | `w64_s8` | 64, 8, 16, 40, 26 | Narrow stream, wide memory |
 | `w128_s32` | 128, 32, 256, 64, 26 | Longest burst, 64-bit addresses |
 | `w128_s64` | 128, 64, 32, 32, 16 | Stream width 64 |
 | `w256_s16` | 256, 16, 8, 48, 20 | Memory width 256, stream width 16 |
 | `w256_s128` | 256, 128, 4, 32, 18 | Stream width 128 |
+| `w256_s128_r8` | 256, 128, 4, 32, 18; `ReadBursts_g` 8 | The most read bursts in flight |
 | `w512_s256` | 512, 256, 8, 36, 22 | Stream width 256 |
 | `w512_s512` | 512, 512, 2, 32, 14 | Equal widths, shortest burst |
 | `w1024_s8` | 1024, 8, 2, 32, 8 | Widest ratio, shortest length width |
@@ -36,10 +38,11 @@ memory contents, never by the RTL. The AXI4-Stream VVC of UVVM is not used: its 
 | `j_w64_s8`, `j_w256_s16`, `j_w32_s32`, `j_w128_s64`, `j_w256_s128`, `j_w512_s256`, `j_w512_s512`, `j_w1024_s1024` | as the configuration without `j_`, `Join_g` true | The stream join with every stream width (1 to 128 byte lanes) |
 
 Every configuration has a data buffer of four bursts (`BufferBeats_g` = 4 x `BurstBeats_g` x `MemWidth_g` /
-`StreamWidth_g`); together the configurations simulate every memory width and every stream width, and every stream
-width with the join. The tests of phase a run in every configuration (with `Join_g` they show that the join passes
-packets of one command unchanged); the tests of Scatter/Gather Mode (TC-MM-16 to TC-MM-18 and TC-MM-20) run in
-the `j_` configurations; lengths are limited to 2**`LengthWidth_g` - 1.
+`StreamWidth_g`) and 6 read bursts in flight (`ReadBursts_g`, the default of the core), except `w32_s32_r2` and
+`w256_s128_r8`, the ends of its range; together the configurations simulate every memory width and every stream
+width, and every stream width with the join. The tests of phase a run in every configuration (with `Join_g` they
+show that the join passes packets of one command unchanged); the tests of Scatter/Gather Mode (TC-MM-16 to TC-MM-18
+and TC-MM-20) run in the `j_` configurations; lengths are limited to 2**`LengthWidth_g` - 1.
 
 Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the batches of phases a and b.
 
@@ -51,8 +54,8 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | `test_unaligned` (TC-MM-02) | Every start offset within a memory word combined with lengths from 1 to three memory words; first byte in lane 0, last `TKeep`; the statistics of the memory model show reads only of the words that contain the buffer | MM-RD-01, MM-ST-01 |
 | `test_bursts` (TC-MM-03) | Transfers that start shortly before a 4 KB boundary and span several boundaries; the memory model checks every burst against 4 KB and `BurstBeats_g` (no alert allowed) | MM-IF-01, MM-RD-02 |
 | `test_backpressure` (TC-MM-04) | 20 transfers of random address and length with 50 % random backpressure of the stream peer and 50 % stall and a latency of 30 cycles in the memory model; data identical | MM-ST-01, MM-ST-02 |
-| `test_throughput` (TC-MM-05) | A transfer of 64 bursts with a ready stream peer and memory: with at least 8 stream beats per burst, the number of clock cycles from the first to the last stream beat exceeds the number of beats by at most 2; in the other configurations the number is logged and listed in the verification report | MM-RD-05 |
-| `test_bus_not_held` (TC-MM-06) | The stream peer stops after 10 beats of a long transfer; until no further read burst comes for 1000 clock cycles and for 2000 clock cycles after that, the R channel never has `RValid` without `RReady`; the number of read bursts stays bounded by the data buffer and the internal FIFOs of the read master; the transfer completes when the peer resumes | MM-RD-03 |
+| `test_throughput` (TC-MM-05) | A transfer of 64 bursts with a ready stream peer and memory: with at least 8 stream beats per burst, the number of clock cycles from the first to the last stream beat exceeds the number of beats by at most 2; in the other configurations the number is logged and listed in the verification report. The same transfer with a read latency of 20, 50 and 100 clock cycles in the memory model: where MM-RD-07 applies (at least 8 stream beats per burst and a latency of at most (`ReadBursts_g` - 1) x these beats - 8) the number exceeds the beats by at most 2; all numbers are logged and listed in the verification report | MM-RD-05, MM-RD-07 |
+| `test_bus_not_held` (TC-MM-06) | The stream peer stops after 10 beats of a long transfer; until no further read burst comes for 1000 clock cycles and for 2000 clock cycles after that, the R channel never has `RValid` without `RReady`; the number of read bursts stays bounded by the data buffer and the internal FIFO of the read master (`ReadBursts_g` bursts); the transfer completes when the peer resumes | MM-RD-03 |
 | `test_queue` (TC-MM-07) | Three commands back to back: three packets in order and three results in order, the second one rejected (buffer beyond the top) between two good ones | MM-IF-03, MM-ST-03, MM-RD-04 |
 | `test_result_timing` (TC-MM-08) | The stream peer takes the last beat 40 clock cycles late: the result appears only after the handshake of the last beat | MM-ST-03 |
 | `test_read_errors` (TC-MM-09) | SLVERR on a middle beat, DECERR on the last beat, SLVERR followed by DECERR within one transfer: the transfer is sent completely with `TLast`, the result carries an error code; a transfer after a failed one has no error | MM-ER-01, MM-ER-02 |
@@ -81,6 +84,7 @@ Clock 100 MHz. Simulators: GHDL; QuestaSim with and without code coverage in the
 | MM-RD-04 | TC-MM-07, TC-MM-10 |
 | MM-RD-05 | TC-MM-05 |
 | MM-RD-06 | TC-MM-10 |
+| MM-RD-07 | TC-MM-05 |
 | MM-ST-01 | TC-MM-01, TC-MM-02, TC-MM-04, TC-MM-14 |
 | MM-ST-02 | TC-MM-01, TC-MM-04 |
 | MM-ST-03 | TC-MM-01, TC-MM-07, TC-MM-08, TC-MM-17 |

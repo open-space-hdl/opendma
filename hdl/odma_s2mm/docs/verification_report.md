@@ -2,17 +2,20 @@
 
 ## 1. Test results
 
-Run on 2026-10-19 in the GHDL CI of the repository, GitHub Actions run 39290223755 on commit 8c32323 (its
+Run on 2026-10-20 in the GHDL CI of the repository, GitHub Actions run 39467613918 on commit fee4598 (its
 `results.xml`), with GHDL 6.0.0 (mcode), VUnit 5.0.0.dev7 and UVVM 2026.03.20:
 `python run.py -p 4 --xunit-xml results.xml`, the tests of `odma_s2mm_tb`.
 
-The same tests pass in QuestaSim (Questa Pro Microchip Edition 2024.3, time resolution 1 fs), with code coverage and in
-the optimised run without it, on 2026-10-19 on commit 6252594 (sources and testbenches as in 8c32323); the code coverage
-of the core is in `docs/coverage.md`.
+QuestaSim (Questa Pro Microchip Edition 2024.3, time resolution 1 fs) ran the tests of release 0.2.0 on commit ad726b1
+with Open Logic 4.7.0-ft.10 (sources and testbenches as in fee4598), with code coverage and in the optimised run without
+it, and all of them passed; the code coverage of the core is in `docs/coverage.md`.
+
+The test end changed after this run (`odmaTestEnd`, see the verification report of `odma_pkg`); the tests of this bench
+expect no alerts, so their results are unchanged.
 
 | Testbench | Tests | Passed |
 | --- | --- | --- |
-| `odma_s2mm_tb` | 422 (27 test cases: 19 in all 19 configurations, TC-S2-07 and TC-S2-08 in the ten without the split, TC-S2-17 to TC-S2-19 and TC-S2-24 in the nine `s_` configurations, TC-S2-21 in four, TC-S2-25 in one) | 422 |
+| `odma_s2mm_tb` | 429 (28 test cases: 19 in all 19 configurations, TC-S2-07 and TC-S2-08 in the ten without the split, TC-S2-17 to TC-S2-19 and TC-S2-24 in the nine `s_` configurations, TC-S2-28 in seven, TC-S2-21 in four, TC-S2-25 in one) | 429 |
 
 ## 2. Summary
 
@@ -29,23 +32,23 @@ boundary and one 1 byte above (with 8-bit streams the two offsets are the same):
 
 | Configuration | Beats per chunk | Memory width / stream width | Beats | Aligned | Stream width above | 1 byte above |
 | --- | --- | --- | --- | --- | --- | --- |
-| `w32_s32` | 16 | 1 | 1024 | 1125 | 1125 | 1182 |
-| `w64_s8` | 128 | 8 | 8192 | 8192 | 8303 | 8303 |
+| `w32_s32` | 16 | 1 | 1024 | 1040 | 1040 | 1043 |
+| `w64_s8` | 128 | 8 | 8192 | 8192 | 8192 | 8192 |
 | `w128_s32` | 1024 | 4 | 65536 | 65536 | 65536 | 65536 |
-| `w128_s64` | 64 | 2 | 4096 | 4299 | 4527 | 4527 |
+| `w128_s64` | 64 | 2 | 4096 | 4096 | 4096 | 4096 |
 | `w256_s16` | 128 | 16 | 8192 | 8192 | 8303 | 8303 |
-| `w256_s128` | 8 | 2 | 512 | 995 | 1223 | 1223 |
-| `w512_s256` | 16 | 2 | 1024 | 1467 | 1695 | 1695 |
-| `w512_s512` | 2 | 1 | 128 | 412 | 416 | 640 |
+| `w256_s128` | 8 | 2 | 512 | 604 | 720 | 720 |
+| `w512_s256` | 16 | 2 | 1024 | 1040 | 1040 | 1040 |
+| `w512_s512` | 2 | 1 | 128 | 414 | 418 | 642 |
 | `w1024_s8` | 256 | 128 | 255 | 255 | 255 | 255 |
 | `w1024_s1024` | 32 | 1 | 32 | 32 | 32 | 32 (the packet fits into the data buffer) |
-| `s_w32_s32` | 16 | 1 | 1024 | 1125 | 1125 | 1182 |
+| `s_w32_s32` | 16 | 1 | 1024 | 1040 | 1040 | 1043 |
 | `s_w64_s8` | 128 | 8 | 8192 | 8192 | 8192 | 8192 |
-| `s_w128_s64` | 64 | 2 | 4096 | 4299 | 4298 | 4378 |
-| `s_w256_s16` | 128 | 16 | 8192 | 8192 | 8192 | 8238 |
-| `s_w256_s128` | 8 | 2 | 512 | 995 | 994 | 1223 |
-| `s_w512_s256` | 16 | 2 | 1024 | 1467 | 1466 | 1620 |
-| `s_w512_s512` | 2 | 1 | 128 | 407 | 411 | 631 |
+| `s_w128_s64` | 64 | 2 | 4096 | 4096 | 4096 | 4096 |
+| `s_w256_s16` | 128 | 16 | 8192 | 8192 | 8192 | 8192 |
+| `s_w256_s128` | 8 | 2 | 512 | 604 | 603 | 720 |
+| `s_w512_s256` | 16 | 2 | 1024 | 1040 | 1039 | 1047 |
+| `s_w512_s512` | 2 | 1 | 128 | 409 | 413 | 633 |
 | `s_w1024_s8` | 256 | 128 | 255 | 255 | 255 | 255 |
 | `s_w1024_s1024` | 32 | 1 | 32 | 32 | 32 | 32 (the packet fits into the data buffer) |
 
@@ -217,5 +220,6 @@ at least one test case; the RTL of the repository passes all of them:
 | The size of the first chunk for every chunk of the buffer | TC-S2-06, TC-S2-24 |
 | The plan of the buffer before (loaded at its last beat) | TC-S2-06, TC-S2-24 |
 | Low-latency write commands with every width | TC-S2-01, TC-S2-05, TC-S2-06, by the W-gap check, in the 13 configurations with a memory wider than the stream |
+| A descriptor taken while the stage of the feed jobs is full (its job is lost) | TC-S2-28 |
 
 The recovery branches of the state machines (`when others`) cannot be reached through the ports.

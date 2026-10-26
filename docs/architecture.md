@@ -29,7 +29,7 @@ The scope is developed in four phases (section 11):
   (MM2S) and received from a status stream (S2MM), the receive length taken from the status stream; the micro DMA
   configuration.
 - **Phase d, software on hardware.** The bare-metal and Linux drivers of a processor system operating OpenDMA on a
-  target board.
+  target board, as part of a reference system of the family.
 
 Fault-tolerance additions that \[PG021\] does not have (ECC event counters, error injection, configuration readback)
 sit in an extension register window outside the compatible register map (D12).
@@ -380,7 +380,7 @@ names its items of the published interface, so the traceability matrix of sectio
 | --- | --- | --- | --- |
 | Unit | `odma_registers`, `odma_mm2s`, `odma_s2mm`, `odma_sg` | `<entity>_th.vhd` (clock, DUT, models) and `<entity>_tb.vhd` (VUnit runner, one `run("test_...")` per test of the verification plan) | UVVM checks; register values against the expected values of the plan; streams and memory against the stream models and the memory model |
 | Core | `odma_core` in the configurations of the verification report | AXI4-Lite VVC with the sequence player, AXI memory model on every memory port, AXI4-Stream VVCs on the streams | The programming sequences of \[PG021\] chapter 4 end to end, errors injected by the memory model, soft reset under load, interrupts |
-| Software (phase d) | The core in a processor system on hardware | The drivers of the processor system | Transfers of the driver test applications; hardware test report |
+| Software (phase d) | The core in a processor system on hardware, as part of a reference system of the family | The drivers of the processor system | Transfers of the driver test applications; hardware test report |
 
 ### Framework
 
@@ -557,7 +557,7 @@ with it is checked once for `MM2S_` and once for `S2MM_`.
    without coverage for phases a and b together on the Open Logic tag with G1, G5 and G10.
 4. Phase c: control and status streams (MM-3, S2-3), receive length, micro DMA.
 5. Phase d: synthesis and timing closure on a target board, the drivers of a processor system against the core,
-   hardware test report.
+   hardware test report, as part of a reference system of the family.
 
 Possible later extensions: asynchronous clocks for the stream and memory ports (\[PG021\] Table 43) with
 `olo_ft_fifo_async` and `olo_base_cc_*` (`SyncTmr_g` = true); a vendor wrapper with the signal names of the vendor

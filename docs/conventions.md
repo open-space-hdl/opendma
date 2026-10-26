@@ -146,5 +146,6 @@ testbench. `hdl/<module>/README.md` links the four documents and explains how to
   regression is green.
 - `main` receives only release branches `release/x.y.z` cut from `develop` and hotfix branches `hotfix/x.y.z`. The
   full regression in QuestaSim, with and without code coverage, runs on the head of the release branch. Releases are
-  tagged `vX.Y.Z` with semantic versioning, below 1.0.0 until the hardware test.
+  tagged `vX.Y.Z` with semantic versioning, below 1.0.0 until the hardware test as part of a reference system of the
+  family.
 - Commit messages: imperative subject line, body explains what and why.

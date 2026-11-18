@@ -4,6 +4,32 @@ The notable changes of OpenDMA. The versions follow semantic versioning: 0.y.z w
 version for an incompatible change of ports, generics or the register map, a minor version for a feature and a patch
 version for a fix.
 
+## [0.2.1] - 2026-11-18
+
+Open Logic 4.8.0-ft.2. No port, generic, register or behaviour of OpenDMA changes. Technology readiness level 3 for
+Direct Register Mode and Scatter/Gather Mode, unchanged.
+
+### Changed
+
+- Open Logic 4.8.0-ft.2 (1f4a6c3), based on Open Logic 4.8.0 (from 4.7.0-ft.10). Of the 25 Open Logic files that
+  OpenDMA compiles, only `olo_axi_master_full` differs, inside the entity: the width of its beat count and the byte
+  offset of an address are computed in a form that differs from 4.7.0-ft.10 for 8-bit AXI data only. At the memory
+  widths of OpenDMA (32 to 1024 bits) the entity behaves as before.
+- Documentation: the hardware test with the drivers of a processor system (phase d) and TRL 4 are part of a
+  reference system of the family.
+
+### Fixed
+
+- Documentation build: the heading hook accepts the additional argument of the table of contents extension of
+  Markdown 3.11.3, and the build pins Markdown 3.11.3.
+
+### Verification
+
+- The sources and testbenches of OpenDMA are those of 0.2.0. The release evidence is the full GHDL regression of the
+  release head in the CI of the release pull request. QuestaSim does not run again: the QuestaSim results and the
+  code coverage of 0.2.0 (ad726b1) stand, as no source or testbench of OpenDMA changed and the only changed Open
+  Logic file behaves as before at the memory widths of OpenDMA.
+
 ## [0.2.0] - 2026-10-23
 
 Throughput: the MM2S read bursts in flight as a generic, the rates over the memory latency in the user guide, and

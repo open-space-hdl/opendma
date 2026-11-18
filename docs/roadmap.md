@@ -13,7 +13,7 @@ Mode pass every test in GHDL and in QuestaSim, with and without code coverage; c
 | Next level | What is needed | State |
 | --- | --- | --- |
 | TRL 3 of phase c | The control and status streams implemented and fully verified by simulation (GHDL and QuestaSim, code coverage closed), traceability matrix complete | Open |
-| TRL 4 | Synthesis and timing closure on a target FPGA; hardware test with the drivers of a processor system; hardware test plan and test report | Open |
+| TRL 4 | Synthesis and timing closure on a target FPGA; hardware test with the drivers of a processor system as part of a reference system of the family; hardware test plan and test report | Open |
 
 ## Development phases
 
@@ -22,7 +22,7 @@ Mode pass every test in GHDL and in QuestaSim, with and without code coverage; c
 | a | Direct Register Mode: MM2S and S2MM channels, register bank, interrupts, errors, soft reset | Done: verified with GHDL and QuestaSim, code coverage closed or justified |
 | b | Scatter/Gather Mode: descriptor engine, cyclic mode, interrupt coalescing and delay, packets of several buffers, keyhole | Done: verified with GHDL and QuestaSim, code coverage closed or justified |
 | c | Control and status streams (user application fields), micro mode | Open |
-| d | Driver tests on hardware (bare-metal and Linux on a processor system) | Open |
+| d | Driver tests on hardware (bare-metal and Linux on a processor system) as part of a reference system of the family | Open |
 
 ## Modules
 
